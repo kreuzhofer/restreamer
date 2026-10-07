@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+config.json
+bin/
+dist/
+coverage.out
+*.oci.tar
+.DS_Store

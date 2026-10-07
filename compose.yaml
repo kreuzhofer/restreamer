@@ -1,0 +1,27 @@
+services:
+  restreamer:
+    build: .
+    image: restreamer:local
+    restart: unless-stopped
+    ports:
+      - "${RTMP_BIND_ADDRESS:-0.0.0.0}:1935:1935"
+      - "127.0.0.1:${STATUS_PORT:-8080}:8080"
+    environment:
+      INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:?Set INGEST_STREAM_KEY in .env}
+      TWITCH_SERVER: ${TWITCH_SERVER:?Set TWITCH_SERVER in .env}
+      TWITCH_STREAM_KEY: ${TWITCH_STREAM_KEY:?Set TWITCH_STREAM_KEY in .env}
+      YOUTUBE_SERVER: ${YOUTUBE_SERVER:-rtmps://a.rtmps.youtube.com/live2}
+      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:?Set YOUTUBE_STREAM_KEY in .env}
+    volumes:
+      - ./config.json:/etc/restreamer/config.json:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

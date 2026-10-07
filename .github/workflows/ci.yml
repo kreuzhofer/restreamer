@@ -1,0 +1,29 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: make cross-build
+      - run: |
+          cp config.example.json config.json
+          INGEST_STREAM_KEY=ci-test-key-123456 TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose config --quiet
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+      - run: docker build -t restreamer:test .
+      - run: |
+          docker run --rm -e INGEST_STREAM_KEY=ci-test-key-123456 -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test -v "$PWD/config.json:/etc/restreamer/config.json:ro" restreamer:test -config /etc/restreamer/config.json -check-config

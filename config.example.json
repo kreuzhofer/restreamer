@@ -1,0 +1,19 @@
+{
+  "listen": ":1935",
+  "health_listen": ":8080",
+  "application": "live",
+  "stream_key": "${INGEST_STREAM_KEY}",
+  "queue_bytes": 16777216,
+  "targets": [
+    {
+      "name": "twitch",
+      "url": "${TWITCH_SERVER}",
+      "stream_key": "${TWITCH_STREAM_KEY}"
+    },
+    {
+      "name": "youtube",
+      "url": "${YOUTUBE_SERVER}",
+      "stream_key": "${YOUTUBE_STREAM_KEY}"
+    }
+  ]
+}
