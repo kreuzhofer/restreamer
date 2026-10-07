@@ -14,6 +14,8 @@ OBS ── RTMP :1935 ── Restreamer ┤
 ## V1 behavior
 
 - One active publisher, authenticated with a required input stream key.
+- Each output defaults to enabled, but an empty/missing target stream key disables
+  it. Set its optional `enabled` switch to `false` to disable it while keeping the key.
 - Standard RTMP **H.264 video and AAC audio**, including 1080p, 1440p, and 4K.
   The relay does not decode frames or impose a resolution/bitrate limit.
 - Encoded audio/video payloads and metadata are preserved. RTMP connections are
@@ -43,21 +45,76 @@ Requires Docker with the Compose plugin.
 
 ```sh
 cp .env.example .env
-cp config.example.json config.json
 openssl rand -hex 24
 ```
 
-Edit `.env`: set `INGEST_STREAM_KEY` to the generated value, set each platform's
-stream key, and copy the Twitch server URL from OBS/Twitch into `TWITCH_SERVER`.
-The YouTube RTMPS URL has a default. Server URLs contain the application path,
+Edit `.env`: set `INGEST_STREAM_KEY` to the generated value and set the stream key
+for each platform you want to use. Leave a target key empty to disable that output,
+or set `TWITCH_ENABLED=false` / `YOUTUBE_ENABLED=false` to disable it while retaining
+its key. Both switches default to `true` when omitted. Twitch and YouTube server
+URLs have defaults; override them with your platform's ingest URL if needed.
+Server URLs contain the application path,
 **without** the stream key; keys are sent separately and literally.
 
 ```sh
-docker compose build
+docker compose pull
 docker compose run --rm restreamer -config /etc/restreamer/config.json -check-config
 docker compose up -d
 docker compose logs -f restreamer
 ```
+
+The default stack pulls `ghcr.io/kreuzhofer/restreamer:main`, published by GitHub
+Actions after tests pass, with both Linux amd64 and arm64 variants. It does not
+build on the deployment host or require a `config.json` file. The image includes
+`config.example.json`; its environment placeholders are resolved at startup.
+Set `RESTREAMER_IMAGE` to a published `sha-<full-commit-SHA>` tag or digest to pin a
+particular build.
+
+### Portainer (standalone Docker)
+
+Create/update a stack from this Git repository, branch `main`, Compose path
+`docker-compose.yml`. Alternatively, paste that file into the stack editor.
+Set these in the stack's **Environment variables** section:
+
+- `INGEST_STREAM_KEY`: your own random key, at least 16 characters.
+- `TWITCH_SERVER`: optional Twitch server URL, without the key; defaults to `rtmp://live.twitch.tv/app`.
+- `TWITCH_STREAM_KEY`: your Twitch key; missing or empty disables Twitch.
+- `TWITCH_ENABLED`: optional `true`/`false`, defaults to `true`.
+- `YOUTUBE_STREAM_KEY`: your YouTube key; missing or empty disables YouTube.
+- `YOUTUBE_ENABLED`: optional `true`/`false`, defaults to `true`.
+- `YOUTUBE_SERVER`: optional; defaults to `rtmps://a.rtmps.youtube.com/live2`.
+
+Deploy after the repository's **CI / image** job has succeeded. When updating an
+existing stack, fetch the latest repository content (or replace the editor content)
+and pull the image again. The default stack has no `build:` section or host bind
+mounts, so it also works when Portainer manages Docker through an agent.
+
+If GHCR returns `unauthorized` or `denied`, add a `ghcr.io` registry in Portainer
+with your GitHub username and a personal access token (classic) with
+`read:packages`, then make it available to the Docker environment. GitHub initially
+creates container packages as private, even for public repositories. If you want
+anonymous pulls instead, make the `restreamer` package public in its GitHub package
+settings; repository visibility alone does not do that.
+See [GitHub's registry authentication documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+The error `listing workers ... http2: frame too large ... HTTP/1.1 header` indicates
+that the build client reached an incompatible HTTP endpoint. It has been reported
+with [Portainer stack builds](https://github.com/portainer/portainer/issues/10562).
+Using the prebuilt image bypasses that build connection. Do not include
+`docker-compose.build.yml` in the Portainer stack.
+
+### Build locally instead
+
+From a local checkout with `.env` configured:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+This explicit override adds `build: .` and uses `restreamer:local`. It is intended
+for the Docker CLI on a host with a working local builder.
+
+## OBS setup
 
 In OBS, choose **Settings → Stream → Service: Custom**:
 
@@ -84,14 +141,24 @@ docker compose down
 
 `/healthz` means the process is running, even when OBS is offline or a target is
 unavailable. `/status` reports `publishing`, each target's state, connection attempt
-count, and media bytes sent (cumulative since process start). States are `idle`,
+count, effective `enabled` flag, and media bytes sent (cumulative since process start).
+Disabled outputs report `enabled: false`, state `disabled`, and never connect or
+retry. If every output is disabled, the service still accepts OBS but discards
+the stream; nothing is broadcast. States for active targets are `idle`,
 `connecting`, `waiting_for_keyframe`, `streaming`, and `retrying`; `streaming` means
 media is being written, not that a platform has made the broadcast public.
 
 ## Configuration
 
-`config.json` is loaded once at startup. Restart/recreate the container after edits;
-when `.env` changes, use `docker compose up -d --force-recreate`.
+The bundled configuration is loaded once at startup. When environment variables
+change, recreate the container (`docker compose up -d --force-recreate`, or update
+the stack in Portainer).
+
+For custom destinations or listener settings, copy `config.example.json` to
+`config.json`, edit it, and mount it read-only over `/etc/restreamer/config.json`.
+For a Portainer stack, use an absolute path to an existing file on the **Docker
+host**, which may be a different machine from Portainer itself. The default
+two-destination configuration requires no mount.
 
 | Field | Default / behavior |
 | --- | --- |
@@ -100,10 +167,17 @@ when `.env` changes, use `docker compose up -d --force-recreate`.
 | `application` | `live`; letters, digits, `_`, `-` |
 | `stream_key` | Required input key, 16–256 letters/digits/`_`/`-` |
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
-| `targets` | 1–16 outputs, each with unique `name`, server `url`, and `stream_key` |
+| `targets` | 1–16 configured outputs, each with a unique `name` |
+| `targets[].enabled` | Optional boolean, defaults to `true`; `false` disables the output even with a key |
+| `targets[].stream_key` | Missing, empty, or whitespace-only disables the output regardless of `enabled` |
+| `targets[].url` | RTMP/RTMPS server URL, required only for active outputs |
 
 String values support `$VARIABLE` and `${VARIABLE}` references. Unset or empty
-references fail startup. Expansion happens after JSON decoding, so special
+references fail startup for required input settings and active target URLs.
+A missing/empty environment variable referenced in a target key disables that
+target. `enabled` accepts a JSON boolean (`true`/`false`) or a string referencing an
+environment variable, such as `"${TWITCH_ENABLED}"`; an unset/empty switch defaults
+to `true`, and any other non-boolean value fails validation. Expansion happens after JSON decoding, so special
 characters in environment secrets cannot change the JSON structure. Literal dollar
 signs in keys are best supplied through environment values (expansion is not recursive).
 
@@ -114,10 +188,11 @@ are capped at 16. Handshakes and output writes time out after 10 seconds; an inp
 without messages times out after 15 seconds. A second publisher is rejected while
 the first session, including its output cleanup, is active.
 
-Add destinations by adding entries to `targets` and corresponding environment
-variables to Compose. To run only one platform, remove the other entry **and** its
-required environment entries from Compose. The supplied Compose file intentionally
-requires keys for both configured platforms. No platform keys are built into the
+Add destinations in your custom configuration by adding entries to `targets` and
+corresponding environment variables to Compose. To run only one platform, leave
+the other platform's key empty or set its enable switch to `false`; no entries need
+to be removed. Only the input key is mandatory in the supplied Compose stack.
+No platform keys are built into the
 image, logged, or returned by `/status`. `.env` and `config.json` are Git-ignored.
 Docker administrators can still inspect container environment variables.
 
@@ -141,6 +216,8 @@ Run locally with the configured environment variables exported:
 ./bin/restreamer -config config.json
 ```
 
+For local binary use, first copy `config.example.json` to `config.json`.
+
 Build a multi-platform OCI image archive without publishing:
 
 ```sh
@@ -148,12 +225,16 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   -t restreamer:local --output type=oci,dest=restreamer.oci.tar .
 ```
 
-Normal `docker compose up --build` builds for the host's architecture. The image
+The explicit local build override builds for the host's architecture. The image
 uses a statically compiled Go executable, a CA bundle, an unprivileged user, and a
 read-only filesystem. CI runs tests, cross-compiles both architectures, validates
-Compose, and builds the container for both architectures.
+both Compose configurations, smoke-tests the bundled configuration and container
+health, and builds the container for both architectures. On `main`, the image job
+publishes `main` and `sha-<full-commit-SHA>` tags to GHCR using the repository's
+`GITHUB_TOKEN`; PRs build without publishing.
 
-Tests cover authentication, single-publisher enforcement, two-destination fanout,
+Tests cover authentication, target enable switches and missing keys, disabled
+targets never connecting, single-publisher enforcement, two-destination fanout,
 payload preservation, independent reconnection, keyframe/header recovery, queue
 overflow, shutdown, secret-safe status/config errors, RTMP interoperability with
 the reference library, ping handling, and rejection of untrusted TLS certificates.

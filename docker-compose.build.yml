@@ -1,0 +1,7 @@
+# Optional local build override; do not include this file in Portainer stacks.
+# docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+services:
+  restreamer:
+    build: .
+    image: restreamer:local
+    pull_policy: never

@@ -2,6 +2,10 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -16,14 +20,52 @@ jobs:
       - run: go vet ./...
       - run: make cross-build
       - run: |
-          cp config.example.json config.json
+          INGEST_STREAM_KEY=ci-test-key-123456 docker compose config --quiet
           INGEST_STREAM_KEY=ci-test-key-123456 TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose config --quiet
+          INGEST_STREAM_KEY=ci-test-key-123456 TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
+      - run: docker build -t restreamer:test .
+      - name: Smoke test bundled configuration and container health
+        shell: bash
+        run: |
+          env_args=(-e INGEST_STREAM_KEY=ci-test-key-123456 -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test)
+          docker run --rm -e INGEST_STREAM_KEY=ci-test-key-123456 restreamer:test -config /etc/restreamer/config.json -check-config
+          docker run --rm "${env_args[@]}" restreamer:test -config /etc/restreamer/config.json -check-config
+          docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true "${env_args[@]}" restreamer:test
+          trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke' EXIT
+          for attempt in {1..10}; do
+            if docker exec restreamer-smoke /restreamer healthcheck; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build both architectures and publish main
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: false
-      - run: docker build -t restreamer:test .
-      - run: |
-          docker run --rm -e INGEST_STREAM_KEY=ci-test-key-123456 -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test -v "$PWD/config.json:/etc/restreamer/config.json:ro" restreamer:test -config /etc/restreamer/config.json -check-config
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:main
+            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

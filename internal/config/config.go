@@ -14,9 +14,32 @@ import (
 )
 
 type Target struct {
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	StreamKey string `json:"stream_key"`
+	Name      string     `json:"name"`
+	URL       string     `json:"url"`
+	StreamKey string     `json:"stream_key"`
+	Enabled   EnableFlag `json:"enabled,omitempty"`
+}
+
+// EnableFlag accepts a JSON boolean or a string containing an environment
+// reference. Its zero value means enabled, preserving existing configurations.
+type EnableFlag string
+
+func (f *EnableFlag) UnmarshalJSON(data []byte) error {
+	if string(data) == "true" || string(data) == "false" {
+		*f = EnableFlag(data)
+		return nil
+	}
+	var value string
+	if string(data) == "null" || json.Unmarshal(data, &value) != nil {
+		return errors.New("enabled must be a boolean or an environment reference")
+	}
+	*f = EnableFlag(value)
+	return nil
+}
+
+// IsEnabled reports whether the target can run: both the switch and key matter.
+func (t Target) IsEnabled() bool {
+	return t.Enabled != "false" && strings.TrimSpace(t.StreamKey) != ""
 }
 
 type Config struct {
@@ -48,23 +71,43 @@ func Load(path string) (Config, error) {
 	// Expand individual decoded strings, so quotes or backslashes in a secret
 	// cannot alter the structure of the configuration.
 	values := []*string{&c.Listen, &c.HealthListen, &c.Application, &c.StreamKey}
-	for i := range c.Targets {
-		values = append(values, &c.Targets[i].Name, &c.Targets[i].URL, &c.Targets[i].StreamKey)
-	}
 	for _, value := range values {
-		missing := false
-		*value = os.Expand(*value, func(key string) string {
-			v, ok := os.LookupEnv(key)
-			if !ok || v == "" {
-				missing = true
-			}
-			return v
-		})
+		var missing bool
+		*value, missing = expand(*value)
 		if missing {
 			return c, errors.New("configuration references an unset or empty environment variable")
 		}
 	}
+	for i := range c.Targets {
+		t := &c.Targets[i]
+		t.Name = os.ExpandEnv(t.Name)
+		flag, _ := expand(string(t.Enabled))
+		t.Enabled = EnableFlag(strings.TrimSpace(flag))
+		// An unset referenced key disables the output, including when the key
+		// expression contains a literal prefix or suffix.
+		var missing bool
+		t.StreamKey, missing = expand(t.StreamKey)
+		if missing {
+			t.StreamKey = ""
+		}
+		t.URL, missing = expand(t.URL)
+		if t.IsEnabled() && missing {
+			return c, fmt.Errorf("target %d URL references an unset or empty environment variable", i+1)
+		}
+	}
 	return c, c.Validate()
+}
+
+func expand(value string) (string, bool) {
+	missing := false
+	value = os.Expand(value, func(key string) string {
+		v, ok := os.LookupEnv(key)
+		if !ok || v == "" {
+			missing = true
+		}
+		return v
+	})
+	return value, missing
 }
 
 func (c Config) Validate() error {
@@ -91,15 +134,18 @@ func (c Config) Validate() error {
 			return fmt.Errorf("target %d needs a unique name using letters, digits, underscores or hyphens", i+1)
 		}
 		names[t.Name] = true
+		if t.Enabled != "" && t.Enabled != "true" && t.Enabled != "false" {
+			return fmt.Errorf("target %d enabled must be true or false", i+1)
+		}
+		if !t.IsEnabled() {
+			continue
+		}
 		u, err := url.Parse(t.URL)
 		if err != nil || u == nil || (u.Scheme != "rtmp" && u.Scheme != "rtmps") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || strings.Trim(u.Path, "/") == "" {
 			return fmt.Errorf("target %d needs an rtmp(s) server URL with an application path, without userinfo or fragment", i+1)
 		}
 		if u.Port() == "0" {
 			return fmt.Errorf("target %d has an invalid port", i+1)
-		}
-		if strings.TrimSpace(t.StreamKey) == "" {
-			return fmt.Errorf("target %d needs a stream_key", i+1)
 		}
 	}
 	return nil

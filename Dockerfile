@@ -11,7 +11,9 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/restreamer ./cmd/restreamer
 
 FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/kreuzhofer/restreamer"
 COPY THIRD_PARTY_NOTICES /THIRD_PARTY_NOTICES
+COPY config.example.json /etc/restreamer/config.json
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/restreamer /restreamer
 USER 65532:65532

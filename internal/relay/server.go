@@ -28,7 +28,11 @@ type Server struct {
 func New(cfg config.Config, log *slog.Logger) *Server {
 	s := &Server{cfg: cfg, log: log}
 	for _, target := range cfg.Targets {
-		s.outputs = append(s.outputs, &output{config: target, log: log, status: OutputStatus{Name: target.Name, State: "idle"}})
+		state := "idle"
+		if !target.IsEnabled() {
+			state = "disabled"
+		}
+		s.outputs = append(s.outputs, &output{config: target, log: log, status: OutputStatus{Name: target.Name, Enabled: target.IsEnabled(), State: state}})
 	}
 	return s
 }
@@ -141,6 +145,9 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	defer wg.Wait()
 	defer cancel()
 	for _, o := range s.outputs {
+		if !o.config.IsEnabled() {
+			continue
+		}
 		wg.Add(1)
 		go func() { defer wg.Done(); o.run(session, h) }()
 	}

@@ -279,3 +279,42 @@ func TestShutdownInterruptsPendingHandshake(t *testing.T) {
 	t.Cleanup(func() { c.Close() })
 	// startRelay cleanup cancels while this connection has sent no handshake.
 }
+
+func TestDisabledTargetsNeverConnect(t *testing.T) {
+	dest := newSink(t)
+	noKey := dest.target("no-key")
+	noKey.StreamKey = ""
+	flagOff := dest.target("flag-off")
+	flagOff.Enabled = "false"
+	s, address := startRelay(t, []config.Target{dest.target("active"), noKey, flagOff})
+	c := publishInput(t, address)
+	eventually(t, func() bool { return s.outputs[0].snapshot().State == "waiting_for_keyframe" })
+	writePacket(t, c, videoConfig())
+	writePacket(t, c, keyframe(time.Second))
+	_ = receive(t, dest)
+	_ = receive(t, dest)
+	c.Net.Close()
+	eventually(t, func() bool { return !s.active.Load() })
+	if dest.count() != 1 {
+		t.Fatal("a disabled target connected")
+	}
+	for _, o := range s.outputs[1:] {
+		status := o.snapshot()
+		if status.State != "disabled" || status.Enabled || status.Attempts != 0 {
+			t.Fatalf("disabled target ran: %+v", status)
+		}
+	}
+}
+
+func TestAllTargetsDisabledAcceptsInput(t *testing.T) {
+	s, address := startRelay(t, []config.Target{{Name: "disabled"}})
+	c := publishInput(t, address)
+	writePacket(t, c, videoConfig())
+	writePacket(t, c, keyframe(time.Second))
+	if !s.active.Load() {
+		t.Fatal("publisher not accepted")
+	}
+	if status := s.outputs[0].snapshot(); status.State != "disabled" || status.Attempts != 0 {
+		t.Fatalf("disabled output ran: %+v", status)
+	}
+}

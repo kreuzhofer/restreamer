@@ -7,11 +7,13 @@
   "targets": [
     {
       "name": "twitch",
+      "enabled": "${TWITCH_ENABLED}",
       "url": "${TWITCH_SERVER}",
       "stream_key": "${TWITCH_STREAM_KEY}"
     },
     {
       "name": "youtube",
+      "enabled": "${YOUTUBE_ENABLED}",
       "url": "${YOUTUBE_SERVER}",
       "stream_key": "${YOUTUBE_STREAM_KEY}"
     }

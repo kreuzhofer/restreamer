@@ -33,14 +33,15 @@ func TestLoadExpandsSecretsAfterJSONDecode(t *testing.T) {
 func TestInvalidConfig(t *testing.T) {
 	t.Setenv("TARGET_KEY", "secret-not-for-logs")
 	for name, body := range map[string]string{
-		"missing environment": strings.ReplaceAll(validJSON, "TARGET_KEY", "RESTREAMER_TEST_UNSET_987"),
-		"unknown option":      strings.Replace(validJSON, "{", `{"typo":true,`, 1),
-		"extra document":      validJSON + "{}",
-		"weak input key":      strings.ReplaceAll(validJSON, "input-key-1234567890", "short"),
-		"unsupported scheme":  strings.ReplaceAll(validJSON, "rtmps://", "https://"),
-		"URL userinfo":        strings.ReplaceAll(validJSON, "example.com", "username:secret-not-for-logs@example.com"),
-		"no targets":          `{"stream_key":"input-key-1234567890"}`,
-		"null":                "null",
+		"missing input key environment":  strings.ReplaceAll(validJSON, "input-key-1234567890", "${RESTREAMER_TEST_UNSET_987}"),
+		"missing active URL environment": strings.ReplaceAll(validJSON, "rtmps://example.com/live", "${RESTREAMER_TEST_UNSET_987}"),
+		"unknown option":                 strings.Replace(validJSON, "{", `{"typo":true,`, 1),
+		"extra document":                 validJSON + "{}",
+		"weak input key":                 strings.ReplaceAll(validJSON, "input-key-1234567890", "short"),
+		"unsupported scheme":             strings.ReplaceAll(validJSON, "rtmps://", "https://"),
+		"URL userinfo":                   strings.ReplaceAll(validJSON, "example.com", "username:secret-not-for-logs@example.com"),
+		"no targets":                     `{"stream_key":"input-key-1234567890"}`,
+		"null":                           "null",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := loadText(t, body)
@@ -51,5 +52,67 @@ func TestInvalidConfig(t *testing.T) {
 				t.Fatal("error leaked secret")
 			}
 		})
+	}
+}
+
+func TestTargetEnablement(t *testing.T) {
+	t.Setenv("RESTREAMER_TEST_EMPTY_KEY", "")
+	t.Setenv("RESTREAMER_TEST_FLAG_FALSE", "false")
+	t.Setenv("RESTREAMER_TEST_FLAG_TRUE", "true")
+	t.Setenv("RESTREAMER_TEST_FLAG_INVALID", "yes")
+	for _, tc := range []struct {
+		name    string
+		target  string
+		want    bool
+		invalid bool
+	}{
+		{"omitted defaults true", `"stream_key":"key"`, true, false},
+		{"explicit true", `"enabled":true,"stream_key":"key"`, true, false},
+		{"explicit false overrides key", `"enabled":false,"stream_key":"key"`, false, false},
+		{"missing key", `"enabled":true`, false, false},
+		{"empty key", `"stream_key":""`, false, false},
+		{"whitespace key", `"stream_key":"  "`, false, false},
+		{"empty environment key", `"stream_key":"${RESTREAMER_TEST_EMPTY_KEY}"`, false, false},
+		{"unset environment key", `"stream_key":"${RESTREAMER_TEST_UNSET_987}"`, false, false},
+		{"partial missing key", `"stream_key":"prefix-${RESTREAMER_TEST_UNSET_987}"`, false, false},
+		{"true environment flag", `"enabled":"${RESTREAMER_TEST_FLAG_TRUE}","stream_key":"key"`, true, false},
+		{"false environment flag", `"enabled":"${RESTREAMER_TEST_FLAG_FALSE}","stream_key":"key"`, false, false},
+		{"unset flag defaults true", `"enabled":"${RESTREAMER_TEST_UNSET_987}","stream_key":"key"`, true, false},
+		{"invalid flag", `"enabled":"${RESTREAMER_TEST_FLAG_INVALID}","stream_key":"key"`, false, true},
+		{"numeric flag", `"enabled":0,"stream_key":"key"`, false, true},
+		{"null flag", `"enabled":null,"stream_key":"key"`, false, true},
+		{"disabled invalid flag is still rejected", `"enabled":"yes"`, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := loadText(t, `{"stream_key":"input-key-1234567890","targets":[{"name":"test","url":"rtmp://localhost/app",`+tc.target+`}]}`)
+			if tc.invalid {
+				if err == nil {
+					t.Fatal("expected invalid flag rejection")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.Targets[0].IsEnabled() != tc.want {
+				t.Fatalf("enabled = %v, want %v", c.Targets[0].IsEnabled(), tc.want)
+			}
+		})
+	}
+}
+
+func TestDisabledTargetsNeedNoURL(t *testing.T) {
+	for _, target := range []string{
+		`{"name":"test"}`,
+		`{"name":"test","stream_key":"key","enabled":false}`,
+		`{"name":"test","url":"${RESTREAMER_TEST_UNSET_987}"}`,
+	} {
+		c, err := loadText(t, `{"stream_key":"input-key-1234567890","targets":[`+target+`]}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Targets[0].IsEnabled() {
+			t.Fatal("unexpected active target")
+		}
 	}
 }
