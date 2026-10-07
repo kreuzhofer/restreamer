@@ -18,6 +18,10 @@ type OutputStatus struct {
 	State             string `json:"state"`
 	Attempts          uint64 `json:"attempts"`
 	Bytes             uint64 `json:"media_bytes_sent"`
+	Frames            uint64 `json:"video_frames_sent"`
+	DroppedFrames     uint64 `json:"dropped_frames"`
+	SkippedFrames     uint64 `json:"skipped_frames"`
+	PausedFrames      uint64 `json:"paused_frames"`
 	CanEnable         bool   `json:"can_enable"`
 	UnavailableReason string `json:"unavailable_reason,omitempty"`
 	LastError         string `json:"last_error,omitempty"`
@@ -31,6 +35,7 @@ type output struct {
 	mu      sync.Mutex
 	status  OutputStatus
 	changed chan struct{}
+	failed  bool // Current interruption only; LastError intentionally survives recovery.
 }
 
 func (o *output) state(state string) {
@@ -46,6 +51,7 @@ func (o *output) setEnabled(enabled bool) {
 	o.mu.Lock()
 	o.status.Enabled = enabled
 	if enabled {
+		o.failed = false
 		if o.status.State == "disabled" {
 			o.status.State = "idle"
 		}
@@ -143,6 +149,7 @@ func (o *output) run(ctx context.Context, h *hub) {
 		wait := delay + time.Duration(rand.Int64N(int64(delay/4)))
 		o.mu.Lock()
 		o.status.LastError = reason(err)
+		o.failed = true
 		o.status.LastErrorAt = time.Now().UnixMilli()
 		o.status.RetryAt = time.Now().Add(wait).UnixMilli()
 		o.mu.Unlock()
@@ -178,8 +185,8 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 		return errConnect
 	}
 	defer c.Net.Close()
-	s := h.subscribe()
-	defer h.unsubscribe(s)
+	s := h.subscribeOutput(o)
+	defer func() { h.finish(s, ctx.Err() != nil) }()
 	o.state("waiting_for_keyframe")
 
 	// The reader handles destination pings and acknowledgements for the entire
@@ -232,6 +239,9 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 			// Keep those; skip only media that predates the starting keyframe.
 			isHeader := m.Type == rtmp.Data || (len(m.Body) > 1 && m.Body[1] == 0)
 			if m.Timestamp < base && !isHeader {
+				if isVideoFrame(m) {
+					o.discardFrames(1, true)
+				}
 				continue
 			}
 			copy := *m
@@ -247,6 +257,9 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 				copy.ChunkStreamID = 5
 			}
 			if err := c.Write(&copy); err != nil {
+				if isVideoFrame(m) {
+					o.discardFrames(1, ctx.Err() != nil)
+				}
 				select {
 				case <-s.failed:
 					return errQueue
@@ -254,14 +267,7 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 					return err
 				}
 			}
-			o.mu.Lock()
-			if copy.Type == rtmp.Video || copy.Type == rtmp.Audio {
-				o.status.Bytes += uint64(len(copy.Body))
-			}
-			if o.status.Enabled {
-				o.status.State = "streaming"
-			}
-			o.mu.Unlock()
+			o.recordSent(&copy)
 		}
 	}
 }

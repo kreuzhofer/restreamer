@@ -64,13 +64,14 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	status := struct {
-		Time       int64           `json:"time"`
-		Publishing bool            `json:"publishing"`
-		InputBytes uint64          `json:"input_bytes"`
-		Outputs    []OutputStatus  `json:"outputs"`
-		History    []bitrateSample `json:"history,omitempty"`
-		Persistent bool            `json:"persistent"`
-	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
+		Time        int64           `json:"time"`
+		Publishing  bool            `json:"publishing"`
+		InputBytes  uint64          `json:"input_bytes"`
+		InputFrames uint64          `json:"input_frames"`
+		Outputs     []OutputStatus  `json:"outputs"`
+		History     []bitrateSample `json:"history,omitempty"`
+		Persistent  bool            `json:"persistent"`
+	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputs {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}

@@ -9,6 +9,7 @@ let snapshot;
 let connected = false;
 let controlError = '';
 let refreshSequence = 0;
+let graphMetric = 'bitrate';
 const pending = new Set();
 const rate = bps => (bps / 1e6).toFixed(2);
 const timeLabel = milliseconds => new Date(milliseconds).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
@@ -20,15 +21,18 @@ function node(tag, attrs, text) {
  return element;
 }
 function chart(container, values, now, label) {
+ const divisor = graphMetric === 'fps' ? 1 : 1e6;
+ const unit = graphMetric === 'fps' ? 'FPS' : 'Mbps';
+ const format = value => (value / divisor).toFixed(graphMetric === 'fps' ? 1 : 2);
  const width = Math.max(280, container.clientWidth);
  const height = container.classList.contains('input-chart') ? 200 : 180;
  const left = 43, right = width - 8, top = 17, bottom = height - 27;
- const peak = Math.max(0, ...values.map(p => p.value / 1e6));
+ const peak = Math.max(0, ...values.map(p => p.value / divisor));
  const max = Math.max(1, Math.ceil(peak * 1.15 * 2) / 2);
  const x = t => left + (t - (now - windowMs)) / windowMs * (right - left);
- const y = v => bottom - v / 1e6 / max * (bottom - top);
+ const y = v => bottom - v / divisor / max * (bottom - top);
  const svg = node('svg', {viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': label});
- svg.append(node('title', {}, `${label}. Current ${rate(values.at(-1)?.value || 0)} Mbps; peak ${peak.toFixed(2)} Mbps.`));
+ svg.append(node('title', {}, values.length ? `${label}. Current ${format(values.at(-1).value)} ${unit}; peak ${peak.toFixed(2)} ${unit}.` : `${label}. Collecting history.`));
  for (let i = 0; i <= 3; i++) {
   const gy = top + i * (bottom - top) / 3;
   svg.append(node('line', {x1: left, y1: gy, x2: right, y2: gy, class: 'grid-line'}));
@@ -49,7 +53,7 @@ function chart(container, values, now, label) {
   segment.push(point);
  }
  draw();
- if (!values.length) svg.append(node('text', {x: (left + right) / 2, y: (top + bottom) / 2, 'text-anchor': 'middle', class: 'empty'}, 'Collecting bitrate history…'));
+ if (!values.length) svg.append(node('text', {x: (left + right) / 2, y: (top + bottom) / 2, 'text-anchor': 'middle', class: 'empty'}, `Collecting ${graphMetric === 'fps' ? 'FPS' : 'bitrate'} history…`));
  container.replaceChildren(svg);
 }
 function badge(element, state) {
@@ -62,6 +66,7 @@ function render() {
  const last = samples.at(-1);
  const current = connected && last && now - last.time < 3500;
  $('#input-rate').textContent = current ? rate(last.input) : '—';
+ $('#input-fps').textContent = current && Number.isFinite(last.input_fps) ? last.input_fps.toFixed(1) : '—';
  $('#input-peak').textContent = samples.length ? rate(Math.max(...samples.map(p => p.input))) : '—';
  $('#active-targets').textContent = connected ? snapshot.outputs.filter(o => o.state === 'streaming').length : '—';
  badge($('#input-status'), connected ? snapshot.publishing ? 'streaming' : 'idle' : 'Unavailable');
@@ -69,7 +74,10 @@ function render() {
  $('#input-detail').textContent = snapshot.publishing ? 'Receiving live video & audio' : 'Connect OBS to begin · history continues while idle';
  $('#persistence').textContent = snapshot.persistent ? 'Target switches saved across restarts' : 'Target switches reset on restart';
  $('#target-count').textContent = snapshot.outputs.length;
- chart($('#input-chart'), samples.map(p => ({time: p.time, value: p.input})), now, 'Input bitrate over 15 minutes');
+ const graphName = graphMetric === 'fps' ? 'FPS' : 'bitrate';
+ $('#input-graph-label').textContent = graphMetric === 'fps' ? 'Input FPS · frames/s' : 'Input bitrate · Mbps';
+ $('#input-chart').setAttribute('aria-label', `Input ${graphName} over the past 15 minutes`);
+ chart($('#input-chart'), samples.map(p => ({time: p.time, value: graphMetric === 'fps' ? p.input_fps : p.input})).filter(p => Number.isFinite(p.value)), now, `Input ${graphName} over 15 minutes`);
  for (const output of snapshot.outputs) {
   let card = cards.get(output.name);
   if (!card) {
@@ -85,7 +93,15 @@ function render() {
   const points = samples.map(p => ({time: p.time, value: p.outputs[output.name] || 0}));
   $('.target-rate', card).textContent = current ? rate(last.outputs[output.name] || 0) : '—';
   $('.target-peak', card).textContent = points.length ? rate(Math.max(...points.map(p => p.value))) : '—';
-  chart($('.target-chart', card), points, now, `${output.name} bitrate over 15 minutes`);
+  const fps = last?.output_fps?.[output.name];
+  $('.target-fps', card).textContent = current && Number.isFinite(fps) ? fps.toFixed(1) : '—';
+  for (const [selector, count] of [['.target-drops', output.dropped_frames], ['.frames-sent', output.video_frames_sent], ['.frames-paused', output.paused_frames], ['.frames-skipped', output.skipped_frames]]) {
+    $(selector, card).textContent = Number.isFinite(count) ? count.toLocaleString() : '—';
+  }
+  $('.target-drops', card).classList.toggle('has-drops', output.dropped_frames > 0);
+  $('.target-graph-label', card).textContent = graphMetric === 'fps' ? 'FPS · frames/s' : 'Bitrate · Mbps';
+  const graphPoints = graphMetric === 'fps' ? samples.map(p => ({time: p.time, value: p.output_fps?.[output.name]})).filter(p => Number.isFinite(p.value)) : points;
+  chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
   let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
   $('.target-message', card).textContent = message;
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
@@ -140,5 +156,12 @@ async function toggle(name) {
 }
 async function poll() { await refresh(); setTimeout(poll, 2000); }
 let resizeTimer;
+document.querySelectorAll('[data-metric]').forEach(button => {
+  button.addEventListener('click', () => {
+    graphMetric = button.dataset.metric;
+    document.querySelectorAll('[data-metric]').forEach(option => option.setAttribute('aria-pressed', String(option.dataset.metric === graphMetric)));
+    render();
+  });
+});
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 100); });
 poll();

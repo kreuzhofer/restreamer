@@ -18,15 +18,16 @@ import (
 )
 
 type Server struct {
-	cfg        config.Config
-	log        *slog.Logger
-	active     atomic.Bool
-	outputs    []*output
-	inputBytes atomic.Uint64
-	metrics    metrics
-	controlMu  sync.Mutex
-	initOnce   sync.Once
-	initErr    error
+	cfg         config.Config
+	log         *slog.Logger
+	active      atomic.Bool
+	outputs     []*output
+	inputBytes  atomic.Uint64
+	inputFrames atomic.Uint64
+	metrics     metrics
+	controlMu   sync.Mutex
+	initOnce    sync.Once
+	initErr     error
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
@@ -163,7 +164,7 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	s.log.Info("publisher connected")
 	defer s.log.Info("publisher disconnected")
 	session, cancel := context.WithCancel(ctx)
-	h := newHub(s.cfg.QueueBytes)
+	h := newHub(s.cfg.QueueBytes, s.outputs...)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	defer cancel()
@@ -186,6 +187,9 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 		}
 		if m.Type == rtmp.Video || m.Type == rtmp.Audio {
 			s.inputBytes.Add(uint64(len(m.Body)))
+		}
+		if isVideoFrame(m) {
+			s.inputFrames.Add(1)
 		}
 	}
 }

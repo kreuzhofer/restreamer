@@ -14,50 +14,98 @@ var errCodec = errors.New("v1 requires H.264 video and AAC audio; choose these c
 // A subscription belongs to one connection attempt. Overflow invalidates the
 // whole attempt: resuming with arbitrary interframes would produce broken video.
 type subscription struct {
-	packets chan *rtmp.Message
-	failed  chan struct{}
-	waiting bool
-	bytes   int
-	broken  bool
+	packets      chan *rtmp.Message
+	failed       chan struct{}
+	waiting      bool
+	bytes        int
+	broken       bool
+	output       *output
+	queuedFrames uint64
 }
 
 type hub struct {
-	mu      sync.Mutex
-	subs    map[*subscription]bool
-	headers [3]*rtmp.Message // metadata, AVC sequence header, AAC sequence header
-	limit   int
+	mu         sync.Mutex
+	subs       map[*subscription]bool
+	headers    [3]*rtmp.Message // metadata, AVC sequence header, AAC sequence header
+	limit      int
+	outputs    []*output
+	outputSubs map[*output]*subscription
 }
 
-func newHub(limit int) *hub { return &hub{subs: make(map[*subscription]bool), limit: limit} }
+func newHub(limit int, outputs ...*output) *hub {
+	for _, o := range outputs {
+		o.mu.Lock()
+		o.failed = false
+		o.mu.Unlock()
+	}
+	return &hub{subs: make(map[*subscription]bool), limit: limit, outputs: outputs, outputSubs: make(map[*output]*subscription)}
+}
 
 func (h *hub) subscribe() *subscription {
-	s := &subscription{packets: make(chan *rtmp.Message, maxQueuePackets), failed: make(chan struct{}), waiting: true}
+	return h.subscribeOutput(nil)
+}
+
+func (h *hub) subscribeOutput(o *output) *subscription {
+	s := &subscription{packets: make(chan *rtmp.Message, maxQueuePackets), failed: make(chan struct{}), waiting: true, output: o}
 	h.mu.Lock()
 	h.subs[s] = true
+	if o != nil {
+		h.outputSubs[o] = s
+	}
 	h.mu.Unlock()
 	return s
 }
 
-func (h *hub) unsubscribe(s *subscription) { h.mu.Lock(); delete(h.subs, s); h.mu.Unlock() }
+func (h *hub) unsubscribe(s *subscription) { h.finish(s, true) }
+
+func (h *hub) finish(s *subscription, intentional bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.subs[s] {
+		return
+	}
+	delete(h.subs, s)
+	if s.output != nil {
+		delete(h.outputSubs, s.output)
+		s.output.discardFrames(s.queuedFrames, intentional)
+	}
+	s.queuedFrames = 0
+}
 func (h *hub) consumed(s *subscription, m *rtmp.Message) {
 	h.mu.Lock()
 	s.bytes -= len(m.Body)
+	if isVideoFrame(m) {
+		s.queuedFrames--
+	}
 	h.mu.Unlock()
 }
 
 func (h *hub) offer(s *subscription, m *rtmp.Message) {
 	if s.broken {
+		if s.output != nil && isVideoFrame(m) {
+			s.output.discardFrames(1, false)
+		}
 		return
 	}
 	if s.bytes+len(m.Body) <= h.limit {
 		select {
 		case s.packets <- m:
 			s.bytes += len(m.Body)
+			if isVideoFrame(m) {
+				s.queuedFrames++
+			}
 			return
 		default:
 		}
 	}
 	s.broken = true
+	if s.output != nil {
+		var n uint64
+		if isVideoFrame(m) {
+			n = 1
+		}
+		s.output.discardFrames(n, false)
+	}
 	close(s.failed)
 }
 
@@ -103,12 +151,31 @@ func (h *hub) publish(m *rtmp.Message) error {
 	if header >= 0 {
 		h.headers[header] = m
 	}
+	if isVideoFrame(m) {
+		for _, o := range h.outputs {
+			if h.outputSubs[o] == nil {
+				o.unavailableFrame()
+			}
+		}
+	}
 	for s := range h.subs {
+		if s.output != nil && !s.output.snapshot().Enabled {
+			if isVideoFrame(m) {
+				s.output.discardFrames(1, true)
+			}
+			continue
+		}
 		if s.broken {
+			if s.output != nil && isVideoFrame(m) {
+				s.output.discardFrames(1, false)
+			}
 			continue
 		}
 		if s.waiting {
 			if !isKey || h.headers[1] == nil {
+				if s.output != nil && isVideoFrame(m) {
+					s.output.discardFrames(1, true)
+				}
 				continue
 			}
 			s.waiting = false

@@ -20,23 +20,27 @@
    <div class="window"><span class="window-dot"></span> Rolling 15 minutes <span class="window-detail">· sampled every second</span></div>
   </section>
   <div id="notice" class="notice" role="alert" hidden></div>
+  <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
   <section class="panel input-panel" aria-labelledby="input-title">
    <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
-   <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
+   <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
    <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
-   <div class="panel-footer"><span><span class="legend input-legend"></span>Input bitrate</span><span id="input-detail">Waiting for server data</span></div>
+   <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
   </section>
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
   </section>
-  <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>Bitrate measures encoded media, excluding network overhead.</span><span id="updated">Awaiting first update</span></footer>
+  <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>FPS and drops are measured at the relay; OBS and platform playback statistics are unavailable.</span><span id="updated">Awaiting first update</span></footer>
  </main>
  <template id="target-template">
   <article class="panel target-panel">
    <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span></div>
    <div class="target-stats"><div><span class="metric target-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong class="target-peak">—</strong><span>Mbps peak · 15 min</span></div></div>
+   <div class="frame-stats"><div><strong class="target-fps">—</strong><span>FPS written</span></div><div><strong class="target-drops">—</strong><span>Relay drops · since restart</span></div></div>
+   <p class="target-graph-label graph-label">Bitrate · Mbps</p>
    <div class="chart target-chart"></div>
+   <details class="frame-details"><summary>Frame counters · since restart</summary><dl><div><dt>Written to target</dt><dd class="frames-sent">—</dd></div><div><dt>Omitted while paused</dt><dd class="frames-paused">—</dd></div><div><dt>Skipped during startup / resync / shutdown</dt><dd class="frames-skipped">—</dd></div></dl><p>Drops count failed writes, discarded queues, and frames omitted during an outage. Written frames are not a playback acknowledgment.</p></details>
    <div class="target-detail"><span class="target-message"></span><span class="attempts"></span></div>
    <div class="issue" hidden></div>
    <div class="target-control"><div><strong class="switch-label">Target enabled</strong><p class="switch-help">Ready when your input goes live.</p></div><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>

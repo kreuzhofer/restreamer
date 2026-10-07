@@ -199,6 +199,34 @@ your firewall. You do not need WebSocket support.
   zero on the next complete sampling interval. History and byte counters are held
   in memory and reset on process restart; only switches are persisted.
 
+### FPS and frame counters
+
+The **Bitrate / FPS** selector switches all graphs between the same rolling
+15-minute histories. Current input FPS and FPS written to each target remain
+visible alongside bitrate. FPS counts H.264 media packets per elapsed second
+(one packet per video frame for standard OBS output), excluding configuration
+headers, end markers, audio, and metadata. It measures arrival/write rate, so
+network bursts can produce short spikes even for a constant-frame-rate source.
+No decoding or GPU is required.
+
+Each destination also shows **Relay drops**, with expandable frame counters:
+
+- **Written:** video packets successfully written to the target connection.
+- **Relay drops:** video packets rejected by a full queue, abandoned in a failed
+  connection's queue, not fully written, or omitted while an enabled destination
+  is disconnected after an error. An in-flight failed write is counted once.
+- **Omitted while paused:** frames arriving or discarded while that target is
+  disabled; these do not increase relay drops.
+- **Skipped:** initial connection setup, waiting for a keyframe, old-timestamp
+  media during resynchronization, and buffered frames discarded on intentional
+  cancellation or input-session shutdown. These do not increase relay drops.
+
+Counters are cumulative across OBS sessions until the restreamer process restarts.
+Frames still queued or being written have not yet received a final classification.
+Input drop counts are unavailable: the relay cannot know which frames OBS never
+sent. Successful writes are not acknowledgments of Twitch/YouTube playback.
+OBS rendering/encoding statistics and platform-side drops are not measured.
+
 Compose mounts the named `restreamer-state` volume at `/data`; target switches are
 atomically saved to `/data/targets.json` before a control request succeeds. A write
 failure is shown on the page and leaves the current switch unchanged. Keep the same
@@ -210,7 +238,10 @@ use their configured defaults. Removing the state file while the container is
 stopped resets all switches to configuration defaults on its next start.
 
 For automation, `GET /api/dashboard` returns server time, status, and up to 900
-bitrate samples (timestamps in Unix milliseconds, rates in bits per second).
+samples (timestamps in Unix milliseconds). Existing `input` and `outputs` values
+remain bitrates in bits per second; `input_fps` and `output_fps` add frames per
+second. Status includes cumulative `input_frames`; target objects include
+`video_frames_sent`, `dropped_frames`, `paused_frames`, and `skipped_frames`.
 `GET /status` omits history. Set a switch using authenticated JSON:
 
 ```sh
