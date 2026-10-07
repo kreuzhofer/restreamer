@@ -13,30 +13,121 @@ import (
 )
 
 type OutputStatus struct {
-	Name     string `json:"name"`
-	Enabled  bool   `json:"enabled"`
-	State    string `json:"state"`
-	Attempts uint64 `json:"attempts"`
-	Bytes    uint64 `json:"media_bytes_sent"`
+	Name              string `json:"name"`
+	Enabled           bool   `json:"enabled"`
+	State             string `json:"state"`
+	Attempts          uint64 `json:"attempts"`
+	Bytes             uint64 `json:"media_bytes_sent"`
+	CanEnable         bool   `json:"can_enable"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
+	LastError         string `json:"last_error,omitempty"`
+	LastErrorAt       int64  `json:"last_error_at,omitempty"`
+	RetryAt           int64  `json:"retry_at,omitempty"`
 }
 
 type output struct {
-	config config.Target
-	log    *slog.Logger
-	mu     sync.Mutex
-	status OutputStatus
+	config  config.Target
+	log     *slog.Logger
+	mu      sync.Mutex
+	status  OutputStatus
+	changed chan struct{}
 }
 
-func (o *output) state(state string)     { o.mu.Lock(); o.status.State = state; o.mu.Unlock() }
+func (o *output) state(state string) {
+	o.mu.Lock()
+	if o.status.Enabled {
+		o.status.State = state
+	}
+	o.mu.Unlock()
+}
 func (o *output) snapshot() OutputStatus { o.mu.Lock(); defer o.mu.Unlock(); return o.status }
 
+func (o *output) setEnabled(enabled bool) {
+	o.mu.Lock()
+	o.status.Enabled = enabled
+	if enabled {
+		if o.status.State == "disabled" {
+			o.status.State = "idle"
+		}
+	} else if o.status.State == "idle" || o.status.State == "disabled" {
+		o.status.State = "disabled"
+	} else {
+		o.status.State = "stopping"
+	}
+	o.mu.Unlock()
+	select {
+	case o.changed <- struct{}{}:
+	default:
+	}
+}
+
+// Each input session owns one manager per target. It joins a cancelled worker
+// before starting another, even when switches change rapidly.
+func (o *output) manage(ctx context.Context, h *hub) {
+	// Offline changes have already been applied to the desired state.
+	select {
+	case <-o.changed:
+	default:
+	}
+	var cancel context.CancelFunc
+	var done chan struct{}
+	stop := func() {
+		if cancel != nil {
+			cancel()
+			<-done
+			cancel = nil
+			done = nil
+		}
+	}
+	settle := func() {
+		o.mu.Lock()
+		if o.status.Enabled {
+			o.status.State = "idle"
+		} else {
+			o.status.State = "disabled"
+		}
+		o.status.RetryAt = 0
+		o.mu.Unlock()
+	}
+	defer func() { stop(); settle() }()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		if o.snapshot().Enabled {
+			if cancel == nil {
+				cancel, done = o.startWorker(ctx, h)
+			}
+		} else {
+			stop()
+			settle()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-o.changed:
+			// Always interrupt on a change: a rapid stop/resume must still
+			// close the old destination session before creating a new one.
+			stop()
+			settle()
+		}
+	}
+}
+
+func (o *output) startWorker(ctx context.Context, h *hub) (context.CancelFunc, chan struct{}) {
+	worker, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); o.run(worker, h) }()
+	return cancel, done
+}
+
 func (o *output) run(ctx context.Context, h *hub) {
-	defer o.state("idle")
 	delay := time.Second
 	for ctx.Err() == nil {
 		o.state("connecting")
 		o.mu.Lock()
 		o.status.Attempts++
+		o.status.RetryAt = 0
 		o.mu.Unlock()
 		started := time.Now()
 		err := o.attempt(ctx, h)
@@ -49,7 +140,13 @@ func (o *output) run(ctx context.Context, h *hub) {
 		if time.Since(started) > 30*time.Second {
 			delay = time.Second
 		}
-		timer := time.NewTimer(delay + time.Duration(rand.Int64N(int64(delay/4))))
+		wait := delay + time.Duration(rand.Int64N(int64(delay/4)))
+		o.mu.Lock()
+		o.status.LastError = reason(err)
+		o.status.LastErrorAt = time.Now().UnixMilli()
+		o.status.RetryAt = time.Now().Add(wait).UnixMilli()
+		o.mu.Unlock()
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -158,8 +255,12 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 				}
 			}
 			o.mu.Lock()
-			o.status.Bytes += uint64(len(copy.Body))
-			o.status.State = "streaming"
+			if copy.Type == rtmp.Video || copy.Type == rtmp.Audio {
+				o.status.Bytes += uint64(len(copy.Body))
+			}
+			if o.status.Enabled {
+				o.status.State = "streaming"
+			}
 			o.mu.Unlock()
 		}
 	}

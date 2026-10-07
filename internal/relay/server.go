@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -19,10 +18,15 @@ import (
 )
 
 type Server struct {
-	cfg     config.Config
-	log     *slog.Logger
-	active  atomic.Bool
-	outputs []*output
+	cfg        config.Config
+	log        *slog.Logger
+	active     atomic.Bool
+	outputs    []*output
+	inputBytes atomic.Uint64
+	metrics    metrics
+	controlMu  sync.Mutex
+	initOnce   sync.Once
+	initErr    error
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
@@ -32,32 +36,19 @@ func New(cfg config.Config, log *slog.Logger) *Server {
 		if !target.IsEnabled() {
 			state = "disabled"
 		}
-		s.outputs = append(s.outputs, &output{config: target, log: log, status: OutputStatus{Name: target.Name, Enabled: target.IsEnabled(), State: state}})
+		status := OutputStatus{Name: target.Name, Enabled: target.IsEnabled(), State: state, CanEnable: target.ReadyError() == nil}
+		if err := target.ReadyError(); err != nil {
+			status.UnavailableReason = err.Error()
+		}
+		s.outputs = append(s.outputs, &output{config: target, log: log, changed: make(chan struct{}, 1), status: status})
 	}
 	return s
 }
 
-func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte("ok\n"))
-	})
-	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
-		status := struct {
-			Publishing bool           `json:"publishing"`
-			Outputs    []OutputStatus `json:"outputs"`
-		}{Publishing: s.active.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs))}
-		for _, o := range s.outputs {
-			status.Outputs = append(status.Outputs, o.snapshot())
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(status)
-	})
-	return mux
-}
-
 func (s *Server) Run(ctx context.Context) error {
+	if err := s.initialize(); err != nil {
+		return err
+	}
 	l, err := net.Listen("tcp", s.cfg.Listen)
 	if err != nil {
 		return errors.New("cannot bind RTMP listener")
@@ -84,6 +75,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Serve owns l until all publishers, pending handshakes and output workers stop.
 func (s *Server) Serve(ctx context.Context, l net.Listener) error {
+	defer l.Close()
+	if err := s.initialize(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { l.Close() })
@@ -91,6 +86,8 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	defer cancel()
+	wg.Add(1)
+	go func() { defer wg.Done(); s.sampleLoop(ctx) }()
 	slots := make(chan struct{}, 16)
 	s.log.Info("RTMP listener ready", "address", l.Addr().String())
 	for {
@@ -123,17 +120,43 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 		}
 	}()
 	expected := sha256.Sum256([]byte(s.cfg.StreamKey))
+	authorizationReason := ""
 	c, err := rtmp.Accept(n, func(app, key string) bool {
 		provided := sha256.Sum256([]byte(key))
-		if app != s.cfg.Application || subtle.ConstantTimeCompare(expected[:], provided[:]) != 1 {
+		if app != s.cfg.Application {
+			authorizationReason = "application_mismatch"
+			return false
+		}
+		if subtle.ConstantTimeCompare(expected[:], provided[:]) != 1 {
+			authorizationReason = "stream_key_mismatch"
 			return false
 		}
 		reserved = s.active.CompareAndSwap(false, true)
+		if !reserved {
+			authorizationReason = "publisher_already_connected"
+		}
 		return reserved
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			s.log.Warn("input connection rejected or handshake failed")
+			stage, reason := "unknown", "protocol_error"
+			var acceptErr *rtmp.AcceptError
+			if errors.As(err, &acceptErr) {
+				stage, reason = acceptErr.Stage, acceptErr.Reason
+			}
+			if authorizationReason != "" {
+				reason = authorizationReason
+			}
+			hint := "Use rtmp:// for OBS input and check the OBS connection log"
+			switch reason {
+			case "application_mismatch":
+				hint = "OBS Server must end with /" + s.cfg.Application + "; enter the stream key separately"
+			case "stream_key_mismatch":
+				hint = "OBS Stream Key must match INGEST_STREAM_KEY in the running container"
+			case "publisher_already_connected":
+				hint = "Stop the existing publisher or wait for its connection to expire"
+			}
+			s.log.Warn("input connection failed", "stage", stage, "reason", reason, "hint", hint)
 		}
 		return
 	}
@@ -145,11 +168,8 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	defer wg.Wait()
 	defer cancel()
 	for _, o := range s.outputs {
-		if !o.config.IsEnabled() {
-			continue
-		}
 		wg.Add(1)
-		go func() { defer wg.Done(); o.run(session, h) }()
+		go func() { defer wg.Done(); o.manage(session, h) }()
 	}
 	for {
 		_ = n.SetReadDeadline(time.Now().Add(15 * time.Second))
@@ -163,6 +183,9 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 		if err := h.publish(m); err != nil {
 			s.log.Warn("input media rejected", "reason", err.Error())
 			return
+		}
+		if m.Type == rtmp.Video || m.Type == rtmp.Audio {
+			s.inputBytes.Add(uint64(len(m.Body)))
 		}
 	}
 }

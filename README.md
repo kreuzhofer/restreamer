@@ -27,8 +27,11 @@ OBS ── RTMP :1935 ── Restreamer ┤
   A slow output gets a bounded queue; overflow disconnects just that output and
   starts a fresh connection at a future keyframe. No disk spooling or stale backlog.
 - JSON logs, HTTP liveness/status endpoints, and graceful SIGTERM shutdown.
+- Password-protected dashboard with independent live target switches and rolling
+  15-minute bitrate graphs for the input and every output. Switches persist in a
+  Docker volume; changing them does not disconnect OBS or other destinations.
 
-There is no transcoding, recording, playback endpoint, web UI, audio-only mode,
+There is no transcoding, recording, playback endpoint, audio-only mode,
 Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher
 using an unsupported codec is disconnected with an explanatory log entry.
 
@@ -55,6 +58,8 @@ its key. Both switches default to `true` when omitted. Twitch and YouTube server
 URLs have defaults; override them with your platform's ingest URL if needed.
 Server URLs contain the application path,
 **without** the stream key; keys are sent separately and literally.
+Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to enable the dashboard.
+Leave both empty to run only the relay and health endpoint.
 
 ```sh
 docker compose pull
@@ -83,6 +88,8 @@ Set these in the stack's **Environment variables** section:
 - `YOUTUBE_STREAM_KEY`: your YouTube key; missing or empty disables YouTube.
 - `YOUTUBE_ENABLED`: optional `true`/`false`, defaults to `true`.
 - `YOUTUBE_SERVER`: optional; defaults to `rtmps://a.rtmps.youtube.com/live2`.
+- `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`: set both for dashboard access.
+- `STATUS_BIND_ADDRESS`: defaults to `127.0.0.1`; adjust for your proxy's network.
 
 Deploy after the repository's **CI / image** job has succeeded. When updating an
 existing stack, fetch the latest repository content (or replace the editor content)
@@ -126,16 +133,27 @@ In OBS, choose **Settings → Stream → Service: Custom**:
 | Audio encoder | AAC |
 | Keyframe interval | 2 seconds is a practical starting point; follow destination requirements |
 
+Include both the port and `/live` in OBS's **Server** field. The path must match
+the configured `application`; the **Stream key** field must match the container's
+`INGEST_STREAM_KEY`.
+
+Input failures log a safe `stage`, `reason`, and `hint`. `application_mismatch`
+means the server path is wrong or missing; `stream_key_mismatch` means the OBS key
+differs from the running container's input key; `publisher_already_connected`
+means another input session is still active. Protocol failures include the RTMP
+stage and distinguish timeouts from closed connections. Peer-supplied URLs and
+stream keys are never included in these diagnostics.
+
 Open TCP port 1935 on the host/firewall for the OBS machine. `localhost` works when
 OBS and Docker run on the same computer. Input RTMP is unencrypted, including its
 key; use a trusted network or VPN for remote ingest. RTMPS outputs verify the
 destination's certificate using the image's CA bundle.
 
-Status is bound to the Docker host's loopback interface by Compose:
+The HTTP listener is bound to the Docker host's loopback interface by Compose:
 
 ```sh
 curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/status
+curl --user "$DASHBOARD_USERNAME" http://127.0.0.1:8080/status
 docker compose down
 ```
 
@@ -147,6 +165,63 @@ retry. If every output is disabled, the service still accepts OBS but discards
 the stream; nothing is broadcast. States for active targets are `idle`,
 `connecting`, `waiting_for_keyframe`, `streaming`, and `retrying`; `streaming` means
 media is being written, not that a platform has made the broadcast public.
+
+## Dashboard and live controls
+
+Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS
+URL) and sign in with `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`. Authentication
+uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
+`/healthz` remains public for Docker healthchecks. If both credentials are absent,
+the dashboard and status API return 503 while RTMP continues operating.
+
+The application serves HTTP only. Configure your HTTPS reverse proxy to forward
+to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
+dedicated hostname at `/` (subpath hosting is not supported). A proxy on the same
+Docker network can use `http://restreamer:8080`; a host proxy can use
+`http://127.0.0.1:8080`. If the proxy is on another machine, bind
+`STATUS_BIND_ADDRESS` to a reachable private interface and allow that proxy through
+your firewall. You do not need WebSocket support.
+
+- Switch a target **off** to close its connection and cancel retries. OBS and
+  other outputs continue. Switch it **on** to connect again, send cached headers,
+  and resume at the next live video keyframe. Nothing is buffered for replay.
+- When OBS is offline, enabled targets remain **Ready** until input connects.
+  A missing key or invalid server URL prevents enabling a target; update the
+  container configuration and redeploy to fix it.
+- Each card shows its connection state, attempts, and latest issue with a
+  timestamp. A recovered target keeps its last issue visible for diagnosis.
+  Errors are sanitized and never contain destination URLs or keys.
+- Bitrate is sampled every second on the server and the page refreshes every two
+  seconds. The graphs show a rolling 15-minute window, current Mbps, and peak
+  bitrate. They count encoded audio/video bytes, excluding metadata and RTMP/TCP/TLS
+  overhead. Short bursts and keyframes can produce normal fluctuations.
+- History collects even with the page closed. Idle/disabled connections settle to
+  zero on the next complete sampling interval. History and byte counters are held
+  in memory and reset on process restart; only switches are persisted.
+
+Compose mounts the named `restreamer-state` volume at `/data`; target switches are
+atomically saved to `/data/targets.json` before a control request succeeds. A write
+failure is shown on the page and leaves the current switch unchanged. Keep the same
+stack/Compose project and volume when redeploying. The volume contains only target
+names and booleans, never stream keys. Saved switches override `TWITCH_ENABLED` /
+`YOUTUBE_ENABLED` startup defaults for existing names. A missing key always disables
+the target, even if the saved switch is on. Targets newly added to the configuration
+use their configured defaults. Removing the state file while the container is
+stopped resets all switches to configuration defaults on its next start.
+
+For automation, `GET /api/dashboard` returns server time, status, and up to 900
+bitrate samples (timestamps in Unix milliseconds, rates in bits per second).
+`GET /status` omits history. Set a switch using authenticated JSON:
+
+```sh
+curl --user "$DASHBOARD_USERNAME" \
+  -X PUT http://127.0.0.1:8080/api/targets/twitch \
+  -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+  --data '{"enabled":false}'
+```
+
+Curl prompts for the password. The control API rejects cross-origin browser
+requests and requires the custom header above; successful updates return 204.
 
 ## Configuration
 
@@ -167,8 +242,10 @@ two-destination configuration requires no mount.
 | `application` | `live`; letters, digits, `_`, `-` |
 | `stream_key` | Required input key, 16–256 letters/digits/`_`/`-` |
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
+| `dashboard_username`, `dashboard_password` | Both required to enable dashboard and status API; omitted disables access |
+| `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
 | `targets` | 1–16 configured outputs, each with a unique `name` |
-| `targets[].enabled` | Optional boolean, defaults to `true`; `false` disables the output even with a key |
+| `targets[].enabled` | Optional startup default, `true` if omitted; a saved/dashboard switch overrides this |
 | `targets[].stream_key` | Missing, empty, or whitespace-only disables the output regardless of `enabled` |
 | `targets[].url` | RTMP/RTMPS server URL, required only for active outputs |
 
@@ -236,7 +313,9 @@ publishes `main` and `sha-<full-commit-SHA>` tags to GHCR using the repository's
 Tests cover authentication, target enable switches and missing keys, disabled
 targets never connecting, single-publisher enforcement, two-destination fanout,
 payload preservation, independent reconnection, keyframe/header recovery, queue
-overflow, shutdown, secret-safe status/config errors, RTMP interoperability with
+overflow, live stop/resume isolation, rapid toggles, persistent switches, dashboard
+authentication and origin checks, bitrate sampling and 15-minute expiry, shutdown,
+secret-safe status/config errors, RTMP interoperability with
 the reference library, ping handling, and rejection of untrusted TLS certificates.
 They use local endpoints and do not broadcast to real platform accounts.
 

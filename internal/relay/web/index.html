@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <meta name="color-scheme" content="dark">
+ <title>Restreamer · Live dashboard</title>
+ <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+ <link rel="stylesheet" href="/dashboard.css">
+ <script src="/dashboard.js" defer></script>
+</head>
+<body>
+ <main>
+  <header class="topbar">
+   <a class="brand" href="/" aria-label="Restreamer home"><span class="brand-mark" aria-hidden="true">↗</span> restreamer<span class="tag">LIVE CONTROL</span></a>
+   <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Connecting to server…</span></div>
+  </header>
+  <section class="intro">
+   <div><p class="eyebrow">STREAM OVERVIEW</p><h1>One stream. Every destination.</h1><p class="subtitle">Monitor your signal and control where you go live.</p></div>
+   <div class="window"><span class="window-dot"></span> Rolling 15 minutes <span class="window-detail">· sampled every second</span></div>
+  </section>
+  <div id="notice" class="notice" role="alert" hidden></div>
+  <section class="panel input-panel" aria-labelledby="input-title">
+   <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
+   <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
+   <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
+   <div class="panel-footer"><span><span class="legend input-legend"></span>Input bitrate</span><span id="input-detail">Waiting for server data</span></div>
+  </section>
+  <section class="destinations" aria-labelledby="destinations-title">
+   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
+   <div id="targets" class="target-grid"></div>
+  </section>
+  <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>Bitrate measures encoded media, excluding network overhead.</span><span id="updated">Awaiting first update</span></footer>
+ </main>
+ <template id="target-template">
+  <article class="panel target-panel">
+   <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span></div>
+   <div class="target-stats"><div><span class="metric target-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong class="target-peak">—</strong><span>Mbps peak · 15 min</span></div></div>
+   <div class="chart target-chart"></div>
+   <div class="target-detail"><span class="target-message"></span><span class="attempts"></span></div>
+   <div class="issue" hidden></div>
+   <div class="target-control"><div><strong class="switch-label">Target enabled</strong><p class="switch-help">Ready when your input goes live.</p></div><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>
+  </article>
+ </template>
+</body>
+</html>

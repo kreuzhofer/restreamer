@@ -4,6 +4,9 @@
   "application": "live",
   "stream_key": "${INGEST_STREAM_KEY}",
   "queue_bytes": 16777216,
+  "dashboard_username": "${DASHBOARD_USERNAME}",
+  "dashboard_password": "${DASHBOARD_PASSWORD}",
+  "state_file": "${TARGET_STATE_FILE}",
   "targets": [
     {
       "name": "twitch",

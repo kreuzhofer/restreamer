@@ -43,12 +43,15 @@ func (t Target) IsEnabled() bool {
 }
 
 type Config struct {
-	Listen       string   `json:"listen"`
-	HealthListen string   `json:"health_listen"`
-	Application  string   `json:"application"`
-	StreamKey    string   `json:"stream_key"`
-	QueueBytes   int      `json:"queue_bytes"`
-	Targets      []Target `json:"targets"`
+	Listen            string   `json:"listen"`
+	HealthListen      string   `json:"health_listen"`
+	Application       string   `json:"application"`
+	StreamKey         string   `json:"stream_key"`
+	QueueBytes        int      `json:"queue_bytes"`
+	Targets           []Target `json:"targets"`
+	DashboardUsername string   `json:"dashboard_username"`
+	DashboardPassword string   `json:"dashboard_password"`
+	StateFile         string   `json:"state_file"`
 }
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -95,6 +98,14 @@ func Load(path string) (Config, error) {
 			return c, fmt.Errorf("target %d URL references an unset or empty environment variable", i+1)
 		}
 	}
+	for _, value := range []*string{&c.DashboardUsername, &c.DashboardPassword} {
+		var missing bool
+		*value, missing = expand(*value)
+		if missing {
+			*value = ""
+		}
+	}
+	c.StateFile = os.ExpandEnv(c.StateFile)
 	return c, c.Validate()
 }
 
@@ -111,6 +122,12 @@ func expand(value string) (string, bool) {
 }
 
 func (c Config) Validate() error {
+	if (c.DashboardUsername == "") != (c.DashboardPassword == "") {
+		return errors.New("set both dashboard_username and dashboard_password, or leave both empty to disable the dashboard")
+	}
+	if strings.ContainsAny(c.DashboardUsername, ":\r\n") || strings.ContainsAny(c.DashboardPassword, "\r\n") {
+		return errors.New("dashboard credentials contain unsupported characters")
+	}
 	for _, address := range []string{c.Listen, c.HealthListen} {
 		if _, _, err := net.SplitHostPort(address); err != nil {
 			return errors.New("listen addresses must use host:port")
@@ -140,13 +157,24 @@ func (c Config) Validate() error {
 		if !t.IsEnabled() {
 			continue
 		}
-		u, err := url.Parse(t.URL)
-		if err != nil || u == nil || (u.Scheme != "rtmp" && u.Scheme != "rtmps") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || strings.Trim(u.Path, "/") == "" {
-			return fmt.Errorf("target %d needs an rtmp(s) server URL with an application path, without userinfo or fragment", i+1)
+		if err := t.ReadyError(); err != nil {
+			return fmt.Errorf("target %d: %s", i+1, err)
 		}
-		if u.Port() == "0" {
-			return fmt.Errorf("target %d has an invalid port", i+1)
-		}
+	}
+	return nil
+}
+
+// ReadyError is safe to display: it never includes URLs or credentials.
+func (t Target) ReadyError() error {
+	if strings.TrimSpace(t.StreamKey) == "" {
+		return errors.New("missing stream key")
+	}
+	u, err := url.Parse(t.URL)
+	if err != nil || u == nil || (u.Scheme != "rtmp" && u.Scheme != "rtmps") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || strings.Trim(u.Path, "/") == "" {
+		return errors.New("needs an rtmp(s) server URL with an application path, without userinfo or fragment")
+	}
+	if u.Port() == "0" {
+		return errors.New("invalid port")
 	}
 	return nil
 }

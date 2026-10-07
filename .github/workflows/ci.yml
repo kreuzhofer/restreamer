@@ -24,21 +24,36 @@ jobs:
           INGEST_STREAM_KEY=ci-test-key-123456 TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose config --quiet
           INGEST_STREAM_KEY=ci-test-key-123456 TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
-      - name: Smoke test bundled configuration and container health
+      - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
           env_args=(-e INGEST_STREAM_KEY=ci-test-key-123456 -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test)
           docker run --rm -e INGEST_STREAM_KEY=ci-test-key-123456 restreamer:test -config /etc/restreamer/config.json -check-config
           docker run --rm "${env_args[@]}" restreamer:test -config /etc/restreamer/config.json -check-config
-          docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true "${env_args[@]}" restreamer:test
-          trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke' EXIT
+          docker volume create restreamer-smoke-state
+          trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke; docker volume rm restreamer-smoke-state' EXIT
+          start_container() {
+            docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+              -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
+              -e TARGET_STATE_FILE=/data/targets.json -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              "${env_args[@]}" restreamer:test
+          }
+          start_container
           for attempt in {1..10}; do
             if docker exec restreamer-smoke /restreamer healthcheck; then
-              exit 0
+              break
             fi
             sleep 1
           done
-          exit 1
+          docker exec restreamer-smoke /restreamer healthcheck
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/dashboard)" = 401
+          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/ > /dev/null
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/targets/twitch \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
+          docker rm -f restreamer-smoke
+          start_container
+          curl --retry 10 --retry-connrefused --retry-delay 1 --fail -s -u ci:ci-dashboard-password \
+            http://127.0.0.1:18080/status | jq -e '.outputs[] | select(.name == "twitch") | .enabled == false'
   image:
     needs: test
     runs-on: ubuntu-latest

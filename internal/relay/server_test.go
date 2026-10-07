@@ -106,8 +106,14 @@ func eventually(t *testing.T, condition func() bool) {
 
 func startRelay(t *testing.T, targets []config.Target) (*Server, string) {
 	t.Helper()
+	return startRelayWithLogger(t, targets, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func startRelayWithLogger(t *testing.T, targets []config.Target, log *slog.Logger) (*Server, string) {
+	t.Helper()
 	cfg := config.Config{Listen: ":1935", HealthListen: ":8080", Application: "live", StreamKey: "input-key-1234567890", QueueBytes: 1 << 20, Targets: targets}
-	s := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	cfg.DashboardUsername, cfg.DashboardPassword = "admin", "test-password"
+	s := New(cfg, log)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -256,6 +262,7 @@ func TestAuthenticationSinglePublisherAndStatus(t *testing.T) {
 		t.Fatal("second publisher displaced first")
 	}
 	request := httptest.NewRequest("GET", "/status", nil)
+	request.SetBasicAuth("admin", "test-password")
 	response := httptest.NewRecorder()
 	s.Handler().ServeHTTP(response, request)
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"publishing":true`) {

@@ -116,3 +116,30 @@ func TestDisabledTargetsNeedNoURL(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardCredentials(t *testing.T) {
+	t.Setenv("DASH_TEST_USER", "admin")
+	t.Setenv("DASH_TEST_PASSWORD", `password$with"quotes`)
+	for _, tc := range []struct {
+		fields         string
+		valid, enabled bool
+	}{
+		{``, true, false},
+		{`,"dashboard_username":"${DASH_TEST_USER}","dashboard_password":"${DASH_TEST_PASSWORD}"`, true, true},
+		{`,"dashboard_username":"admin"`, false, false},
+		{`,"dashboard_password":"secret"`, false, false},
+		{`,"dashboard_username":"admin:bad","dashboard_password":"secret"`, false, false},
+		{`,"dashboard_username":"${UNSET_DASH_987}","dashboard_password":"prefix-${UNSET_DASH_987}"`, true, false},
+	} {
+		cfg, err := loadText(t, `{"stream_key":"input-key-1234567890","targets":[{"name":"one"}]`+tc.fields+`}`)
+		if (err == nil) != tc.valid {
+			t.Fatalf("valid %v, error %v", tc.valid, err)
+		}
+		if err == nil && (cfg.DashboardPassword != "") != tc.enabled {
+			t.Fatal("wrong dashboard default")
+		}
+		if tc.enabled && cfg.DashboardPassword != `password$with"quotes` {
+			t.Fatal("password changed during expansion")
+		}
+	}
+}

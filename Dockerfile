@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS build
 WORKDIR /src
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates && mkdir -p /out/data && chown 65532:65532 /out/data
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
@@ -16,6 +16,7 @@ COPY THIRD_PARTY_NOTICES /THIRD_PARTY_NOTICES
 COPY config.example.json /etc/restreamer/config.json
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/restreamer /restreamer
+COPY --from=build --chown=65532:65532 /out/data /data
 USER 65532:65532
 EXPOSE 1935 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 CMD ["/restreamer", "healthcheck"]

@@ -12,7 +12,13 @@ import (
 
 // Accept authenticates and reserves a publisher before acknowledging publish.
 // authorize must return false if another input is already active.
-func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
+func Accept(n net.Conn, authorize func(app, key string) bool) (_ *Conn, retErr error) {
+	stage := "handshake"
+	defer func() {
+		if retErr != nil {
+			retErr = acceptFailure(stage, retErr)
+		}
+	}()
 	if err := n.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return nil, err
 	}
@@ -25,6 +31,7 @@ func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
 		return nil, errors.New("RTMPE is not supported")
 	}
 	c := New(n, bc)
+	stage = "connect_command"
 	a, err := c.readCommand()
 	if err != nil {
 		return nil, err
@@ -36,6 +43,7 @@ func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
 	if !ok {
 		return nil, errors.New("missing application")
 	}
+	stage = "connect_reply"
 	if err := c.control(5, u32(2500000)); err != nil {
 		return nil, err
 	}
@@ -51,20 +59,24 @@ func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
 		return nil, err
 	}
 	for {
+		stage = "publish_command"
 		a, err = c.readCommand()
 		if err != nil {
 			return nil, err
 		}
 		switch a[0] {
 		case "createStream":
+			stage = "create_stream_reply"
 			if err := c.command(0, "_result", a[1].(float64), nil, float64(1)); err != nil {
 				return nil, err
 			}
 		case "releaseStream", "FCPublish":
+			stage = "prepare_publish_reply"
 			if err := c.command(0, "_result", a[1].(float64), nil, nil); err != nil {
 				return nil, err
 			}
 		case "publish":
+			stage = "publish_authorization"
 			if len(a) < 4 {
 				return nil, errors.New("missing stream key")
 			}
@@ -73,6 +85,7 @@ func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
 				_ = c.status("error", "NetStream.Publish.BadName")
 				return nil, errors.New("publisher rejected")
 			}
+			stage = "publish_reply"
 			if err := c.control(4, append([]byte{0, 0}, u32(1)...)); err != nil {
 				return nil, err
 			}
@@ -84,6 +97,7 @@ func Accept(n net.Conn, authorize func(app, key string) bool) (*Conn, error) {
 			}
 			return c, nil
 		case "play":
+			stage = "playback_rejected"
 			_ = c.status("error", "NetStream.Play.Failed")
 			return nil, errors.New("playback is not supported")
 		}
