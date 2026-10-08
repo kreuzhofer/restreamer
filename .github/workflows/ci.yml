@@ -40,15 +40,22 @@ jobs:
               -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
               -e TARGET_STATE_FILE=/data/targets.json -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               "${env_args[@]}" restreamer:test
+            # Startup prepares BRB media before opening HTTP, including after a
+            # restart. Docker can reset connections while the port is not ready.
+            for attempt in {1..60}; do
+              if docker exec restreamer-smoke /restreamer healthcheck; then
+                return 0
+              fi
+              if [ "$(docker inspect --format '{{.State.Running}}' restreamer-smoke)" != true ]; then
+                echo "Container exited before becoming healthy" >&2
+                return 1
+              fi
+              sleep 1
+            done
+            echo "Container did not become healthy within the startup deadline" >&2
+            return 1
           }
           start_container
-          for attempt in {1..60}; do
-            if docker exec restreamer-smoke /restreamer healthcheck; then
-              break
-            fi
-            sleep 1
-          done
-          docker exec restreamer-smoke /restreamer healthcheck
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/dashboard)" = 401
           curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/ > /dev/null
           curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.forwarding == false'
@@ -62,8 +69,8 @@ jobs:
             -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
           docker rm -f restreamer-smoke
           start_container
-          curl --retry 10 --retry-connrefused --retry-delay 1 --fail -s -u ci:ci-dashboard-password \
-            http://127.0.0.1:18080/status | jq -e '.forwarding == false and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
+          curl --fail --show-error -s -u ci:ci-dashboard-password \
+            http://127.0.0.1:18080/status | jq -e '.forwarding == false and .brb.ready == true and .brb.manual == false and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
   image:
     needs: test
     runs-on: ubuntu-latest
