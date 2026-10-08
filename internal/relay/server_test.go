@@ -109,11 +109,15 @@ func startRelay(t *testing.T, targets []config.Target) (*Server, string) {
 	return startRelayWithLogger(t, targets, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func startRelayWithLogger(t *testing.T, targets []config.Target, log *slog.Logger) (*Server, string) {
+func startRelayWithLogger(t *testing.T, targets []config.Target, log *slog.Logger, paused ...bool) (*Server, string) {
 	t.Helper()
 	cfg := config.Config{Listen: ":1935", HealthListen: ":8080", Application: "live", StreamKey: "input-key-1234567890", QueueBytes: 1 << 20, Targets: targets}
 	cfg.DashboardUsername, cfg.DashboardPassword = "admin", "test-password"
 	s := New(cfg, log)
+	// Existing relay tests explicitly opt into forwarding. Production starts off.
+	if len(paused) == 0 || !paused[0] {
+		s.setForwarding(true)
+	}
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

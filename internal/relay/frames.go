@@ -19,7 +19,7 @@ func (o *output) recordSent(m *rtmp.Message) {
 		o.status.Frames++
 		o.failed = false
 	}
-	if o.status.Enabled {
+	if o.status.Enabled && !o.blocked {
 		o.status.State = "streaming"
 	}
 }
@@ -28,7 +28,7 @@ func (o *output) discardFrames(n uint64, intentional bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	switch {
-	case !o.status.Enabled:
+	case !o.status.Enabled || o.blocked:
 		o.status.PausedFrames += n
 	case intentional:
 		o.status.SkippedFrames += n
@@ -44,7 +44,7 @@ func (o *output) unavailableFrame() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	switch {
-	case !o.status.Enabled:
+	case !o.status.Enabled || o.blocked:
 		o.status.PausedFrames++
 	case o.failed:
 		o.status.DroppedFrames++

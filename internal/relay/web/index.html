@@ -8,6 +8,7 @@
  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
  <link rel="stylesheet" href="/dashboard.css">
  <script src="/dashboard.js" defer></script>
+ <script src="/preview.js" defer></script>
 </head>
 <body>
  <main>
@@ -21,11 +22,23 @@
   </section>
   <div id="notice" class="notice" role="alert" hidden></div>
   <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
+  <div class="input-grid">
   <section class="panel input-panel" aria-labelledby="input-title">
    <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
    <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
    <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
    <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
+  </section>
+  <section class="panel preview-panel" aria-labelledby="preview-title">
+   <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">Input preview</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
+   <div class="preview-screen"><video id="preview-video" controls autoplay muted playsinline aria-label="Live input preview"></video></div>
+   <p id="preview-status" class="preview-status" role="status">Waiting for OBS input</p>
+   <div class="panel-footer"><span>Original input · audio starts muted</span><span>Preview stays on while forwarding is off</span></div>
+  </section>
+  </div>
+  <section class="panel forwarding-panel" aria-labelledby="forwarding-title">
+   <div><h2 id="forwarding-title">Forward to destinations</h2><p id="forwarding-help">Off at every application launch. Individual target switches are kept.</p></div>
+   <button id="forwarding-toggle" class="toggle" type="button" role="switch" aria-label="Forward to destinations" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button>
   </section>
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>

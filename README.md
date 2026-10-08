@@ -29,9 +29,9 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - JSON logs, HTTP liveness/status endpoints, and graceful SIGTERM shutdown.
 - Password-protected dashboard with independent live target switches and rolling
   15-minute bitrate graphs for the input and every output. Switches persist in a
-  Docker volume; changing them does not disconnect OBS or other destinations.
+  Docker volume; changing them does not disconnect OBS or other destinations.\n- Authenticated input video preview and a master forwarding switch that starts\n  off on every application launch, independently of saved target switches.
 
-There is no transcoding, recording, playback endpoint, audio-only mode,
+There is no transcoding, recording, public playback endpoint, audio-only mode,
 Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher
 using an unsupported codec is disconnected with an explanatory log entry.
 
@@ -59,7 +59,7 @@ URLs have defaults; override them with your platform's ingest URL if needed.
 Server URLs contain the application path,
 **without** the stream key; keys are sent separately and literally.
 Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to enable the dashboard.
-Leave both empty to run only the relay and health endpoint.
+Both credentials are needed to operate the forwarding switch. Without them,\nRTMP input and health checks still run, but forwarding remains off.
 
 ```sh
 docker compose pull
@@ -172,7 +172,7 @@ Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS
 URL) and sign in with `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`. Authentication
 uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
 `/healthz` remains public for Docker healthchecks. If both credentials are absent,
-the dashboard and status API return 503 while RTMP continues operating.
+the dashboard and status API return 503 while RTMP input continues operating.\nForwarding stays off until enabled through the authenticated dashboard/API.
 
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
@@ -182,10 +182,17 @@ Docker network can use `http://restreamer:8080`; a host proxy can use
 `STATUS_BIND_ADDRESS` to a reachable private interface and allow that proxy through
 your firewall. You do not need WebSocket support.
 
-- Switch a target **off** to close its connection and cancel retries. OBS and
+- **Forward to destinations** is the master switch. It starts **off on every
+  process/container launch**, even when saved target switches are on. Turn it on
+  to forward to enabled targets. Turning it off closes all target connections and
+  cancels retries; OBS input, statistics, and preview continue. It never changes
+  or persists over the individual target preferences. Reloading the page or
+  reconnecting OBS does not reset it; restarting the application does.
+- Switch a target **off**
+ to close its connection and cancel retries. OBS and
   other outputs continue. Switch it **on** to connect again, send cached headers,
   and resume at the next live video keyframe. Nothing is buffered for replay.
-- When OBS is offline, enabled targets remain **Ready** until input connects.
+- With master forwarding on and OBS offline, enabled targets remain **Ready**\n  until input connects. With the master off, they show **Forwarding off**.
   A missing key or invalid server URL prevents enabling a target; update the
   container configuration and redeploy to fix it.
 - Each card shows its connection state, attempts, and latest issue with a
@@ -199,7 +206,33 @@ your firewall. You do not need WebSocket support.
   zero on the next complete sampling interval. History and byte counters are held
   in memory and reset on process restart; only switches are persisted.
 
+### Input preview
+
+The input monitor and player share a row on desktop and stack on smaller screens.
+The player starts muted and previews the original input even with master forwarding
+or all destinations off. Use its audio/fullscreen controls or **Pause preview** to
+stop downloading video without changing forwarding.
+
+Preview uses authenticated `GET /api/preview`: Go repackages H.264/AAC-LC into
+fragmented MP4; the browser decodes it through Media Source Extensions. No GPU,
+FFmpeg, transcoding, extra port, or external player dependency is required. The
+browser must support the input H.264 profile/resolution and AAC. Unsupported
+codecs and playback failures are shown in the panel. Video-only input also works.
+Playback starts at the next keyframe and reconnects after input changes; this is a
+live monitor, not a recording or a 15-minute playback buffer.
+
+Each open preview downloads the **original input bitrate**, including 1440p/4K;
+showing it at half width does not reduce bandwidth. Up to eight simultaneous
+viewers have independent bounded queues; slow viewers cannot block destinations.
+The player keeps roughly 20–25 seconds of buffered media.
+
+Disable response buffering and compression for `/api/preview` in your reverse
+proxy and allow long-lived streaming responses. The server sends
+`X-Accel-Buffering: no` for nginx. Keep forwarding `Host` and `Authorization`, and
+protect this endpoint with the same HTTPS/authentication setup as the dashboard.
+
 ### FPS and frame counters
+
 
 The **Bitrate / FPS** selector switches all graphs between the same rolling
 15-minute histories. Current input FPS and FPS written to each target remain
@@ -216,7 +249,7 @@ Each destination also shows **Relay drops**, with expandable frame counters:
   connection's queue, not fully written, or omitted while an enabled destination
   is disconnected after an error. An in-flight failed write is counted once.
 - **Omitted while paused:** frames arriving or discarded while that target is
-  disabled; these do not increase relay drops.
+  disabled or master forwarding is off; these do not increase relay drops.
 - **Skipped:** initial connection setup, waiting for a keyframe, old-timestamp
   media during resynchronization, and buffered frames discarded on intentional
   cancellation or input-session shutdown. These do not increase relay drops.
@@ -242,7 +275,11 @@ samples (timestamps in Unix milliseconds). Existing `input` and `outputs` values
 remain bitrates in bits per second; `input_fps` and `output_fps` add frames per
 second. Status includes cumulative `input_frames`; target objects include
 `video_frames_sent`, `dropped_frames`, `paused_frames`, and `skipped_frames`.
-`GET /status` omits history. Set a switch using authenticated JSON:
+`GET /status` omits history. Both include `forwarding`, the current master switch.
+Set it with `PUT /api/forwarding` and `{"enabled":true}` or `{"enabled":false}`,
+using the same authentication, JSON content type, and `X-Restreamer-Control: 1`
+header as target controls. Master changes affect the running process only.
+Set a target switch using authenticated JSON:
 
 ```sh
 curl --user "$DASHBOARD_USERNAME" \

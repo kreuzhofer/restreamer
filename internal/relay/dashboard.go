@@ -27,6 +27,8 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /status", s.dashboardStatus)
 	private.HandleFunc("GET /api/dashboard", s.dashboardStatus)
 	private.HandleFunc("PUT /api/targets/{name}", s.targetControl)
+	private.HandleFunc("PUT /api/forwarding", s.targetControl)
+	private.HandleFunc("GET /api/preview", s.preview)
 	assets, _ := fs.Sub(dashboardFiles, "web")
 	private.Handle("GET /", http.FileServer(http.FS(assets)))
 	mux.Handle("/", s.authenticate(private))
@@ -38,7 +40,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		if s.cfg.DashboardUsername == "" || s.cfg.DashboardPassword == "" {
 			http.Error(w, "Dashboard disabled: configure DASHBOARD_USERNAME and DASHBOARD_PASSWORD.", http.StatusServiceUnavailable)
 			return
@@ -66,6 +68,7 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	status := struct {
 		Time        int64           `json:"time"`
 		Publishing  bool            `json:"publishing"`
+		Forwarding  bool            `json:"forwarding"`
 		InputBytes  uint64          `json:"input_bytes"`
 		InputFrames uint64          `json:"input_frames"`
 		Outputs     []OutputStatus  `json:"outputs"`
@@ -75,6 +78,7 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	for _, o := range s.outputs {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
+	status.Forwarding = s.forwarding.Load()
 	if r.URL.Path == "/api/dashboard" {
 		status.History = s.history(now)
 	}
@@ -106,6 +110,11 @@ func (s *Server) targetControl(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&body) != nil || body.Enabled == nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "Expected one JSON object with enabled: true or false", http.StatusBadRequest)
+		return
+	}
+	if r.URL.Path == "/api/forwarding" {
+		s.setForwarding(*body.Enabled)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if err := s.setTarget(r.PathValue("name"), *body.Enabled); err != nil {

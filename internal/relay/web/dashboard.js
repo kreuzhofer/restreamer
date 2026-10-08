@@ -3,13 +3,14 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const cards = new Map();
 const samples = [];
 const windowMs = 15 * 60 * 1000;
-const states = {idle: 'Ready', disabled: 'Disabled', stopping: 'Stopping', connecting: 'Connecting', waiting_for_keyframe: 'Waiting for keyframe', streaming: 'Streaming', retrying: 'Retrying'};
+const states = {idle: 'Ready', paused: 'Forwarding off', disabled: 'Disabled', stopping: 'Stopping', connecting: 'Connecting', waiting_for_keyframe: 'Waiting for keyframe', streaming: 'Streaming', retrying: 'Retrying'};
 const issues = {connect_failed: 'Could not connect or publish. Check the target server, stream key, and network access.', queue_overflow: 'The destination could not keep up; its output queue filled. Reconnecting independently.', connection_closed_or_write_failed: 'The destination disconnected or stopped accepting data. Reconnecting automatically.'};
 let snapshot;
 let connected = false;
 let controlError = '';
 let refreshSequence = 0;
 let graphMetric = 'bitrate';
+let forwardingPending = false;
 const pending = new Set();
 const rate = bps => (bps / 1e6).toFixed(2);
 const timeLabel = milliseconds => new Date(milliseconds).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
@@ -62,7 +63,15 @@ function badge(element, state) {
 }
 function render() {
  if (!snapshot) return;
+ const master = $('#forwarding-toggle');
+ master.setAttribute('aria-checked', String(snapshot.forwarding));
+ master.disabled = !connected || forwardingPending;
+ $('.toggle-text', master).textContent = forwardingPending ? 'Updating…' : snapshot.forwarding ? 'On' : 'Off';
+ $('.forwarding-panel').dataset.enabled = String(snapshot.forwarding);
+ $('#forwarding-help').textContent = snapshot.forwarding ? 'Forwarding is on. Only enabled targets receive the live input.' : 'Forwarding is off. Input and preview continue; target switches are kept. Resets off at every application launch.';
+ window.updatePreview?.(connected && snapshot.publishing);
  const now = snapshot.time;
+
  const last = samples.at(-1);
  const current = connected && last && now - last.time < 3500;
  $('#input-rate').textContent = current ? rate(last.input) : '—';
@@ -102,7 +111,7 @@ function render() {
   $('.target-graph-label', card).textContent = graphMetric === 'fps' ? 'FPS · frames/s' : 'Bitrate · Mbps';
   const graphPoints = graphMetric === 'fps' ? samples.map(p => ({time: p.time, value: p.output_fps?.[output.name]})).filter(p => Number.isFinite(p.value)) : points;
   chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
-  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
+  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? 'Master forwarding is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
   $('.target-message', card).textContent = message;
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
   const issue = $('.issue', card);
@@ -114,7 +123,7 @@ function render() {
   button.disabled = !connected || !output.can_enable || pending.has(output.name);
   $('.toggle-text', card).textContent = pending.has(output.name) ? 'Saving…' : output.enabled ? 'On' : 'Off';
   $('.switch-label', card).textContent = !output.can_enable ? 'Configuration required' : output.enabled ? 'Target enabled' : 'Target disabled';
-  $('.switch-help', card).textContent = !output.can_enable ? 'Set a server URL and key, then redeploy.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.publishing ? 'Switch on to resume from the live stream.' : 'Switch on to send your next live stream.';
+  $('.switch-help', card).textContent = !output.can_enable ? 'Set a server URL and key, then redeploy.' : !snapshot.forwarding ? 'Master forwarding must also be on to send this stream.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.publishing ? 'Switch on to resume from the live stream.' : 'Switch on to send your next live stream.';
  }
 }
 function connection(ok, message) {
@@ -154,7 +163,21 @@ async function toggle(name) {
  } catch (error) { controlError = error.message; }
  finally { pending.delete(name); await refresh(); }
 }
-async function poll() { await refresh(); setTimeout(poll, 2000); }
+async function toggleForwarding() {
+ if (!connected || forwardingPending || !snapshot) return;
+ const enabled = !snapshot.forwarding;
+ forwardingPending = true;
+ controlError = '';
+ render();
+ try {
+  const response = await fetch(`${location.origin}/api/forwarding`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled}), signal: AbortSignal.timeout(8000)});
+  if (!response.ok) throw new Error((await response.text()).trim() || 'Could not change forwarding.');
+ } catch (error) { controlError = error.message; }
+ finally { forwardingPending = false; await refresh(); }
+}
+$('#forwarding-toggle').addEventListener('click', toggleForwarding);
+async function poll()
+ { await refresh(); setTimeout(poll, 2000); }
 let resizeTimer;
 document.querySelectorAll('[data-metric]').forEach(button => {
   button.addEventListener('click', () => {

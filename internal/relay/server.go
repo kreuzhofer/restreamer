@@ -18,22 +18,27 @@ import (
 )
 
 type Server struct {
-	cfg         config.Config
-	log         *slog.Logger
-	active      atomic.Bool
-	outputs     []*output
-	inputBytes  atomic.Uint64
-	inputFrames atomic.Uint64
-	metrics     metrics
-	controlMu   sync.Mutex
-	initOnce    sync.Once
-	initErr     error
+	cfg          config.Config
+	log          *slog.Logger
+	active       atomic.Bool
+	forwarding   atomic.Bool
+	previewMu    sync.Mutex
+	previewHub   *hub
+	previewDone  <-chan struct{}
+	previewSlots chan struct{}
+	outputs      []*output
+	inputBytes   atomic.Uint64
+	inputFrames  atomic.Uint64
+	metrics      metrics
+	controlMu    sync.Mutex
+	initOnce     sync.Once
+	initErr      error
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, log: log}
+	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8)}
 	for _, target := range cfg.Targets {
-		state := "idle"
+		state := "paused"
 		if !target.IsEnabled() {
 			state = "disabled"
 		}
@@ -41,7 +46,7 @@ func New(cfg config.Config, log *slog.Logger) *Server {
 		if err := target.ReadyError(); err != nil {
 			status.UnavailableReason = err.Error()
 		}
-		s.outputs = append(s.outputs, &output{config: target, log: log, changed: make(chan struct{}, 1), status: status})
+		s.outputs = append(s.outputs, &output{config: target, log: log, changed: make(chan struct{}, 1), status: status, blocked: true})
 	}
 	return s
 }
@@ -165,6 +170,10 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	defer s.log.Info("publisher disconnected")
 	session, cancel := context.WithCancel(ctx)
 	h := newHub(s.cfg.QueueBytes, s.outputs...)
+	s.previewMu.Lock()
+	s.previewHub, s.previewDone = h, session.Done()
+	s.previewMu.Unlock()
+	defer func() { s.previewMu.Lock(); s.previewHub = nil; s.previewMu.Unlock() }()
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	defer cancel()

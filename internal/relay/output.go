@@ -36,26 +36,43 @@ type output struct {
 	status  OutputStatus
 	changed chan struct{}
 	failed  bool // Current interruption only; LastError intentionally survives recovery.
+	blocked bool // Master gate; independent of the persisted target preference.
 }
 
 func (o *output) state(state string) {
 	o.mu.Lock()
-	if o.status.Enabled {
+	if o.status.Enabled && !o.blocked {
 		o.status.State = state
 	}
 	o.mu.Unlock()
 }
 func (o *output) snapshot() OutputStatus { o.mu.Lock(); defer o.mu.Unlock(); return o.status }
 
+func (o *output) forwardingAllowed() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.status.Enabled && !o.blocked
+}
+
+func (o *output) settledState() string {
+	if !o.status.Enabled {
+		return "disabled"
+	}
+	if o.blocked {
+		return "paused"
+	}
+	return "idle"
+}
+
 func (o *output) setEnabled(enabled bool) {
 	o.mu.Lock()
 	o.status.Enabled = enabled
 	if enabled {
 		o.failed = false
-		if o.status.State == "disabled" {
-			o.status.State = "idle"
+		if o.status.State == "disabled" || o.status.State == "paused" {
+			o.status.State = o.settledState()
 		}
-	} else if o.status.State == "idle" || o.status.State == "disabled" {
+	} else if o.status.State == "idle" || o.status.State == "disabled" || o.status.State == "paused" {
 		o.status.State = "disabled"
 	} else {
 		o.status.State = "stopping"
@@ -87,11 +104,7 @@ func (o *output) manage(ctx context.Context, h *hub) {
 	}
 	settle := func() {
 		o.mu.Lock()
-		if o.status.Enabled {
-			o.status.State = "idle"
-		} else {
-			o.status.State = "disabled"
-		}
+		o.status.State = o.settledState()
 		o.status.RetryAt = 0
 		o.mu.Unlock()
 	}
@@ -100,7 +113,7 @@ func (o *output) manage(ctx context.Context, h *hub) {
 		if ctx.Err() != nil {
 			return
 		}
-		if o.snapshot().Enabled {
+		if o.forwardingAllowed() {
 			if cancel == nil {
 				cancel, done = o.startWorker(ctx, h)
 			}
@@ -137,7 +150,7 @@ func (o *output) run(ctx context.Context, h *hub) {
 		o.mu.Unlock()
 		started := time.Now()
 		err := o.attempt(ctx, h)
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || !o.forwardingAllowed() {
 			return
 		}
 		o.state("retrying")
@@ -186,7 +199,7 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 	}
 	defer c.Net.Close()
 	s := h.subscribeOutput(o)
-	defer func() { h.finish(s, ctx.Err() != nil) }()
+	defer func() { h.finish(s, ctx.Err() != nil || !o.forwardingAllowed()) }()
 	o.state("waiting_for_keyframe")
 
 	// The reader handles destination pings and acknowledgements for the entire
@@ -231,6 +244,12 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 			return readErr
 		case m := <-s.packets:
 			h.consumed(s, m)
+			if !o.forwardingAllowed() {
+				if isVideoFrame(m) {
+					o.discardFrames(1, true)
+				}
+				return context.Canceled
+			}
 			if first {
 				base = m.Timestamp
 				first = false

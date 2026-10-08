@@ -159,7 +159,7 @@ func (h *hub) publish(m *rtmp.Message) error {
 		}
 	}
 	for s := range h.subs {
-		if s.output != nil && !s.output.snapshot().Enabled {
+		if s.output != nil && !s.output.forwardingAllowed() {
 			if isVideoFrame(m) {
 				s.output.discardFrames(1, true)
 			}

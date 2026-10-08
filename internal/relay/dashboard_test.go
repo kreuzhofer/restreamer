@@ -40,7 +40,7 @@ func dashboardRequest(s *Server, method, path, body string) *httptest.ResponseRe
 
 func TestDashboardAuthenticationAndControl(t *testing.T) {
 	s := dashboardServer(t)
-	for _, path := range []string{"/", "/dashboard.js", "/dashboard.css", "/status", "/api/dashboard", "/api/targets/one"} {
+	for _, path := range []string{"/", "/dashboard.js", "/preview.js", "/dashboard.css", "/status", "/api/dashboard", "/api/preview", "/api/forwarding", "/api/targets/one"} {
 		for _, password := range []string{"", "incorrect"} {
 			r := httptest.NewRequest("GET", path, nil)
 			if password != "" {
@@ -103,28 +103,30 @@ func TestDashboardAuthenticationAndControl(t *testing.T) {
 
 func TestDashboardRejectsCrossOriginControl(t *testing.T) {
 	s := dashboardServer(t)
-	for _, tc := range []struct {
-		origin, fetchSite, controlHeader, contentType string
-		want                                          int
-	}{
-		{"https://evil.example", "", "1", "application/json", 403},
-		{"null", "", "1", "application/json", 403},
-		{"https://dashboard.example", "cross-site", "1", "application/json", 403},
-		{"https://dashboard.example", "same-origin", "", "application/json", 403},
-		{"https://dashboard.example", "same-origin", "1", "text/plain", 403},
-		{"https://dashboard.example", "same-origin", "1", "application/json", 204},
-		{"", "", "1", "application/json", 204},
-	} {
-		r := httptest.NewRequest("PUT", "http://dashboard.example/api/targets/one", strings.NewReader(`{"enabled":false}`))
-		r.SetBasicAuth("admin", "dashboard-secret")
-		r.Header.Set("Origin", tc.origin)
-		r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
-		r.Header.Set("X-Restreamer-Control", tc.controlHeader)
-		r.Header.Set("Content-Type", tc.contentType)
-		w := httptest.NewRecorder()
-		s.Handler().ServeHTTP(w, r)
-		if w.Code != tc.want {
-			t.Fatalf("%+v: %d", tc, w.Code)
+	for _, path := range []string{"/api/targets/one", "/api/forwarding"} {
+		for _, tc := range []struct {
+			origin, fetchSite, controlHeader, contentType string
+			want                                          int
+		}{
+			{"https://evil.example", "", "1", "application/json", 403},
+			{"null", "", "1", "application/json", 403},
+			{"https://dashboard.example", "cross-site", "1", "application/json", 403},
+			{"https://dashboard.example", "same-origin", "", "application/json", 403},
+			{"https://dashboard.example", "same-origin", "1", "text/plain", 403},
+			{"https://dashboard.example", "same-origin", "1", "application/json", 204},
+			{"", "", "1", "application/json", 204},
+		} {
+			r := httptest.NewRequest("PUT", "http://dashboard.example"+path, strings.NewReader(`{"enabled":false}`))
+			r.SetBasicAuth("admin", "dashboard-secret")
+			r.Header.Set("Origin", tc.origin)
+			r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
+			r.Header.Set("X-Restreamer-Control", tc.controlHeader)
+			r.Header.Set("Content-Type", tc.contentType)
+			w := httptest.NewRecorder()
+			s.Handler().ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("%+v: %d", tc, w.Code)
+			}
 		}
 	}
 	r := httptest.NewRequest(http.MethodOptions, "/api/targets/one", nil)

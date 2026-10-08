@@ -27,6 +27,7 @@ func TestVideoFrameClassification(t *testing.T) {
 
 func TestFrameAccountingQueueFailureAndIntentionalSkips(t *testing.T) {
 	o := dashboardServer(t).outputs[0]
+	o.blocked = false // These unit tests exercise an open master gate.
 	h := newHub(32, o)
 	sub := h.subscribeOutput(o)
 	publish := func(m *rtmp.Message) {
@@ -77,6 +78,7 @@ func TestFrameAccountingInFlightFailureAndPause(t *testing.T) {
 	for _, paused := range []bool{false, true} {
 		t.Run(map[bool]string{false: "network failure", true: "manual pause"}[paused], func(t *testing.T) {
 			o := dashboardServer(t).outputs[0]
+			o.blocked = false // These unit tests exercise an open master gate.
 			h := newHub(1024, o)
 			sub := h.subscribeOutput(o)
 			_ = h.publish(videoConfig())
