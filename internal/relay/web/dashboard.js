@@ -11,6 +11,7 @@ let controlError = '';
 let refreshSequence = 0;
 let graphMetric = 'bitrate';
 let forwardingPending = false;
+let brbPending = false, assetsPending = false, assetsDirty = false, assetGeneration;
 const pending = new Set();
 const rate = bps => (bps / 1e6).toFixed(2);
 const timeLabel = milliseconds => new Date(milliseconds).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
@@ -68,7 +69,8 @@ function render() {
  master.disabled = !connected || forwardingPending;
  $('.toggle-text', master).textContent = forwardingPending ? 'Updating…' : snapshot.forwarding ? 'On' : 'Off';
  $('.forwarding-panel').dataset.enabled = String(snapshot.forwarding);
- $('#forwarding-help').textContent = snapshot.forwarding ? 'Forwarding is on. Only enabled targets receive the live input.' : 'Forwarding is off. Input and preview continue; target switches are kept. Resets off at every application launch.';
+ $('#forwarding-help').textContent = snapshot.forwarding ? 'Broadcast is on. Turning this off ends all destinations, including BRB.' : 'Forwarding is off. Input and preview continue; target switches are kept. Resets off at every application launch.';
+ renderBRB();
  window.updatePreview?.(connected && snapshot.publishing);
  const now = snapshot.time;
 
@@ -111,7 +113,7 @@ function render() {
   $('.target-graph-label', card).textContent = graphMetric === 'fps' ? 'FPS · frames/s' : 'Bitrate · Mbps';
   const graphPoints = graphMetric === 'fps' ? samples.map(p => ({time: p.time, value: p.output_fps?.[output.name]})).filter(p => Number.isFinite(p.value)) : points;
   chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
-  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? 'Master forwarding is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
+  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? 'Master forwarding is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? snapshot.brb?.active ? 'Sending BRB video and audio.' : 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
   $('.target-message', card).textContent = message;
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
   const issue = $('.issue', card);
@@ -165,16 +167,101 @@ async function toggle(name) {
 }
 async function toggleForwarding() {
  if (!connected || forwardingPending || !snapshot) return;
- const enabled = !snapshot.forwarding;
+ if (snapshot.forwarding) {
+  $('#stop-dialog').showModal();
+  $('#stop-cancel').focus();
+  return;
+ }
+ await setForwarding(true);
+}
+async function setForwarding(enabled) {
+ if (forwardingPending) return;
  forwardingPending = true;
  controlError = '';
  render();
  try {
-  const response = await fetch(`${location.origin}/api/forwarding`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled}), signal: AbortSignal.timeout(8000)});
+  const response = await fetch(`${location.origin}/api/forwarding`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled, confirmed: !enabled}), signal: AbortSignal.timeout(8000)});
   if (!response.ok) throw new Error((await response.text()).trim() || 'Could not change forwarding.');
  } catch (error) { controlError = error.message; }
  finally { forwardingPending = false; await refresh(); }
 }
+function renderBRB() {
+ const brb = snapshot.brb || {};
+ const button = $('#brb-toggle');
+ button.disabled = !connected || !brb.ready || brbPending;
+ button.setAttribute('aria-checked', String(!!brb.manual));
+ $('.toggle-text', button).textContent = brbPending ? 'Updating…' : brb.manual ? 'On' : 'Off';
+ const active = connected && snapshot.forwarding && brb.active;
+ $('#brb-badge').textContent = !connected ? 'Unavailable' : active ? 'BRB active' : brb.ready ? 'Protection ready' : 'Not configured';
+ $('#brb-badge').className = `badge ${active ? 'warn' : brb.ready ? 'live' : ''}`;
+ $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : !snapshot.forwarding ? brb.manual ? 'Manual BRB selected · master forwarding is off' : 'BRB ready · master forwarding is off' : active ? brb.manual ? 'Manual BRB · broadcast still live' : 'Waiting for OBS · broadcast still live' : brb.manual ? 'Switching to manual BRB…' : 'OBS live · automatic protection armed';
+ $('#brb-help').textContent = brb.manual ? 'OBS reconnecting will not end manual BRB. Switch BRB off when you are ready.' : 'OBS disconnects activate BRB automatically, with no time limit. Only master off ends the broadcast.';
+ $('#brb-settings').hidden = !brb.ready;
+ $('#brb-error').hidden = !brb.error;
+ $('#brb-error').textContent = brb.error || '';
+ $('#brb-profile').disabled = snapshot.forwarding || assetsPending || !connected;
+ $('#brb-save').disabled = !connected || !brb.ready || assetsPending;
+ $('#brb-save').textContent = assetsPending ? 'Preparing…' : 'Prepare & save BRB';
+ const assets = snapshot.brb_assets;
+ if (brb.ready && assets) {
+  if (assetGeneration !== assets.generation) {
+   assetGeneration = assets.generation;
+   $('#brb-image').src = `/api/brb/image?v=${encodeURIComponent(assetGeneration)}`;
+   $('#brb-image').hidden = false;
+  }
+  $('#brb-asset-status').textContent = `${assets.custom_image ? 'Custom image' : 'Default screen'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
+  if (!assetsDirty && !assetsPending) {
+   $('#brb-volume').value = assets.volume;
+   const profile = snapshot.brb_profile;
+   if (profile) {
+    const resolution = `${profile.width}x${profile.height}`;
+    const select = $('#brb-resolution');
+    if (![...select.options].some(option => option.value === resolution)) select.add(new Option(resolution, resolution));
+    select.value = resolution;
+    $('#brb-fps').value = profile.fps;
+    $('#brb-sample-rate').value = profile.sample_rate;
+   }
+  }
+ }
+}
+async function toggleBRB() {
+ if (!connected || brbPending || !snapshot?.brb?.ready) return;
+ const enabled = !snapshot.brb.manual;
+ brbPending = true;
+ controlError = '';
+ render();
+ try {
+  const response = await fetch(`${location.origin}/api/brb`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled}), signal: AbortSignal.timeout(8000)});
+  if (!response.ok) throw new Error((await response.text()).trim());
+ } catch (error) { controlError = error.message; }
+ finally { brbPending = false; await refresh(); }
+}
+async function saveBRB(event) {
+ event.preventDefault();
+ if (!connected || assetsPending) return;
+ const form = $('#brb-form');
+ const data = new FormData(form);
+ for (const name of ['image', 'music']) if (!data.get(name)?.size) data.delete(name);
+ if (!snapshot.forwarding) {
+  const [width, height] = $('#brb-resolution').value.split('x');
+  data.set('width', width); data.set('height', height);
+ }
+ assetsPending = true;
+ $('#brb-save-status').textContent = 'Preparing video and audio… Your current BRB remains active.';
+ render();
+ try {
+  const response = await fetch(`${location.origin}/api/brb/assets`, {method: 'POST', headers: {'X-Restreamer-Control': '1'}, body: data, signal: AbortSignal.timeout(180000)});
+  if (!response.ok) throw new Error((await response.text()).trim() || 'Could not prepare BRB.');
+  form.reset(); assetsDirty = false;
+  $('#brb-save-status').textContent = 'Saved · BRB is ready.';
+ } catch (error) { $('#brb-save-status').textContent = error.message; }
+ finally { assetsPending = false; await refresh(); }
+}
+$('#brb-toggle').addEventListener('click', toggleBRB);
+$('#brb-form').addEventListener('submit', saveBRB);
+$('#brb-form').addEventListener('input', () => { assetsDirty = true; });
+$('#stop-cancel').addEventListener('click', () => $('#stop-dialog').close());
+$('#stop-confirm').addEventListener('click', () => { $('#stop-dialog').close(); setForwarding(false); });
 $('#forwarding-toggle').addEventListener('click', toggleForwarding);
 async function poll()
  { await refresh(); setTimeout(poll, 2000); }

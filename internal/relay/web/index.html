@@ -40,12 +40,41 @@
    <div><h2 id="forwarding-title">Forward to destinations</h2><p id="forwarding-help">Off at every application launch. Individual target switches are kept.</p></div>
    <button id="forwarding-toggle" class="toggle" type="button" role="switch" aria-label="Forward to destinations" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button>
   </section>
+  <section class="panel brb-panel" aria-labelledby="brb-title">
+   <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
+   <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div><button id="brb-toggle" class="toggle" type="button" role="switch" aria-label="Manual BRB" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button></div>
+   <p id="brb-error" class="notice" role="alert" hidden></p>
+   <details id="brb-settings"><summary>BRB screen, music &amp; video profile</summary>
+    <form id="brb-form">
+     <div class="brb-assets">
+      <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
+      <div class="brb-fields">
+       <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels. Fitted without cropping.</small>
+       <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Use the default “Be right back” screen</label>
+       <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes. Loops during BRB.</small>
+       <label class="check-label"><input name="remove_music" type="checkbox" value="true"> Remove music and use silent audio</label>
+       <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
+      </div>
+     </div>
+     <fieldset id="brb-profile"><legend>Match your OBS output</legend><p>Change the profile while master forwarding is off, then reconnect OBS with matching settings. H.264 video and AAC-LC stereo audio.</p><div class="profile-fields">
+      <label>Resolution <select id="brb-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080" selected>1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
+      <label>Frame rate <select id="brb-fps" name="fps"><option>24</option><option>25</option><option selected>30</option><option>50</option><option>60</option></select></label>
+      <label>Audio sample rate <select id="brb-sample-rate" name="sample_rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>
+     </div></fieldset>
+     <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Prepare &amp; save BRB</button><span id="brb-save-status" role="status">Your current BRB stays ready while new assets are prepared.</span></div>
+    </form>
+   </details>
+  </section>
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
   </section>
   <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>FPS and drops are measured at the relay; OBS and platform playback statistics are unavailable.</span><span id="updated">Awaiting first update</span></footer>
  </main>
+ <dialog id="stop-dialog" aria-labelledby="stop-title" aria-describedby="stop-help">
+  <h2 id="stop-title">End the broadcast?</h2><p id="stop-help">Turning master forwarding off disconnects every destination and stops BRB and music. OBS can stay connected.</p>
+  <div class="dialog-actions"><button id="stop-cancel" class="preview-button" type="button" autofocus>Keep broadcasting</button><button id="stop-confirm" class="danger-button" type="button">End broadcast</button></div>
+ </dialog>
  <template id="target-template">
   <article class="panel target-panel">
    <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span></div>

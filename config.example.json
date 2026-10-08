@@ -7,6 +7,14 @@
   "dashboard_username": "${DASHBOARD_USERNAME}",
   "dashboard_password": "${DASHBOARD_PASSWORD}",
   "state_file": "${TARGET_STATE_FILE}",
+  "brb": {
+    "enabled": "${BRB_ENABLED}",
+    "directory": "${BRB_DIRECTORY}",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "sample_rate": 48000
+  },
   "targets": [
     {
       "name": "twitch",

@@ -42,16 +42,39 @@ func (t Target) IsEnabled() bool {
 	return t.Enabled != "false" && strings.TrimSpace(t.StreamKey) != ""
 }
 
+type BRBProfile struct {
+	Width      int `json:"width"`
+	Height     int `json:"height"`
+	FPS        int `json:"fps"`
+	SampleRate int `json:"sample_rate"`
+}
+
+func (b BRBProfile) Validate() error {
+	if b.Width < 320 || b.Width > 3840 || b.Height < 180 || b.Height > 2160 || b.Width%2 != 0 || b.Height%2 != 0 || (b.FPS != 24 && b.FPS != 25 && b.FPS != 30 && b.FPS != 50 && b.FPS != 60) || (b.SampleRate != 44100 && b.SampleRate != 48000) {
+		return errors.New("BRB needs an even resolution from 320x180 to 3840x2160, FPS 24/25/30/50/60, and sample_rate 44100/48000")
+	}
+	return nil
+}
+
+type BRBConfig struct {
+	Enabled   EnableFlag `json:"enabled"`
+	Directory string     `json:"directory"`
+	BRBProfile
+}
+
+func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
+
 type Config struct {
-	Listen            string   `json:"listen"`
-	HealthListen      string   `json:"health_listen"`
-	Application       string   `json:"application"`
-	StreamKey         string   `json:"stream_key"`
-	QueueBytes        int      `json:"queue_bytes"`
-	Targets           []Target `json:"targets"`
-	DashboardUsername string   `json:"dashboard_username"`
-	DashboardPassword string   `json:"dashboard_password"`
-	StateFile         string   `json:"state_file"`
+	BRB               *BRBConfig `json:"brb,omitempty"`
+	Listen            string     `json:"listen"`
+	HealthListen      string     `json:"health_listen"`
+	Application       string     `json:"application"`
+	StreamKey         string     `json:"stream_key"`
+	QueueBytes        int        `json:"queue_bytes"`
+	Targets           []Target   `json:"targets"`
+	DashboardUsername string     `json:"dashboard_username"`
+	DashboardPassword string     `json:"dashboard_password"`
+	StateFile         string     `json:"state_file"`
 }
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -106,6 +129,10 @@ func Load(path string) (Config, error) {
 		}
 	}
 	c.StateFile = os.ExpandEnv(c.StateFile)
+	if c.BRB != nil {
+		c.BRB.Enabled = EnableFlag(os.ExpandEnv(string(c.BRB.Enabled)))
+		c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
+	}
 	return c, c.Validate()
 }
 
@@ -122,6 +149,20 @@ func expand(value string) (string, bool) {
 }
 
 func (c Config) Validate() error {
+	if c.BRB != nil {
+		b := c.BRB
+		if b.Enabled != "" && b.Enabled != "true" && b.Enabled != "false" {
+			return errors.New("brb.enabled must be true or false")
+		}
+		if b.IsEnabled() {
+			if b.Directory == "" {
+				return errors.New("BRB needs a persistent directory")
+			}
+			if err := b.BRBProfile.Validate(); err != nil {
+				return err
+			}
+		}
+	}
 	if (c.DashboardUsername == "") != (c.DashboardPassword == "") {
 		return errors.New("set both dashboard_username and dashboard_password, or leave both empty to disable the dashboard")
 	}

@@ -143,3 +143,23 @@ func TestDashboardCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestBRBConfigurationValidation(t *testing.T) {
+	base := strings.TrimSuffix(validJSON, "}") + `,"brb":{"enabled":"${BRB_TEST_ENABLED}","directory":"${BRB_TEST_DIR}","width":1920,"height":1080,"fps":25,"sample_rate":48000}}`
+	t.Setenv("BRB_TEST_ENABLED", "true")
+	t.Setenv("BRB_TEST_DIR", t.TempDir())
+	c, err := loadText(t, base)
+	if err != nil || !c.BRB.IsEnabled() || c.BRB.FPS != 25 {
+		t.Fatal("valid BRB config rejected", err)
+	}
+	for _, pair := range [][2]string{{`"fps":25`, `"fps":27`}, {`"width":1920`, `"width":1921`}, {`"sample_rate":48000`, `"sample_rate":96000`}, {`"directory":"${BRB_TEST_DIR}"`, `"directory":""`}} {
+		if _, err = loadText(t, strings.Replace(base, pair[0], pair[1], 1)); err == nil {
+			t.Fatal("invalid BRB config accepted", pair)
+		}
+	}
+	t.Setenv("BRB_TEST_ENABLED", "")
+	c, err = loadText(t, base)
+	if err != nil || c.BRB.IsEnabled() {
+		t.Fatal("unset flag should leave BRB disabled")
+	}
+}

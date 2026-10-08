@@ -16,7 +16,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: go test -race ./...
+        env:
+          REQUIRE_FFMPEG_TESTS: '1'
       - run: go vet ./...
       - run: make cross-build
       - run: |
@@ -35,11 +38,11 @@ jobs:
           start_container() {
             docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
-              -e TARGET_STATE_FILE=/data/targets.json -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              -e TARGET_STATE_FILE=/data/targets.json -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               "${env_args[@]}" restreamer:test
           }
           start_container
-          for attempt in {1..10}; do
+          for attempt in {1..60}; do
             if docker exec restreamer-smoke /restreamer healthcheck; then
               break
             fi
@@ -51,6 +54,10 @@ jobs:
           curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.forwarding == false'
           curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding \
             -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":true}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}')" = 409
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/brb -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":true}'
+          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.brb.ready == true and .brb.manual == true'
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false,"confirmed":true}'
           curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/targets/twitch \
             -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
           docker rm -f restreamer-smoke

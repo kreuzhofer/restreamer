@@ -25,7 +25,7 @@ func TestForwardingStartsOffAndIsNotPersisted(t *testing.T) {
 	if err := s.setTarget("one", false); err != nil {
 		t.Fatal(err)
 	}
-	if w := dashboardRequest(s, "PUT", "/api/forwarding", `{"enabled":false}`); w.Code != 204 {
+	if w := dashboardRequest(s, "PUT", "/api/forwarding", `{"enabled":false,"confirmed":true}`); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
 	if s.outputs[0].snapshot().Enabled {

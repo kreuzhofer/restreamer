@@ -54,3 +54,14 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+BRB asset preparation in the container uses Alpine Linux's FFmpeg and libx264
+packages. FFmpeg is run as a separate executable, not linked into the Go binary.
+Upstream sources and license information:
+https://ffmpeg.org/legal.html
+https://ffmpeg.org/download.html
+https://www.videolan.org/developers/x264.html
+Alpine package source recipes and patches:
+https://gitlab.alpinelinux.org/alpine/aports
+Installed versions and package licenses are recorded in /lib/apk/db/installed.

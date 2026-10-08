@@ -17,6 +17,10 @@ func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
 		defer s.controlMu.Unlock()
+		if err := s.initializeBRB(); err != nil {
+			s.initErr = err
+			return
+		}
 		if s.cfg.StateFile == "" {
 			return
 		}
@@ -84,7 +88,7 @@ func (s *Server) setTarget(name string, enabled bool) error {
 
 // Write in the same directory and rename atomically so interrupted saves never
 // leave a partially written JSON file. No secrets or metrics are persisted.
-func writeState(path string, state savedState) error {
+func writeState(path string, state any) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".targets-*")
 	if err != nil {
 		return err

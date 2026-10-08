@@ -33,6 +33,8 @@ type Server struct {
 	controlMu    sync.Mutex
 	initOnce     sync.Once
 	initErr      error
+	broadcast    *broadcast
+	mediaMu      sync.Mutex
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
@@ -94,6 +96,14 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	defer cancel()
 	wg.Add(1)
 	go func() { defer wg.Done(); s.sampleLoop(ctx) }()
+	if s.broadcast != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.broadcast.run(ctx) }()
+		for _, o := range s.outputs {
+			wg.Add(1)
+			go func() { defer wg.Done(); o.manage(ctx, s.broadcast.hub) }()
+		}
+	}
 	slots := make(chan struct{}, 16)
 	s.log.Info("RTMP listener ready", "address", l.Addr().String())
 	for {
@@ -169,7 +179,13 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	s.log.Info("publisher connected")
 	defer s.log.Info("publisher disconnected")
 	session, cancel := context.WithCancel(ctx)
-	h := newHub(s.cfg.QueueBytes, s.outputs...)
+	h := newHub(s.cfg.QueueBytes)
+	if s.broadcast == nil {
+		h = newHub(s.cfg.QueueBytes, s.outputs...)
+	} else {
+		s.broadcast.attach(func() { n.Close() })
+		defer s.broadcast.inputLost()
+	}
 	s.previewMu.Lock()
 	s.previewHub, s.previewDone = h, session.Done()
 	s.previewMu.Unlock()
@@ -177,9 +193,11 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	defer cancel()
-	for _, o := range s.outputs {
-		wg.Add(1)
-		go func() { defer wg.Done(); o.manage(session, h) }()
+	if s.broadcast == nil {
+		for _, o := range s.outputs {
+			wg.Add(1)
+			go func() { defer wg.Done(); o.manage(session, h) }()
+		}
 	}
 	for {
 		_ = n.SetReadDeadline(time.Now().Add(15 * time.Second))
@@ -190,9 +208,21 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 		if err := rtmp.CheckControl(m); err != nil {
 			return
 		}
+		if s.broadcast != nil {
+			if err := s.validateBRBInput(m); err != nil {
+				s.broadcast.mu.Lock()
+				s.broadcast.lastError = err.Error()
+				s.broadcast.mu.Unlock()
+				s.log.Warn("input incompatible with BRB", "reason", err.Error())
+				return
+			}
+		}
 		if err := h.publish(m); err != nil {
 			s.log.Warn("input media rejected", "reason", err.Error())
 			return
+		}
+		if s.broadcast != nil {
+			s.broadcast.ingest(m, time.Now())
 		}
 		if m.Type == rtmp.Video || m.Type == rtmp.Audio {
 			s.inputBytes.Add(uint64(len(m.Body)))

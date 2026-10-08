@@ -116,7 +116,7 @@ func TestDashboardRejectsCrossOriginControl(t *testing.T) {
 			{"https://dashboard.example", "same-origin", "1", "application/json", 204},
 			{"", "", "1", "application/json", 204},
 		} {
-			r := httptest.NewRequest("PUT", "http://dashboard.example"+path, strings.NewReader(`{"enabled":false}`))
+			r := httptest.NewRequest("PUT", "http://dashboard.example"+path, strings.NewReader(`{"enabled":false,"confirmed":true}`))
 			r.SetBasicAuth("admin", "dashboard-secret")
 			r.Header.Set("Origin", tc.origin)
 			r.Header.Set("Sec-Fetch-Site", tc.fetchSite)

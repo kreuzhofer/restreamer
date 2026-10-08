@@ -2,8 +2,9 @@
 
 A native Go application that accepts one OBS stream over RTMP and forwards it to
 Twitch, YouTube, and other RTMP/RTMPS destinations. Runs as a single executable in
-a Docker container on Linux **amd64** and **arm64**. No Node, Python, FFmpeg, or GPU
-is required for v1.
+a Docker container on Linux **amd64** and **arm64**. Live media stays native Go
+passthrough. Optional BRB protection uses FFmpeg to prepare uploaded assets; the
+container includes it. No Node, Python, GPU, or continuous transcoder is required.
 
 ```text
                               ┌── RTMP/RTMPS ── Twitch
@@ -17,7 +18,7 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - Each output defaults to enabled, but an empty/missing target stream key disables
   it. Set its optional `enabled` switch to `false` to disable it while keeping the key.
 - Standard RTMP **H.264 video and AAC audio**, including 1080p, 1440p, and 4K.
-  The relay does not decode frames or impose a resolution/bitrate limit.
+  Live video is not decoded. BRB-enabled streams must match the selected profile.
 - Encoded audio/video payloads and metadata are preserved. RTMP connections are
   independently negotiated; stream IDs and connection timestamps are rewritten.
 - Each output connects independently, waits for the next keyframe, and receives
@@ -31,7 +32,7 @@ OBS ── RTMP :1935 ── Restreamer ┤
   15-minute bitrate graphs for the input and every output. Switches persist in a
   Docker volume; changing them does not disconnect OBS or other destinations.\n- Authenticated input video preview and a master forwarding switch that starts\n  off on every application launch, independently of saved target switches.
 
-There is no transcoding, recording, public playback endpoint, audio-only mode,
+There is no live transcoding, recording, public playback endpoint, audio-only mode,
 Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher
 using an unsupported codec is disconnected with an explanatory log entry.
 
@@ -184,7 +185,7 @@ your firewall. You do not need WebSocket support.
 
 - **Forward to destinations** is the master switch. It starts **off on every
   process/container launch**, even when saved target switches are on. Turn it on
-  to forward to enabled targets. Turning it off closes all target connections and
+  to forward to enabled targets. Turning it off requires confirmation, closes all target connections, and
   cancels retries; OBS input, statistics, and preview continue. It never changes
   or persists over the individual target preferences. Reloading the page or
   reconnecting OBS does not reset it; restarting the application does.
@@ -192,7 +193,9 @@ your firewall. You do not need WebSocket support.
  to close its connection and cancel retries. OBS and
   other outputs continue. Switch it **on** to connect again, send cached headers,
   and resume at the next live video keyframe. Nothing is buffered for replay.
-- With master forwarding on and OBS offline, enabled targets remain **Ready**\n  until input connects. With the master off, they show **Forwarding off**.
+- With master forwarding on and BRB enabled, offline OBS is replaced by BRB
+  indefinitely. Without BRB, enabled targets remain **Ready** until input connects.
+  With the master off, they show **Forwarding off**.
   A missing key or invalid server URL prevents enabling a target; update the
   container configuration and redeploy to fix it.
 - Each card shows its connection state, attempts, and latest issue with a
@@ -263,8 +266,9 @@ OBS rendering/encoding statistics and platform-side drops are not measured.
 Compose mounts the named `restreamer-state` volume at `/data`; target switches are
 atomically saved to `/data/targets.json` before a control request succeeds. A write
 failure is shown on the page and leaves the current switch unchanged. Keep the same
-stack/Compose project and volume when redeploying. The volume contains only target
-names and booleans, never stream keys. Saved switches override `TWITCH_ENABLED` /
+stack/Compose project and volume when redeploying. The target state file contains
+only names and booleans, never stream keys. BRB assets and its profile also live
+in this volume, without credentials. Saved switches override `TWITCH_ENABLED` /
 `YOUTUBE_ENABLED` startup defaults for existing names. A missing key always disables
 the target, even if the saved switch is on. Targets newly added to the configuration
 use their configured defaults. Removing the state file while the container is
@@ -276,9 +280,12 @@ remain bitrates in bits per second; `input_fps` and `output_fps` add frames per
 second. Status includes cumulative `input_frames`; target objects include
 `video_frames_sent`, `dropped_frames`, `paused_frames`, and `skipped_frames`.
 `GET /status` omits history. Both include `forwarding`, the current master switch.
-Set it with `PUT /api/forwarding` and `{"enabled":true}` or `{"enabled":false}`,
+Set it with `PUT /api/forwarding` and `{"enabled":true}` or
+`{"enabled":false,"confirmed":true}`,
 using the same authentication, JSON content type, and `X-Restreamer-Control: 1`
-header as target controls. Master changes affect the running process only.
+header as target controls. **Migration for API clients:** master-off requests
+without `confirmed:true` now return 409 without changing the switch. Master
+changes affect the running process only.
 Set a target switch using authenticated JSON:
 
 ```sh
@@ -312,6 +319,11 @@ two-destination configuration requires no mount.
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
 | `dashboard_username`, `dashboard_password` | Both required to enable dashboard and status API; omitted disables access |
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
+| `brb.enabled` | Opt-in for custom/native configurations; Compose defaults `BRB_ENABLED=false` |
+| `brb.directory` | Required writable persistent directory when enabled; Compose uses `/data/brb` |
+| `brb.width`, `brb.height` | Initial profile; bundled config uses 1920×1080. Even dimensions, 320×180 through 3840×2160 |
+| `brb.fps` | Initial rate: 30; supports 24, 25, 30, 50, 60 |
+| `brb.sample_rate` | Initial AAC-LC stereo rate: 48000; also supports 44100 |
 | `targets` | 1–16 configured outputs, each with a unique `name` |
 | `targets[].enabled` | Optional startup default, `true` if omitted; a saved/dashboard switch overrides this |
 | `targets[].stream_key` | Missing, empty, or whitespace-only disables the output regardless of `enabled` |
@@ -347,7 +359,9 @@ plus protocol overhead. In v1, CPU handles transport/TLS, not video encoding.
 
 ## Build and test
 
-Requires Go 1.27 or later. The protocol dependency is pinned in `go.mod`/`go.sum`.
+Requires Go 1.27 or later. Install FFmpeg with `libx264` and AAC support to run
+BRB or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
+these tests cannot silently skip. The protocol dependency is pinned in `go.mod`/`go.sum`.
 
 ```sh
 make check              # race-enabled tests and go vet
@@ -371,7 +385,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 The explicit local build override builds for the host's architecture. The image
-uses a statically compiled Go executable, a CA bundle, an unprivileged user, and a
+uses a statically compiled Go executable, Alpine with FFmpeg, a CA bundle, an unprivileged user, and a
 read-only filesystem. CI runs tests, cross-compiles both architectures, validates
 both Compose configurations, smoke-tests the bundled configuration and container
 health, and builds the container for both architectures. On `main`, the image job
@@ -386,6 +400,71 @@ authentication and origin checks, bitrate sampling and 15-minute expiry, shutdow
 secret-safe status/config errors, RTMP interoperability with
 the reference library, ping handling, and rejection of untrusted TLS certificates.
 They use local endpoints and do not broadcast to real platform accounts.
+
+## BRB and OBS disconnect protection
+
+Enable BRB by setting `BRB_ENABLED=true` in `.env` and recreating the Compose
+service. It defaults off so existing deployments retain their behavior. Custom
+configurations need `brb.enabled=true`, a writable directory, and an initial
+profile (see `config.example.json`). With BRB enabled, master forwarding **on starts broadcasting even
+before OBS connects**. It sends the prepared BRB screen and audio to enabled
+outputs. Master forwarding still starts off after every application restart.
+
+- Lost or stalled OBS video/audio activates automatic BRB. Stalls are detected
+  after three seconds; a closed connection activates BRB immediately. There is
+  **no BRB timeout**. An OBS disconnect never ends the broadcast.
+- Automatic BRB returns to OBS only after valid current codec headers, audio,
+  and a fresh video keyframe arrive. Destination sessions stay connected and
+  timestamps continue across reconnects, including OBS resetting its timestamps.
+- **Manual BRB** overrides connected OBS and never expires. Turn it on before
+  restarting your computer. Reconnecting OBS does not disable manual BRB.
+  Turn it off to return to OBS at the next keyframe; if OBS is unavailable,
+  automatic BRB continues indefinitely.
+- **Master off**, with the dashboard confirmation, ends all outputs including
+  BRB/music. Individual target switches still control their own destinations.
+  Closing the dashboard, cancelling the dialog, or pressing Escape never stops
+  a broadcast. Application shutdown or loss of the relay's own connectivity
+  cannot be protected by BRB.
+
+Expand **BRB screen, music & video profile** in the dashboard:
+
+- Upload a PNG/JPEG image up to 10 MiB and 20 megapixels, or restore the built-in
+  “Be right back” screen. Images fit inside the output without cropping.
+- Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
+  remove it. Music loops during BRB; without music, the relay sends silent AAC.
+  Preparing and saving audio restarts the BRB loop if already active.
+- Choose resolution, frame rate (including **25 and 30 fps**), and audio sample
+  rate while master forwarding is **off**. Save, then configure/reconnect OBS to
+  match. Video must be 8-bit 4:2:0 H.264; audio must be AAC-LC stereo. Declared
+  incompatible resolution, video timing, or audio headers reject that publisher
+  with a visible BRB error while the prepared fallback stays available.
+- **Prepare & save BRB** validates and encodes assets before atomically activating
+  them. Failed uploads preserve the previous working assets. The saved dashboard
+  profile overrides the initial JSON profile on restart. Assets/profile persist;
+  manual BRB selection does not persist across application restarts.
+
+FFmpeg runs only at preparation/startup. Go then loops bounded encoded tracks,
+with no transcoding of OBS and no dependence on an FFmpeg process during a break.
+Preparation may take up to two minutes and adds temporary CPU/memory use. Allow
+43 MiB uploads and a three-minute request timeout in your reverse proxy. BRB's
+prepared video/audio tracks are limited to 64 MiB each; upload processing is
+serialized and bounded. Output queues remain independently bounded.
+
+Input preview always shows OBS, including during manual BRB. The BRB image preview
+shows the saved artwork. Destination bitrate/FPS and sent counters include BRB
+media. Original OBS frames withheld during manual BRB count as skipped (or paused
+when a target/master is off), not dropped. These counters do not acknowledge
+platform playback. Test switching against your intended destinations before a
+production broadcast; local tests exercise H.264 decoder changes and B-frames,
+but cannot establish every platform's ingest behavior.
+
+Authenticated APIs: `PUT /api/brb` takes `{"enabled":true}` / `false` for manual
+mode, with the same JSON/control-header requirements as other controls.
+`POST /api/brb/assets` takes multipart fields `image`, `music`, `volume`,
+`reset_image=true`, `remove_music=true`, and optional `width`, `height`, `fps`,
+`sample_rate`. It requires `X-Restreamer-Control: 1` and rejects cross-origin
+requests. Profile changes while forwarding is on return 409. `GET /api/brb/image`
+returns the saved PNG. Status adds `brb`, `brb_assets`, and `brb_profile`.
 
 ## Later: a separate 1080p Twitch output
 
@@ -417,7 +496,7 @@ Encoder overload would restart/resynchronize the Twitch branch without backing u
 the YouTube branch. This adds CPU/GPU cost and latency only to the transcoded
 branch. The next design inputs are the deployment CPU/GPU, 30 vs 60 fps, and whether
 the source is SDR or HDR (HDR needs deliberate SDR tone mapping for an SDR output).
-No transcoder is shipped or started in v1.
+BRB asset preparation already uses FFmpeg; this proposed live transcoder is not implemented.
 
 References: [FFmpeg's streamcopy and transcoding model](https://ffmpeg.org/ffmpeg.html),
 [scaling filters](https://ffmpeg.org/ffmpeg-filters.html),

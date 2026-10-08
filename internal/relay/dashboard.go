@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"mime"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -29,6 +28,9 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("PUT /api/targets/{name}", s.targetControl)
 	private.HandleFunc("PUT /api/forwarding", s.targetControl)
 	private.HandleFunc("GET /api/preview", s.preview)
+	private.HandleFunc("PUT /api/brb", s.targetControl)
+	private.HandleFunc("POST /api/brb/assets", s.brbAssets)
+	private.HandleFunc("GET /api/brb/image", s.brbImage)
 	assets, _ := fs.Sub(dashboardFiles, "web")
 	private.Handle("GET /", http.FileServer(http.FS(assets)))
 	mux.Handle("/", s.authenticate(private))
@@ -74,11 +76,22 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 		Outputs     []OutputStatus  `json:"outputs"`
 		History     []bitrateSample `json:"history,omitempty"`
 		Persistent  bool            `json:"persistent"`
+		BRB         BRBStatus       `json:"brb"`
+		BRBAssets   brbSettings     `json:"brb_assets"`
+		BRBProfile  any             `json:"brb_profile,omitempty"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputs {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
 	status.Forwarding = s.forwarding.Load()
+	if s.broadcast != nil {
+		status.BRB = s.broadcast.status()
+		s.broadcast.mu.Lock()
+		status.BRBAssets = s.broadcast.media.settings
+		s.broadcast.mu.Unlock()
+		b := status.BRBAssets.Profile
+		status.BRBProfile = map[string]int{"width": b.Width, "height": b.Height, "fps": b.FPS, "sample_rate": b.SampleRate}
+	}
 	if r.URL.Path == "/api/dashboard" {
 		status.History = s.history(now)
 	}
@@ -90,21 +103,15 @@ func (s *Server) targetControl(w http.ResponseWriter, r *http.Request) {
 	// A custom header plus JSON forces cross-origin browser requests through a
 	// preflight, which this server does not allow. Also reject hostile Origins.
 	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if r.Header.Get("X-Restreamer-Control") != "1" || mediaType != "application/json" || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	if !controlOriginAllowed(r) || mediaType != "application/json" {
 		http.Error(w, "Control requests require same-origin JSON", http.StatusForbidden)
 		return
-	}
-	if origin := r.Header.Get("Origin"); origin != "" {
-		u, err := url.Parse(origin)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host != r.Host || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-			http.Error(w, "Origin not allowed", http.StatusForbidden)
-			return
-		}
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 	defer r.Body.Close()
 	var body struct {
-		Enabled *bool `json:"enabled"`
+		Enabled   *bool `json:"enabled"`
+		Confirmed bool  `json:"confirmed,omitempty"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -112,7 +119,20 @@ func (s *Server) targetControl(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Expected one JSON object with enabled: true or false", http.StatusBadRequest)
 		return
 	}
+	if r.URL.Path == "/api/brb" {
+		if s.broadcast == nil {
+			http.Error(w, "BRB is not configured", 409)
+			return
+		}
+		s.broadcast.setManual(*body.Enabled)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.URL.Path == "/api/forwarding" {
+		if !*body.Enabled && !body.Confirmed {
+			http.Error(w, "Confirm turning master forwarding off: this ends the broadcast, including BRB.", http.StatusConflict)
+			return
+		}
 		s.setForwarding(*body.Enabled)
 		w.WriteHeader(http.StatusNoContent)
 		return

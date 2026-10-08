@@ -84,7 +84,8 @@ func (o *output) setEnabled(enabled bool) {
 	}
 }
 
-// Each input session owns one manager per target. It joins a cancelled worker
+// The owning session (publisher or protected broadcast) has one manager per
+// target. It joins a cancelled worker
 // before starting another, even when switches change rapidly.
 func (o *output) manage(ctx context.Context, h *hub) {
 	// Offline changes have already been applied to the desired state.
