@@ -1,0 +1,13 @@
+{
+  "width": 320,
+  "height": 180,
+  "fps": 60,
+  "duration": 32,
+  "hashes": {
+    "artwork/brb/animation.mjs": "5a0c200bda08e557a090180126ad4386d4e0c767a2bf1bb50bd5e59f8d3dc051",
+    "artwork/brb/raster.mjs": "31bae06a881c599a47f467257f9413950fe56b1c97433814fc82937eeaa23821",
+    "artwork/brb/render.mjs": "e2fb138b96b762a494b1e0f6b13003d19b9edf5238e87709895531a5ffb5a3c7",
+    "internal/relay/artwork/arcade.mkv": "6a510ff7893a53ee11154273b631f8eea11295a2b02bd4625a7414fc3cd5aead",
+    "internal/relay/artwork/poster.png": "f1e6117a185af0927b97326d1c84ffe0ed93b9ed1bbc4ee405476078fbd2be90"
+  }
+}

@@ -1,4 +1,9 @@
-.PHONY: build test check cross-build
+.PHONY: build test check cross-build brb-artwork check-brb-artwork
+brb-artwork:
+	node artwork/brb/render.mjs
+check-brb-artwork:
+	node --test artwork/brb/animation.test.mjs
+	node artwork/brb/render.mjs --check
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/restreamer ./cmd/restreamer
 test:

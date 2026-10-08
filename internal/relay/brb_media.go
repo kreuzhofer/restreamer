@@ -3,11 +3,11 @@ package relay
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/jpeg"
 	"image/png"
 	"io"
@@ -82,7 +82,7 @@ func readMediaTrack(path string, typ uint8, step time.Duration) (mediaTrack, err
 	return track, nil
 }
 
-func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, music bool, volume int) (*brbMedia, error) {
+func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customImage, music bool, volume int) (*brbMedia, error) {
 	run := func(args ...string) error {
 		base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "67108864"}
 		cmd := exec.CommandContext(ctx, "ffmpeg", append(base, args...)...)
@@ -95,7 +95,23 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, music boo
 	videoPath := filepath.Join(dir, "video.flv")
 	fps := fmt.Sprint(cfg.FPS)
 	vf := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", cfg.Width, cfg.Height, cfg.Width, cfg.Height)
-	if err := run("-protocol_whitelist", "file,pipe", "-loop", "1", "-framerate", fps, "-i", filepath.Join(dir, "image.png"), "-t", "2", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", fmt.Sprint(cfg.FPS*2), "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", videoPath); err != nil {
+	seconds := 2
+	videoArgs := []string{"-protocol_whitelist", "file,pipe", "-loop", "1", "-framerate", fps, "-i", filepath.Join(dir, "image.png")}
+	tune := "stillimage"
+	if !customImage {
+		seconds = 32
+		master := filepath.Join(dir, "arcade.mkv")
+		if err := os.WriteFile(master, defaultBRBVideo, 0600); err != nil {
+			return nil, errors.New("cannot prepare default BRB animation")
+		}
+		defer os.Remove(master)
+		videoArgs = []string{"-protocol_whitelist", "file,pipe", "-i", master}
+		// Keep pixel edges crisp; the bundled 60 fps master supports every profile.
+		vf = "fps=" + fps + "," + fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=neighbor,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", cfg.Width, cfg.Height, cfg.Width, cfg.Height)
+		tune = "animation"
+	}
+	videoArgs = append(videoArgs, "-t", fmt.Sprint(seconds), "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-tune", tune, "-profile:v", "high", "-bf", "0", "-g", fmt.Sprint(cfg.FPS*2), "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", videoPath)
+	if err := run(videoArgs...); err != nil {
 		return nil, err
 	}
 	audioPath := filepath.Join(dir, "audio.flv")
@@ -119,7 +135,7 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, music boo
 		return nil, errors.New("BRB audio must be no longer than 10 minutes")
 	}
 	v.duration = time.Duration(len(v.frames)) * time.Second / time.Duration(cfg.FPS)
-	if len(v.frames) != cfg.FPS*2 {
+	if len(v.frames) != cfg.FPS*seconds {
 		return nil, errors.New("BRB video preparation was incomplete")
 	}
 	return &brbMedia{video: v, audio: a}, nil
@@ -146,47 +162,15 @@ func normalizeImage(src io.Reader, path string) error {
 	return png.Encode(f, img)
 }
 
+// The lossless master is generated from artwork/brb/animation.mjs. Runtime
+// preparation only needs FFmpeg; Node and a browser are development tools.
+//
+//go:embed artwork/arcade.mkv
+var defaultBRBVideo []byte
+
+//go:embed artwork/poster.png
+var defaultBRBPoster []byte
+
 func defaultBRBImage(path string) error {
-	img := image.NewRGBA(image.Rect(0, 0, 1280, 720))
-	for y := 0; y < 720; y++ {
-		for x := 0; x < 1280; x++ {
-			img.SetRGBA(x, y, color.RGBA{uint8(14 + y/90), uint8(22 + y/70), uint8(34 + y/45), 255})
-		}
-	}
-	// A small built-in bitmap alphabet keeps default artwork and native builds
-	// independent of system fonts or external image-generation services.
-	glyphs := map[rune][]string{
-		'B': {"11110", "10001", "10001", "11110", "10001", "10001", "11110"},
-		'E': {"11111", "10000", "10000", "11110", "10000", "10000", "11111"},
-		'R': {"11110", "10001", "10001", "11110", "10100", "10010", "10001"},
-		'I': {"11111", "00100", "00100", "00100", "00100", "00100", "11111"},
-		'G': {"01111", "10000", "10000", "10111", "10001", "10001", "01111"},
-		'H': {"10001", "10001", "10001", "11111", "10001", "10001", "10001"},
-		'T': {"11111", "00100", "00100", "00100", "00100", "00100", "00100"},
-		'A': {"01110", "10001", "10001", "11111", "10001", "10001", "10001"},
-		'C': {"01111", "10000", "10000", "10000", "10000", "10000", "01111"},
-		'K': {"10001", "10010", "10100", "11000", "10100", "10010", "10001"},
-	}
-	text := "BE RIGHT BACK"
-	size := 12
-	x0 := (1280 - (len(text)*6-1)*size) / 2
-	for i, ch := range text {
-		for y, row := range glyphs[ch] {
-			for x, v := range row {
-				if v == '1' {
-					for dy := 0; dy < size; dy++ {
-						for dx := 0; dx < size; dx++ {
-							img.SetRGBA(x0+i*6*size+x*size+dx, 318+y*size+dy, color.RGBA{220, 241, 234, 255})
-						}
-					}
-				}
-			}
-		}
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return png.Encode(f, img)
+	return os.WriteFile(path, defaultBRBPoster, 0600)
 }

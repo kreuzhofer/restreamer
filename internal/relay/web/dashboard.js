@@ -214,7 +214,7 @@ function renderBRB() {
    $('#brb-image').src = `/api/brb/image?v=${encodeURIComponent(assetGeneration)}`;
    $('#brb-image').hidden = false;
   }
-  $('#brb-asset-status').textContent = `${assets.custom_image ? 'Custom image' : 'Default screen'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
+  $('#brb-asset-status').textContent = `${assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
   if (!assetsDirty && !assetsPending) {
    $('#brb-volume').value = assets.volume;
    const profile = snapshot.brb_profile;

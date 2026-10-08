@@ -68,21 +68,23 @@ func (s *Server) initializeBRB() error {
 			os.RemoveAll(dir)
 		}
 	}()
-	if settings.Generation != "" {
+	if settings.CustomImage {
 		if err = copyAsset(filepath.Join(root, settings.Generation, "image.png"), filepath.Join(dir, "image.png")); err != nil {
 			return err
 		}
+	} else if err = defaultBRBImage(filepath.Join(dir, "image.png")); err != nil {
+		return err
+	}
+	if settings.Generation != "" {
 		if settings.Music {
 			if err = copyAsset(filepath.Join(root, settings.Generation, "music"), filepath.Join(dir, "music")); err != nil {
 				return err
 			}
 		}
-	} else if err = defaultBRBImage(filepath.Join(dir, "image.png")); err != nil {
-		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.Music, settings.Volume)
+	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume)
 	if err != nil {
 		return err
 	}
@@ -273,7 +275,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.Music, settings.Volume)
+	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume)
 	if err != nil {
 		fail(err)
 		return

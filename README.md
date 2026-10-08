@@ -431,8 +431,18 @@ outputs. Master forwarding still starts off after every application restart.
 
 Expand **BRB screen, music & video profile** in the dashboard:
 
-- Upload a PNG/JPEG image up to 10 MiB and 20 megapixels, or restore the built-in
-  “Be right back” screen. Images fit inside the output without cropping.
+- The default is a **32-second pixel-art arcade loop**: ghosts chase Pac-Man,
+  a power pellet reverses the chase, frightened ghosts scatter and returning
+  eyes cross the screen, then another chase leads back into the opening.
+  “BE RIGHT BACK” stays readable in the centre. There are no game sound effects.
+  The dashboard shows a labelled still preview of this animation.
+- Upload a PNG/JPEG image up to 10 MiB and 20 megapixels for a static screen,
+  or select **Use the default animated arcade screen** and **Prepare & save BRB**
+  to restore the animation. Images fit inside the output without cropping.
+  Existing default-screen installations receive the animation on restart;
+  custom images and music are preserved.
+  To change sprites, colours or choreography, use the editable Canvas source and
+  browser preview described in [the artwork guide](artwork/brb/README.md).
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.

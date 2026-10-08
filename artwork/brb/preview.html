@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BRB arcade animation preview</title>
+<style>body{margin:0;padding:24px;background:#080e20;color:#dcf1ea;font:16px system-ui}main{max-width:1100px;margin:auto}canvas{width:100%;image-rendering:pixelated;border:1px solid #243976}label{display:block;margin:20px 0}input{width:100%}button,select{font:inherit;padding:8px;background:#243976;color:#fff;border:0;border-radius:4px}p{line-height:1.6}</style>
+<main><h1>BRB arcade loop</h1><canvas width="320" height="180" aria-label="Animated pixel-art BRB scene"></canvas>
+<p>32 seconds · editable sprites, colours and choreography · silent preview</p>
+<button id="play">Pause</button> <select aria-label="Scene"><option value="0">Ghost chase</option><option value="8">Power-pellet reversal</option><option value="16">Scatter & returning eyes</option><option value="24">Return chase</option></select>
+<label>Timeline <output>0.0 s</output><input aria-label="Timeline" type="range" min="0" max="32" step="0.0166667" value="0"></label>
+<p>Edit <code>artwork/brb/animation.mjs</code>, preview here, then run <code>make brb-artwork</code> and rebuild Restreamer.</p></main>
+<script type="module">
+import {drawFrame,DURATION} from './animation.mjs';
+const ctx=document.querySelector('canvas').getContext('2d'), slider=document.querySelector('input'), output=document.querySelector('output'), play=document.querySelector('button');
+let playing=true, time=0, previous;
+play.onclick=()=>{playing=!playing;play.textContent=playing?'Pause':'Play';};
+slider.oninput=()=>{time=Number(slider.value);playing=false;play.textContent='Play';};
+document.querySelector('select').onchange=e=>{time=Number(e.target.value);};
+function frame(now){if(playing&&previous!==undefined)time=(time+(now-previous)/1000)%DURATION;previous=now;drawFrame(ctx,time);slider.value=time;output.value=`${time.toFixed(1)} s`;requestAnimationFrame(frame);}requestAnimationFrame(frame);
+</script></html>

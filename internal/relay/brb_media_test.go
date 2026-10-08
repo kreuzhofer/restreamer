@@ -39,12 +39,36 @@ func preparedBRB(t *testing.T, fps int) (*brbMedia, config.BRBProfile, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	media, err := encodeBRB(ctx, profile, dir, false, 50)
+	media, err := encodeBRB(ctx, profile, dir, false, false, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	media.settings = brbSettings{Profile: profile, Volume: 50}
+	if media.video.duration != 32*time.Second || len(media.video.frames) != fps*32 {
+		t.Fatal("default animation is not a complete 32-second loop")
+	}
 	return media, profile, dir
+}
+
+func TestBRBAnimationLoopDecodesAcrossBoundary(t *testing.T) {
+	for _, fps := range []int{24, 25, 30, 50, 60} {
+		t.Run(fmt.Sprint(fps), func(t *testing.T) {
+			media, _, dir := preparedBRB(t, fps)
+			packets := []*rtmp.Message{media.video.header}
+			for loop := 0; loop < 2; loop++ {
+				for _, frame := range media.video.frames {
+					copy := *frame
+					copy.Timestamp += time.Duration(loop) * media.video.duration
+					packets = append(packets, &copy)
+				}
+			}
+			path := filepath.Join(dir, "loop.flv")
+			writeTestFLV(t, path, packets)
+			if out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-xerror", "-i", path, "-f", "null", "-").CombinedOutput(); err != nil {
+				t.Fatalf("animation loop failed to decode: %v %s", err, out)
+			}
+		})
+	}
 }
 
 func TestBRBMediaSwitchingDecodesAt25And30FPS(t *testing.T) {
@@ -215,6 +239,9 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 	if w := assetRequest(t, s, nil, "custom.png", imageData); w.Code != 204 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	if s.broadcast.media.video.duration != 2*time.Second {
+		t.Fatal("custom image must keep the static loop")
+	}
 	// Valid WAV upload is encoded and persisted. Silence is sufficient to exercise
 	// the actual WAV demuxer/AAC encoder; no external files or real credentials.
 	var wav bytes.Buffer
@@ -252,7 +279,22 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 	if reloaded.broadcast.media.settings.Music || reloaded.broadcast.media.settings.CustomImage {
 		t.Fatal("asset resets failed")
 	}
-	if w := dashboardRequest(reloaded, "GET", "/api/brb/image", ""); w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
+	if reloaded.broadcast.media.video.duration != 32*time.Second {
+		t.Fatal("reset did not restore the animation")
+	}
+	// Existing default-screen installations regenerate the current poster/loop.
+	poster := filepath.Join(s.cfg.BRB.Directory, reloaded.broadcast.media.settings.Generation, "image.png")
+	if err := os.WriteFile(poster, []byte("legacy poster"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	upgraded := New(s.cfg, s.log)
+	if err := upgraded.initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if upgraded.broadcast.media.video.duration != 32*time.Second {
+		t.Fatal("default animation lost on restart")
+	}
+	if w := dashboardRequest(upgraded, "GET", "/api/brb/image", ""); w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
 		t.Fatal("missing authenticated preview")
 	}
 }
