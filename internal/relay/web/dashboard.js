@@ -72,6 +72,7 @@ function render() {
  $('#forwarding-help').textContent = snapshot.forwarding ? 'Broadcast is on. Turning this off ends all destinations, including BRB.' : 'Forwarding is off. Input and preview continue; target switches are kept. Resets off at every application launch.';
  renderBRB();
  window.updatePreview?.(connected && snapshot.publishing);
+ window.updateLibrary?.(snapshot, connected);
  const now = snapshot.time;
 
  const last = samples.at(-1);
@@ -196,6 +197,10 @@ function renderBRB() {
  $('#brb-badge').className = `badge ${active ? 'warn' : brb.ready ? 'live' : ''}`;
  $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : !snapshot.forwarding ? brb.manual ? 'Manual BRB selected · master forwarding is off' : 'BRB ready · master forwarding is off' : active ? brb.manual ? 'Manual BRB · broadcast still live' : 'Waiting for OBS · broadcast still live' : brb.manual ? 'Switching to manual BRB…' : 'OBS live · automatic protection armed';
  $('#brb-help').textContent = brb.manual ? 'OBS reconnecting will not end manual BRB. Switch BRB off when you are ready.' : 'OBS disconnects activate BRB automatically, with no time limit. Only master off ends the broadcast.';
+ if (connected && snapshot.forwarding && snapshot.playback?.id) {
+  $('#brb-status').textContent = brb.manual ? 'Manual BRB · video paused' : snapshot.playback.state === 'paused' ? 'Video paused · BRB on air' : 'Video playback · protection ready';
+  if (brb.manual) $('#brb-help').textContent = 'Switch manual BRB off to resume the video. OBS reconnecting will not replace it.';
+ }
  $('#brb-settings').hidden = !brb.ready;
  const profile = snapshot.brb_profile;
  $('#brb-active-profile').hidden = !brb.ready || !profile;

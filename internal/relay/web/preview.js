@@ -1,9 +1,9 @@
 'use strict';
-(() => {
-  const video = document.querySelector('#preview-video');
-  const status = document.querySelector('#preview-status');
-  const toggle = document.querySelector('#preview-toggle');
-  let enabled = true, publishing = false, controller, retryAt = 0;
+function createPreview(prefix, url, liveText, waitingText) {
+  const video = document.querySelector(`#${prefix}-video`);
+  const status = document.querySelector(`#${prefix}-status`);
+  const toggle = document.querySelector(`#${prefix}-toggle`);
+  let enabled = true, publishing = false, controller, retryAt = 0, epoch;
   const MediaSourceClass = window.MediaSource;
 
   function stop() {
@@ -40,9 +40,11 @@
     let timeout = setTimeout(() => current.abort(new Error('Preview timed out. Check input and proxy buffering.')), 15000);
     status.textContent = 'Connecting · waiting for a video keyframe…';
     try {
-      const response = await fetch(`${location.origin}/api/preview`, {signal, cache: 'no-store'});
+      const response = await fetch(`${location.origin}${url}`, {signal, cache: 'no-store'});
       if (!response.ok) throw new Error((await response.text()).trim() || 'Preview unavailable. Retrying…');
       const mime = response.headers.get('X-Preview-Codecs');
+      video.dataset.baseMs = response.headers.get('X-Preview-Base-Ms');
+      video.dataset.epoch = response.headers.get('X-Preview-Epoch');
       if (!mime || !MediaSourceClass.isTypeSupported(mime)) {
         throw new Error('This browser cannot play the input codec/profile. Try a browser with H.264/AAC support.');
       }
@@ -57,7 +59,7 @@
         timeout = setTimeout(() => current.abort(new Error('Preview stream stalled. Retrying…')), 15000);
         const {done, value} = await reader.read();
         clearTimeout(timeout);
-        if (done) throw new Error('Input preview disconnected. Retrying…');
+        if (done) throw new Error('Preview source changed or disconnected. Retrying…');
         await event(buffer, 'updateend', signal, () => buffer.appendBuffer(value));
         if (buffer.buffered.length) {
           const end = buffer.buffered.end(buffer.buffered.length - 1);
@@ -96,19 +98,20 @@
       if (controller === current) {
         controller = undefined;
         video.pause(); video.removeAttribute('src'); video.load();
-        retryAt = Date.now() + 3000;
+        retryAt = Date.now() + (prefix === 'broadcast' ? 200 : 3000);
       }
       if (objectURL) URL.revokeObjectURL(objectURL);
     }
   }
-  video.addEventListener('playing', () => { status.textContent = 'Live input preview'; });
-  video.addEventListener('waiting', () => { if (controller) status.textContent = 'Buffering input preview…'; });
-  window.updatePreview = active => {
+  video.addEventListener('playing', () => { status.textContent = liveText; });
+  video.addEventListener('waiting', () => { if (controller) status.textContent = 'Buffering preview…'; });
+  const update = (active, nextEpoch) => {
+    if (nextEpoch !== undefined && nextEpoch !== epoch) {epoch = nextEpoch;if(controller) stop();retryAt=0;}
     publishing = active;
     if (!MediaSourceClass) { status.textContent = 'Preview needs a browser with Media Source Extensions support.'; toggle.disabled = true; return; }
     if (!enabled || !publishing) {
       if (controller) stop();
-      status.textContent = enabled ? 'Waiting for OBS input' : 'Preview paused · forwarding is unaffected';
+      status.textContent = enabled ? waitingText : 'Preview paused · forwarding is unaffected';
     } else if (!controller && Date.now() >= retryAt) start();
   };
   toggle.addEventListener('click', () => {
@@ -116,7 +119,10 @@
     toggle.setAttribute('aria-pressed', String(enabled));
     toggle.textContent = enabled ? 'Pause preview' : 'Start preview';
     retryAt = 0;
-    window.updatePreview(publishing);
+    update(publishing);
   });
   window.addEventListener('pagehide', stop);
-})();
+return {update, position: () => ({epoch:Number(video.dataset.epoch),timeMS:Number(video.dataset.baseMs)+video.currentTime*1000,ready:video.readyState>=2})};
+}
+window.updatePreview = createPreview('preview','/api/preview','Live input preview','Waiting for OBS input').update;
+window.broadcastPreview = createPreview('broadcast','/api/broadcast-preview','Live broadcast preview','Master forwarding is off');

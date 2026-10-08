@@ -322,6 +322,8 @@ two-destination configuration requires no mount.
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
 | `dashboard_username`, `dashboard_password` | Both required to enable dashboard and status API; omitted disables access |
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
+| `library_directory` | Persistent MP4 library root; Compose uses `/data/videos`, native default is `<brb.directory>/library` |
+| `library_upload_mib` | Maximum original MP4 size in MiB; 0 or omitted means 4096; maximum 32768 |
 | `brb.enabled` | Opt-in for custom/native configurations; Compose defaults `BRB_ENABLED=false` |
 | `brb.directory` | Required writable persistent directory when enabled; Compose uses `/data/brb` |
 | `brb.width`, `brb.height` | Initial profile; bundled config uses 1920×1080. Even dimensions, 320×180 through 3840×2160 |
@@ -549,3 +551,75 @@ BRB asset preparation already uses FFmpeg; this proposed live transcoder is not 
 References: [FFmpeg's streamcopy and transcoding model](https://ffmpeg.org/ffmpeg.html),
 [scaling filters](https://ffmpeg.org/ffmpeg-filters.html),
 [Twitch publish URLs](https://dev.twitch.tv/docs/video-broadcast/).
+
+## Prepared video library
+
+Enable BRB to use its saved output profile and persistent broadcast controller.
+The **Video library** section accepts MP4 uploads and discovers regular `.mp4`
+files in `<library_directory>/originals` every five seconds. In Compose this is
+`/data/videos/originals` inside the existing persistent `/data` volume. Mount a
+host folder there if you want to add files directly. Copy external files under a
+temporary extension and rename them to `.mp4` when complete; unchanged size and
+modification time over successive scans are used to detect finished copies.
+Hidden files, subdirectories and symlinks are ignored. Filenames are unique;
+uploading the same name never overwrites an original.
+
+The library shows discovery, queued, preparation progress, ready and failed
+states. One background worker converts each original to the **active saved**
+resolution, frame rate, H.264 video and AAC-LC stereo profile. Silent audio is
+added to files without audio. Aspect ratio is preserved with letterboxing;
+rotation is handled by FFmpeg. **Prepare again** retries a failed conversion or
+rebuilds a prepared copy. Originals are retained, and successful conversions are
+reused after restart. Playback reads bounded packets from disk instead of loading
+entire videos into memory. Node/browser runtimes are not needed on the server;
+FFmpeg and FFprobe are required (both are in the container image).
+
+Turn **master forwarding on**, choose a ready file, then **Play once** or **Play
+on loop**. OBS is optional and reconnecting OBS does not interrupt a file.
+
+- **Pause file** holds the position and puts BRB on air; **Resume file** resumes
+  from a nearby preceding keyframe.
+- **Manual BRB** pauses a playing file. Turning it off resumes that file, unless
+  you had explicitly paused the file. Resuming a file never overrides manual BRB.
+- Release the **Playback position** slider to seek to a preceding keyframe,
+  within about one second. Seeking while paused keeps the file paused.
+- **Stop file**, or the end of play-once, returns to a fresh OBS keyframe if OBS
+  is available; BRB fills any wait and remains on air if OBS is absent. Manual
+  BRB remains respected. Looping does not reconnect destinations.
+- Confirmed **master off** closes playback and all destination streams. Restart
+  starts with master off and no selected playback; the library persists.
+
+**Broadcast preview** uses the same encoded feed sent to destinations, including
+OBS, files and BRB. Its position display follows the visible file when the browser
+is playing the current preview, otherwise it shows the server position. Seeks
+and source changes reconnect the preview to discard stale buffered frames.
+Browser preview controls affect only that browser, not the broadcast. Use a
+browser supporting Media Source Extensions with H.264/AAC; platform buffering
+can add a separate delay for remote viewers. The original OBS preview is retained.
+
+Profile changes still require master off. Saving a different resolution, FPS or
+sample rate cancels obsolete preparation, marks the library queued, and prepares
+from the originals. Older incompatible conversions cannot be selected for
+playback. BRB artwork, message or music changes do not reconvert library files.
+Old conversions are removed only after their replacement is ready.
+
+Uploads stream to temporary disk files and publish atomically; interrupted or
+oversized uploads do not enter the library. Defaults/limits: one simultaneous
+upload, 4 GiB per original (configurable), 1000 files, source duration 0.1 seconds
+to 12 hours, source dimensions at most 8192 × 8192, and 32 GiB per prepared copy.
+Preparation has a 12-hour deadline and is cancelled on shutdown. Allow disk space
+for originals plus conversions and temporary files. Configure your reverse proxy
+for your chosen upload size, up to a two-hour upload timeout, and unbuffered
+long-lived `/api/broadcast-preview` responses. Conversion happens asynchronously
+after upload, so the upload request does not wait for transcoding.
+
+Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin):
+
+- `GET /api/library`: filenames, IDs, progress, readiness, duration and profile.
+- `POST /api/library/upload`: multipart with exactly one `file` MP4; returns 202.
+- `PUT /api/playback`: JSON `{"action":"play","id":"…","loop":false}`,
+  `{"action":"pause"}`, `{"action":"resume"}`, `{"action":"stop"}`,
+  `{"action":"seek","position":12.5}`, or `{"action":"prepare","id":"…"}`.
+- `GET /api/broadcast-preview`: streaming fragmented MP4, using the same bounded
+  viewer limit as the input preview. `/status` and `/api/dashboard` include
+  `library_enabled` and `playback` state, source, position and preview timeline.

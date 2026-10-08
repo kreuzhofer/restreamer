@@ -318,6 +318,9 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	os.RemoveAll(filepath.Join(root, old))
 	s.broadcast.mu.Unlock()
+	if s.library != nil && oldProfile != settings.Profile {
+		s.library.setProfile(settings.Profile)
+	}
 	keep = true
 	s.log.Info("BRB assets updated", "custom_image", settings.CustomImage, "music", settings.Music)
 	w.WriteHeader(http.StatusNoContent)

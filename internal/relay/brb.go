@@ -22,6 +22,10 @@ type BRBStatus struct {
 // A broadcast outlives publishers. All source selection and timestamp mapping
 // happen under mu, before fanout; output failures remain independent.
 type broadcast struct {
+	clip                    *clipPlayback
+	playbackError           string
+	previewChanged          chan struct{}
+	previewEpoch            uint64
 	lastTick                time.Time
 	attached                time.Time
 	mu                      sync.Mutex
@@ -43,10 +47,11 @@ type broadcast struct {
 }
 
 func newBroadcast(s *Server, media *brbMedia) *broadcast {
-	return &broadcast{server: s, hub: newHub(s.cfg.QueueBytes, s.outputs...), media: media, started: time.Now()}
+	return &broadcast{server: s, hub: newHub(s.cfg.QueueBytes, s.outputs...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
 }
 
 func (b *broadcast) run(ctx context.Context) {
+	defer func() { b.mu.Lock(); b.stopClip(""); b.resetBroadcastPreview(); b.mu.Unlock() }()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -65,6 +70,9 @@ func (b *broadcast) status() BRBStatus {
 	reason := "ready"
 	if b.active {
 		reason = "waiting_for_obs"
+		if b.clip != nil {
+			reason = "file_paused"
+		}
 		if b.manual {
 			reason = "manual"
 		}
@@ -79,6 +87,9 @@ func (b *broadcast) setManual(enabled bool) {
 	defer b.mu.Unlock()
 	if b.manual == enabled {
 		return
+	}
+	if b.clip != nil {
+		b.clip.freeze(time.Now())
 	}
 	b.manual = enabled
 	// Returning from manual mode always waits for a new decodable keyframe.
@@ -125,6 +136,12 @@ func (b *broadcast) tick(now time.Time) {
 		b.closeInput()
 		b.closeInput = nil
 	}
+	if b.clip != nil && !previousTick.IsZero() && now.Sub(previousTick) > 250*time.Millisecond {
+		b.clip.freeze(now)
+	}
+	if b.tickClip(now) {
+		return
+	}
 	if b.manual || !b.live {
 		if !b.active {
 			b.startFallback(now)
@@ -138,6 +155,7 @@ func (b *broadcast) tick(now time.Time) {
 }
 
 func (b *broadcast) startFallback(now time.Time) {
+	b.resetBroadcastPreview()
 	b.active = true
 	b.live = false
 	b.fallbackStart = now
@@ -203,7 +221,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	if m.Type == rtmp.Audio && len(m.Body) > 1 && m.Body[1] == 1 {
 		b.lastAudio = now
 	}
-	if !b.server.forwarding.Load() || b.manual {
+	if !b.server.forwarding.Load() || b.manual || b.clip != nil {
 		if isVideoFrame(m) {
 			for _, o := range b.server.outputs {
 				o.discardFrames(1, true)
@@ -230,6 +248,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 				b.emit(h, base)
 			}
 		}
+		b.resetBroadcastPreview()
 		b.live = true
 		b.active = false
 		b.lastError = ""

@@ -8,6 +8,7 @@
  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
  <link rel="stylesheet" href="/dashboard.css">
  <script src="/dashboard.js" defer></script>
+ <script src="/library.js" defer></script>
  <script src="/preview.js" defer></script>
 </head>
 <body>
@@ -68,6 +69,23 @@
     </form>
    </details>
   </section>
+  <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
+   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>
+   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Files are prepared for the active saved profile. Playback replaces OBS; stopping or finishing returns to OBS, or BRB when OBS is unavailable.</p>
+   <form id="library-upload"><label>MP4 file <input id="library-file" type="file" accept=".mp4,video/mp4" required></label><button id="library-upload-button" class="preview-button" type="submit">Upload MP4</button><button id="library-upload-cancel" class="preview-button" type="button" hidden>Cancel upload</button></form>
+   <p id="library-upload-status" role="status" class="library-help"></p>
+   <p id="library-error" class="notice" role="alert" hidden></p>
+   <div class="library-grid">
+    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p>
+     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
+     <p id="playback-status" role="status" class="library-help">No file playing</p>
+     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause file</button><button id="playback-resume" class="preview-button" type="button">Resume file</button><button id="playback-stop" class="preview-button" type="button">Stop file</button></div>
+     <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
+     <p class="library-help">Release the seek bar to jump to the preceding keyframe (within about one second). Pause shows BRB. Manual BRB pauses the file and resumes it when switched off. Master off ends playback.</p>
+    </div>
+    <div class="broadcast-preview"><div class="panel-heading"><h3>Broadcast preview</h3><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video><p id="broadcast-status" role="status" class="library-help">Master forwarding is off</p><p class="library-help">Same feed sent to destinations · audio starts muted. Platform viewers may see additional buffering delay. Preview controls affect only this browser.</p></div>
+   </div>
+  </section>
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
@@ -75,7 +93,7 @@
   <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>FPS and drops are measured at the relay; OBS and platform playback statistics are unavailable.</span><span id="updated">Awaiting first update</span></footer>
  </main>
  <dialog id="stop-dialog" aria-labelledby="stop-title" aria-describedby="stop-help">
-  <h2 id="stop-title">End the broadcast?</h2><p id="stop-help">Turning master forwarding off disconnects every destination and stops BRB and music. OBS can stay connected.</p>
+  <h2 id="stop-title">End the broadcast?</h2><p id="stop-help">Turning master forwarding off disconnects every destination and stops video playback, BRB and music. OBS can stay connected.</p>
   <div class="dialog-actions"><button id="stop-cancel" class="preview-button" type="button" autofocus>Keep broadcasting</button><button id="stop-confirm" class="danger-button" type="button">End broadcast</button></div>
  </dialog>
  <template id="target-template">

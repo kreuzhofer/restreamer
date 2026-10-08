@@ -18,6 +18,7 @@ import (
 )
 
 type Server struct {
+	library      *videoLibrary
 	cfg          config.Config
 	log          *slog.Logger
 	active       atomic.Bool
@@ -96,6 +97,10 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	defer cancel()
 	wg.Add(1)
 	go func() { defer wg.Done(); s.sampleLoop(ctx) }()
+	if s.library != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.library.run(ctx) }()
+	}
 	if s.broadcast != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); s.broadcast.run(ctx) }()

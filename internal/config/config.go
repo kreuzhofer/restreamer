@@ -65,6 +65,8 @@ type BRBConfig struct {
 func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
 
 type Config struct {
+	LibraryDirectory  string     `json:"library_directory,omitempty"`
+	LibraryUploadMiB  int        `json:"library_upload_mib,omitempty"`
 	BRB               *BRBConfig `json:"brb,omitempty"`
 	Listen            string     `json:"listen"`
 	HealthListen      string     `json:"health_listen"`
@@ -129,6 +131,7 @@ func Load(path string) (Config, error) {
 		}
 	}
 	c.StateFile = os.ExpandEnv(c.StateFile)
+	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
 	if c.BRB != nil {
 		c.BRB.Enabled = EnableFlag(os.ExpandEnv(string(c.BRB.Enabled)))
 		c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
@@ -149,6 +152,9 @@ func expand(value string) (string, bool) {
 }
 
 func (c Config) Validate() error {
+	if c.LibraryUploadMiB < 0 || c.LibraryUploadMiB > 32768 {
+		return errors.New("library_upload_mib must be 0 (4 GiB default) or 1–32768 MiB")
+	}
 	if c.BRB != nil {
 		b := c.BRB
 		if b.Enabled != "" && b.Enabled != "true" && b.Enabled != "false" {

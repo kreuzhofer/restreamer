@@ -28,6 +28,10 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("PUT /api/targets/{name}", s.targetControl)
 	private.HandleFunc("PUT /api/forwarding", s.targetControl)
 	private.HandleFunc("GET /api/preview", s.preview)
+	private.HandleFunc("GET /api/broadcast-preview", s.preview)
+	private.HandleFunc("GET /api/library", s.libraryStatus)
+	private.HandleFunc("POST /api/library/upload", s.libraryUpload)
+	private.HandleFunc("PUT /api/playback", s.playbackControl)
 	private.HandleFunc("PUT /api/brb", s.targetControl)
 	private.HandleFunc("POST /api/brb/assets", s.brbAssets)
 	private.HandleFunc("GET /api/brb/image", s.brbImage)
@@ -68,17 +72,19 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	status := struct {
-		Time        int64           `json:"time"`
-		Publishing  bool            `json:"publishing"`
-		Forwarding  bool            `json:"forwarding"`
-		InputBytes  uint64          `json:"input_bytes"`
-		InputFrames uint64          `json:"input_frames"`
-		Outputs     []OutputStatus  `json:"outputs"`
-		History     []bitrateSample `json:"history,omitempty"`
-		Persistent  bool            `json:"persistent"`
-		BRB         BRBStatus       `json:"brb"`
-		BRBAssets   brbSettings     `json:"brb_assets"`
-		BRBProfile  any             `json:"brb_profile,omitempty"`
+		Time           int64           `json:"time"`
+		Publishing     bool            `json:"publishing"`
+		Forwarding     bool            `json:"forwarding"`
+		InputBytes     uint64          `json:"input_bytes"`
+		InputFrames    uint64          `json:"input_frames"`
+		Outputs        []OutputStatus  `json:"outputs"`
+		History        []bitrateSample `json:"history,omitempty"`
+		Persistent     bool            `json:"persistent"`
+		Playback       PlaybackStatus  `json:"playback"`
+		LibraryEnabled bool            `json:"library_enabled"`
+		BRB            BRBStatus       `json:"brb"`
+		BRBAssets      brbSettings     `json:"brb_assets"`
+		BRBProfile     any             `json:"brb_profile,omitempty"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputs {
 		status.Outputs = append(status.Outputs, o.snapshot())
@@ -86,6 +92,8 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	status.Forwarding = s.forwarding.Load()
 	if s.broadcast != nil {
 		status.BRB = s.broadcast.status()
+		status.Playback = s.broadcast.playbackStatus(now)
+		status.LibraryEnabled = s.library != nil
 		s.broadcast.mu.Lock()
 		status.BRBAssets = s.broadcast.media.settings
 		s.broadcast.mu.Unlock()

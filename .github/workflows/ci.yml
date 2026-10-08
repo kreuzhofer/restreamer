@@ -68,13 +68,38 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}')" = 409
           curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/brb -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":true}'
           curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.brb.ready == true and .brb.manual == true'
+          # Prepare/play a real MP4 inside the read-only container. No real
+          # destinations are used; the configured targets point to localhost.
+          ffmpeg -v error -f lavfi -i testsrc2=size=320x180:rate=25 -t 4 -c:v libx264 -threads 2 /tmp/library-smoke.mp4
+          curl --fail -s -u ci:ci-dashboard-password -H 'X-Restreamer-Control: 1' \
+            -F 'file=@/tmp/library-smoke.mp4' http://127.0.0.1:18080/api/library/upload
+          wait_library() {
+            for attempt in {1..90}; do
+              curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/api/library > /tmp/library-status.json
+              if jq -e '.files | length == 1 and .[0].state == "ready"' /tmp/library-status.json; then return 0; fi
+              if jq -e 'any(.files[]; .state == "failed")' /tmp/library-status.json; then cat /tmp/library-status.json; return 1; fi
+              sleep 1
+            done
+            cat /tmp/library-status.json
+            return 1
+          }
+          wait_library
+          clip_id=$(jq -r '.files[0].id' /tmp/library-status.json)
+          jq -n --arg id "$clip_id" '{action:"play",id:$id,loop:true}' > /tmp/playback.json
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/playback \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data-binary @/tmp/playback.json
+          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.playback.state == "paused" and .playback.pause_reason == "manual_brb"'
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/brb -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
+          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.playback.state == "playing" and .playback.source == "file"'
+          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/playback -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"action":"seek","position":2}'
           curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false,"confirmed":true}'
           curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/targets/twitch \
             -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
           docker rm -f restreamer-smoke
           start_container
+          wait_library
           curl --fail --show-error -s -u ci:ci-dashboard-password \
-            http://127.0.0.1:18080/status | jq -e '.forwarding == false and .brb.ready == true and .brb.manual == false and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
+            http://127.0.0.1:18080/status | jq -e '.forwarding == false and .playback.state == "idle" and .brb.ready == true and .brb.manual == false and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
   image:
     needs: test
     runs-on: ubuntu-latest

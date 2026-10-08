@@ -7,6 +7,8 @@
   "dashboard_username": "${DASHBOARD_USERNAME}",
   "dashboard_password": "${DASHBOARD_PASSWORD}",
   "state_file": "${TARGET_STATE_FILE}",
+  "library_directory": "${LIBRARY_DIRECTORY}",
+  "library_upload_mib": 4096,
   "brb": {
     "enabled": "${BRB_ENABLED}",
     "directory": "${BRB_DIRECTORY}",

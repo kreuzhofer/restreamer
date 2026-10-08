@@ -21,6 +21,10 @@ func (s *Server) initialize() error {
 			s.initErr = err
 			return
 		}
+		if err := s.initializeLibrary(); err != nil {
+			s.initErr = err
+			return
+		}
 		if s.cfg.StateFile == "" {
 			return
 		}

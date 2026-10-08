@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	amp4 "github.com/abema/go-mp4"
@@ -29,6 +30,18 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 	s.previewMu.Lock()
 	h, done := s.previewHub, s.previewDone
 	s.previewMu.Unlock()
+	var epoch uint64
+	if r.URL.Path == "/api/broadcast-preview" {
+		if s.broadcast == nil || !s.forwarding.Load() {
+			http.Error(w, "Master forwarding is off", 503)
+			return
+		}
+		s.broadcast.mu.Lock()
+		h = s.broadcast.hub
+		done = s.broadcast.previewChanged
+		epoch = s.broadcast.previewEpoch
+		s.broadcast.mu.Unlock()
+	}
 	if h == nil {
 		http.Error(w, "Waiting for OBS input", http.StatusServiceUnavailable)
 		return
@@ -71,6 +84,8 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 			if !started {
 				w.Header().Set("Content-Type", "video/mp4")
 				w.Header().Set("X-Preview-Codecs", mux.mime)
+				w.Header().Set("X-Preview-Base-Ms", strconv.FormatInt(mux.base.Milliseconds(), 10))
+				w.Header().Set("X-Preview-Epoch", strconv.FormatUint(epoch, 10))
 				w.Header().Set("X-Accel-Buffering", "no")
 				started = true
 			}

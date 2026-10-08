@@ -8,6 +8,14 @@ func (s *Server) setForwarding(enabled bool) {
 	if s.forwarding.Swap(enabled) == enabled {
 		return
 	}
+	if !enabled && s.broadcast != nil {
+		s.broadcast.mu.Lock()
+		s.broadcast.stopClip("")
+		s.broadcast.active = false
+		s.broadcast.live = false
+		s.broadcast.resetBroadcastPreview()
+		s.broadcast.mu.Unlock()
+	}
 	for _, o := range s.outputs {
 		o.mu.Lock()
 		o.blocked = !enabled

@@ -13,6 +13,7 @@ services:
       TARGET_STATE_FILE: /data/targets.json
       BRB_ENABLED: "${BRB_ENABLED:-false}"
       BRB_DIRECTORY: /data/brb
+      LIBRARY_DIRECTORY: /data/videos
       TWITCH_ENABLED: "${TWITCH_ENABLED:-true}"
       TWITCH_SERVER: ${TWITCH_SERVER:-rtmp://live.twitch.tv/app}
       TWITCH_STREAM_KEY: ${TWITCH_STREAM_KEY:-}
