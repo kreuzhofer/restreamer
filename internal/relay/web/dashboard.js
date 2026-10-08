@@ -204,13 +204,13 @@ function renderBRB() {
  $('#brb-settings').hidden = !brb.ready;
  const profile = snapshot.brb_profile;
  $('#brb-active-profile').hidden = !brb.ready || !profile;
- if (profile) $('#brb-active-profile').textContent = `Active saved profile: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
+ if (profile) $('#brb-active-profile').textContent = `Shared profile · managed in OBS input: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
  $('#brb-unsaved').hidden = !brb.ready || !assetsDirty || assetsPending;
  $('#brb-save').classList.toggle('needs-save', assetsDirty && !assetsPending);
  $('#brb-error').hidden = !brb.error;
  $('#brb-error').textContent = brb.error || '';
- $('#brb-profile').disabled = snapshot.forwarding || assetsPending || !connected;
- $('#brb-save').disabled = !connected || !brb.ready || assetsPending;
+ window.streamProfile?.update(snapshot, connected, assetsPending);
+ $('#brb-save').disabled = !connected || !brb.ready || assetsPending || !!window.streamProfile?.isPending();
  $('#brb-save').textContent = assetsPending ? 'Preparing…' : 'Prepare & save BRB';
  const assets = snapshot.brb_assets;
  if (brb.ready && assets) {
@@ -223,15 +223,6 @@ function renderBRB() {
   if (!assetsDirty && !assetsPending) {
    $('#brb-text').value = assets.text ?? 'BE RIGHT BACK';
    $('#brb-volume').value = assets.volume;
-   const profile = snapshot.brb_profile;
-   if (profile) {
-    const resolution = `${profile.width}x${profile.height}`;
-    const select = $('#brb-resolution');
-    if (![...select.options].some(option => option.value === resolution)) select.add(new Option(resolution, resolution));
-    select.value = resolution;
-    $('#brb-fps').value = profile.fps;
-    $('#brb-sample-rate').value = profile.sample_rate;
-   }
   }
  }
 }
@@ -249,14 +240,10 @@ async function toggleBRB() {
 }
 async function saveBRB(event) {
  event.preventDefault();
- if (!connected || assetsPending) return;
+ if (!connected || assetsPending || window.streamProfile?.isPending()) return;
  const form = $('#brb-form');
  const data = new FormData(form);
  for (const name of ['image', 'music']) if (!data.get(name)?.size) data.delete(name);
- if (!snapshot.forwarding) {
-  const [width, height] = $('#brb-resolution').value.split('x');
-  data.set('width', width); data.set('height', height);
- }
  assetsPending = true;
  $('#brb-save-status').textContent = 'Preparing video and audio… Your current BRB remains active.';
  render();

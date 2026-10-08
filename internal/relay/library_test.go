@@ -154,6 +154,22 @@ func TestLibraryDiscoveryUploadPersistenceAndProfileChanges(t *testing.T) {
 		t.Fatal("manual BRB cleared explicit pause")
 	}
 	s.setForwarding(false)
+	generation := s.broadcast.media.settings.Generation
+	if w := assetRequest(t, s, map[string]string{"fps": "25"}, "", nil); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if s.broadcast.media.settings.Generation != generation || l.status().Files[0].key != entry.key {
+		t.Fatal("unchanged profile rebuilt media")
+	}
+	t.Run("failed profile preparation keeps working media", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir()) // Force encoder failure without changing media.
+		if w := assetRequest(t, s, map[string]string{"fps": "30"}, "", nil); w.Code != 422 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		if s.broadcast.media.settings.Generation != generation || l.status().Files[0].State != "ready" || l.status().Files[0].key != entry.key {
+			t.Fatal("failed preparation changed the active profile or library")
+		}
+	})
 	if w := assetRequest(t, s, map[string]string{"fps": "30"}, "", nil); w.Code != 204 {
 		t.Fatal(w.Code, w.Body.String())
 	}

@@ -364,12 +364,12 @@ plus protocol overhead. In v1, CPU handles transport/TLS, not video encoding.
 
 ## Build and test
 
-Requires Go 1.27 or later. Install FFmpeg with `libx264` and AAC support to run
+Requires Go 1.27 or later and Node.js 24 for dashboard tests. Install FFmpeg/FFprobe with `libx264` and AAC support to run
 BRB or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
 these tests cannot silently skip. The protocol dependency is pinned in `go.mod`/`go.sum`.
 
 ```sh
-make check              # race-enabled tests and go vet
+make check              # race-enabled tests, dashboard tests, and go vet
 make build              # bin/restreamer for your local machine
 make cross-build        # static Linux amd64 and arm64 executables in dist/
 ```
@@ -431,7 +431,7 @@ outputs. Master forwarding still starts off after every application restart.
   a broadcast. Application shutdown or loss of the relay's own connectivity
   cannot be protected by BRB.
 
-Expand **BRB screen, music & video profile** in the dashboard:
+Expand **BRB screen & music** in the dashboard:
 
 - The default is a **32-second pixel-art arcade loop**: ghosts chase Pac-Man,
   a power pellet reverses the chase, frightened ghosts scatter and returning
@@ -456,17 +456,27 @@ Expand **BRB screen, music & video profile** in the dashboard:
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
-- Choose resolution, frame rate (including **25 and 30 fps**), and audio sample
-  rate while master forwarding is **off**. **Selecting a value does not apply
-  it: click Prepare & save BRB and wait for success.** The dashboard shows the
-  active saved profile separately, flags unsaved changes, and highlights the save
-  button. Configure/reconnect OBS to match the saved profile. Video must be 8-bit 4:2:0 H.264; audio must be AAC-LC stereo. Declared
-  incompatible resolution, video timing, or audio headers reject that publisher
-  with a visible BRB error while the prepared fallback stays available.
 - **Prepare & save BRB** validates and encodes assets before atomically activating
   them. Failed uploads preserve the previous working assets. The saved dashboard
   profile overrides the initial JSON profile on restart. Assets/profile persist;
   manual BRB selection does not persist across application restarts.
+
+The **Shared streaming profile** in the **OBS input** card controls resolution,
+frame rate (including **25 and 30 fps**), and audio sample rate for OBS, BRB,
+and prepared videos. Turn master forwarding **off** before changing it.
+The form shows the active saved profile and keeps edits as an unsaved draft.
+**Save & rebuild** warns that saving rebuilds BRB and re-prepares the video
+library from retained originals. **Cancel changes** restores every saved value.
+Returning all fields to their saved values also clears the warning and disables
+saving; no media is rebuilt. Saving BRB artwork/music never applies a profile draft.
+
+The new profile becomes active only after BRB preparation and persistence succeed;
+failures preserve the previous working profile and library. Videos are then
+prepared in the background, with progress in the library and playback available
+individually when ready. Configure/reconnect OBS to match the saved values—these
+controls do not configure OBS. Video must be 8-bit 4:2:0 H.264; audio must be
+AAC-LC stereo. Incompatible resolution, video timing, or audio headers reject
+that publisher with a visible error while the prepared fallback stays available.
 
 FFmpeg runs only at preparation/startup. Go then loops bounded encoded tracks,
 with no transcoding of OBS and no dependence on an FFmpeg process during a break.

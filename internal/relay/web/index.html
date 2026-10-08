@@ -8,6 +8,7 @@
  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
  <link rel="stylesheet" href="/dashboard.css">
  <script src="/dashboard.js" defer></script>
+ <script src="/profile.js" defer></script>
  <script src="/library.js" defer></script>
  <script src="/preview.js" defer></script>
 </head>
@@ -29,6 +30,22 @@
    <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
    <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
    <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
+   <div id="input-profile" class="input-profile" hidden>
+    <h3>Shared streaming profile</h3>
+    <p id="profile-active" class="brb-active-profile"></p>
+    <p class="profile-help">Required OBS output settings, also used for BRB and prepared videos. Set OBS to match; saving here does not configure OBS. H.264 video and AAC-LC stereo audio.</p>
+    <form id="profile-form">
+     <fieldset id="profile-fields"><legend>Required OBS settings</legend><div class="profile-fields">
+      <label>Resolution <select id="profile-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
+      <label>Frame rate <select id="profile-fps"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label>
+      <label>Audio sample rate <select id="profile-sample-rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>
+     </div></fieldset>
+     <p id="profile-locked" class="profile-help" hidden>Turn master forwarding off before changing this profile.</p>
+     <div id="profile-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved profile changes</strong><p>Saving will rebuild BRB and re-prepare your video library. Original uploads are preserved. Each video becomes playable when its new conversion is ready.</p></div>
+     <div class="profile-actions"><button id="profile-save" class="preview-button" type="submit" disabled>Save &amp; rebuild</button><button id="profile-cancel" class="preview-button" type="button" disabled>Cancel changes</button></div>
+     <p id="profile-save-status" class="profile-help" role="status"></p>
+    </form>
+   </div>
   </section>
   <section class="panel preview-panel" aria-labelledby="preview-title">
    <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">Input preview</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
@@ -45,9 +62,9 @@
    <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
    <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div><button id="brb-toggle" class="toggle" type="button" role="switch" aria-label="Manual BRB" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button></div>
    <p id="brb-active-profile" class="brb-active-profile" hidden></p>
-   <div id="brb-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; save BRB</b> to apply your changes. OBS must match the active saved profile shown above.</p></div>
+   <div id="brb-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; save BRB</b> to apply your changes. The shared streaming profile is managed in the OBS input card.</p></div>
    <p id="brb-error" class="notice" role="alert" hidden></p>
-   <details id="brb-settings"><summary>BRB screen, music &amp; video profile</summary>
+   <details id="brb-settings"><summary>BRB screen &amp; music</summary>
     <form id="brb-form">
      <div class="brb-assets">
       <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
@@ -60,11 +77,6 @@
        <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
       </div>
      </div>
-     <fieldset id="brb-profile"><legend>Match your OBS output</legend><p>Change the profile while master forwarding is off, then click <strong>Prepare &amp; save BRB</strong> below. Selecting a value does not apply it. Reconnect OBS with matching settings after saving. H.264 video and AAC-LC stereo audio.</p><div class="profile-fields">
-      <label>Resolution <select id="brb-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080" selected>1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
-      <label>Frame rate <select id="brb-fps" name="fps"><option>24</option><option>25</option><option selected>30</option><option>50</option><option>60</option></select></label>
-      <label>Audio sample rate <select id="brb-sample-rate" name="sample_rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>
-     </div></fieldset>
      <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Prepare &amp; save BRB</button><span id="brb-save-status" role="status">Your current BRB stays ready while new assets are prepared.</span></div>
     </form>
    </details>

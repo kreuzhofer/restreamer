@@ -220,7 +220,19 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if oldProfile != settings.Profile && s.forwarding.Load() {
-		http.Error(w, "Turn master forwarding off before changing the BRB profile", 409)
+		http.Error(w, "Turn master forwarding off before changing the shared streaming profile", 409)
+		return
+	}
+	// Profile-only saves that match the active profile must not rebuild media.
+	// Keep existing asset-update requests (including explicit re-preparation).
+	profileOnly := len(r.MultipartForm.Value) > 0 && len(r.MultipartForm.File) == 0
+	for key := range r.MultipartForm.Value {
+		if key != "width" && key != "height" && key != "fps" && key != "sample_rate" {
+			profileOnly = false
+		}
+	}
+	if profileOnly && oldProfile == settings.Profile {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	root := s.cfg.BRB.Directory
