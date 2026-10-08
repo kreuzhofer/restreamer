@@ -4,10 +4,12 @@
   "fps": 60,
   "duration": 32,
   "hashes": {
-    "artwork/brb/animation.mjs": "5a0c200bda08e557a090180126ad4386d4e0c767a2bf1bb50bd5e59f8d3dc051",
+    "artwork/brb/animation.mjs": "95c59d693795b3d56b07be95184e7de351ef16cb2949dcdae7f56860c17848fc",
     "artwork/brb/raster.mjs": "31bae06a881c599a47f467257f9413950fe56b1c97433814fc82937eeaa23821",
-    "artwork/brb/render.mjs": "e2fb138b96b762a494b1e0f6b13003d19b9edf5238e87709895531a5ffb5a3c7",
-    "internal/relay/artwork/arcade.mkv": "6a510ff7893a53ee11154273b631f8eea11295a2b02bd4625a7414fc3cd5aead",
-    "internal/relay/artwork/poster.png": "f1e6117a185af0927b97326d1c84ffe0ed93b9ed1bbc4ee405476078fbd2be90"
+    "artwork/brb/render.mjs": "e587f2aec8c9b0c0a083b5efcca9ce04c51c9378f2854dc53f5eb58918f328db",
+    "artwork/brb/font.json": "68762478d69edf4c1f6ae5787366d91d41243244bbd1aaa9725feed05228da88",
+    "internal/relay/artwork/arcade.mkv": "ccc583314b576c925f3b8898f4727f30db81481895933838f478d6634760d364",
+    "internal/relay/artwork/poster.png": "f90b48fb0a33711966f6f4a0a1e3bf89f79a4f7352b0e164e3c3c72cfadf7759",
+    "internal/relay/artwork/text.json": "4f9f1d7326581437002f8b2f8de0e8cecc133daaee7b8fb2be511e7e27d06f4e"
   }
 }

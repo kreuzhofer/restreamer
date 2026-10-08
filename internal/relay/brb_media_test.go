@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,12 +36,12 @@ func preparedBRB(t *testing.T, fps int) (*brbMedia, config.BRBProfile, string) {
 	requireFFmpeg(t)
 	dir := t.TempDir()
 	profile := config.BRBProfile{Width: 320, Height: 180, FPS: fps, SampleRate: 48000}
-	if err := defaultBRBImage(filepath.Join(dir, "image.png")); err != nil {
+	if err := defaultBRBImage(filepath.Join(dir, "image.png"), defaultBRBText); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	media, err := encodeBRB(ctx, profile, dir, false, false, 50)
+	media, err := encodeBRB(ctx, profile, dir, false, false, 50, defaultBRBText)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +220,15 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := s.broadcast.media
+	if original.settings.Text != defaultBRBText {
+		t.Fatal("missing default message")
+	}
+	for _, value := range []string{"", "line\nbreak", strings.Repeat("X", 41), "%{metadata}"} {
+		w := assetRequest(t, s, map[string]string{"text": value}, "", nil)
+		if w.Code != 400 || s.broadcast.media != original {
+			t.Fatal("invalid message replaced active assets", w.Code)
+		}
+	}
 	for _, file := range []string{"bad.png", "bad.mp3", "bad.wav"} {
 		w := assetRequest(t, s, nil, file, []byte("not media"))
 		if w.Code != 422 || s.broadcast.media != original {
@@ -225,6 +236,9 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 		}
 	}
 	s.setForwarding(true)
+	if w := assetRequest(t, s, map[string]string{"text": "  bin gleich zurück!  "}, "", nil); w.Code != 204 {
+		t.Fatal("text-only change should work while forwarding", w.Code, w.Body.String())
+	}
 	if w := assetRequest(t, s, map[string]string{"fps": "25"}, "", nil); w.Code != 409 {
 		t.Fatal("changed profile while on", w.Code)
 	}
@@ -266,7 +280,7 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings := reloaded.broadcast.media.settings
-	if settings.Profile.FPS != 25 || settings.Volume != 25 || !settings.Music || !settings.CustomImage || reloaded.forwarding.Load() {
+	if settings.Text != "BIN GLEICH ZURÜCK!" || settings.Profile.FPS != 25 || settings.Volume != 25 || !settings.Music || !settings.CustomImage || reloaded.forwarding.Load() {
 		t.Fatalf("wrong restart settings: %+v", settings)
 	}
 	// The configured default is 30fps; the saved dashboard profile must win.
@@ -294,8 +308,44 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 	if upgraded.broadcast.media.video.duration != 32*time.Second {
 		t.Fatal("default animation lost on restart")
 	}
+	if upgraded.broadcast.media.settings.Text != settings.Text {
+		t.Fatal("reset or restart lost custom text")
+	}
 	if w := dashboardRequest(upgraded, "GET", "/api/brb/image", ""); w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
 		t.Fatal("missing authenticated preview")
+	}
+}
+
+func TestBRBLegacySettingsDefaultMessage(t *testing.T) {
+	requireFFmpeg(t)
+	s := dashboardServer(t)
+	s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}
+	if err := s.initialize(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(s.cfg.BRB.Directory, "current.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy map[string]any
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		t.Fatal(err)
+	}
+	delete(legacy, "text")
+	data, err = json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := New(s.cfg, s.log)
+	if err := reloaded.initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.broadcast.media.settings.Text != defaultBRBText {
+		t.Fatal("legacy settings lost default message")
 	}
 }
 

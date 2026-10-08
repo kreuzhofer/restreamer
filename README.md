@@ -443,6 +443,14 @@ Expand **BRB screen, music & video profile** in the dashboard:
   custom images and music are preserved.
   To change sprites, colours or choreography, use the editable Canvas source and
   browser preview described in [the artwork guide](artwork/brb/README.md).
+- Edit **Arcade message**, then click **Prepare & save BRB** to change the text
+  and its still preview. The message stays on one centred line and automatically
+  shrinks in whole-pixel steps to fit clear of the animation. Up to 40 characters
+  are supported: A–Z, 0–9, ÄÖÜß, spaces and `. , ! ? : ' - / ( ) + &`.
+  Lowercase letters are displayed in uppercase. Unsupported or empty text is
+  rejected without replacing the active BRB. The message persists across
+  restarts and can be changed while forwarding; it applies only to the default
+  animation, with custom image uploads unchanged.
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
@@ -500,7 +508,7 @@ reported. Stream keys, credentials and arbitrary peer metadata are never logged.
 
 Authenticated APIs: `PUT /api/brb` takes `{"enabled":true}` / `false` for manual
 mode, with the same JSON/control-header requirements as other controls.
-`POST /api/brb/assets` takes multipart fields `image`, `music`, `volume`,
+`POST /api/brb/assets` takes multipart fields `image`, `music`, `volume`, `text`,
 `reset_image=true`, `remove_music=true`, and optional `width`, `height`, `fps`,
 `sample_rate`. It requires `X-Restreamer-Control: 1` and rejects cross-origin
 requests. Profile changes while forwarding is on return 409. `GET /api/brb/image`

@@ -1,3 +1,4 @@
+import letters from './font.json' with {type:'json'};
 // Editable, deterministic Canvas animation. Seconds are the only clock: preview
 // and offline rendering use this exact source. All drawing uses integer pixels.
 export const WIDTH = 320, HEIGHT = 180, FPS = 60, DURATION = 32;
@@ -9,20 +10,7 @@ export function sceneAt(seconds) {
   return {index, time:t % 8, mode:['chase','powered','scatter','chase'][index], direction:index === 1 || index === 3 ? -1 : 1};
 }
 
-const letters = {
-  B:['11110','10001','10001','11110','10001','10001','11110'],
-  E:['11111','10000','10000','11110','10000','10000','11111'],
-  R:['11110','10001','10001','11110','10100','10010','10001'],
-  I:['11111','00100','00100','00100','00100','00100','11111'],
-  G:['01111','10000','10000','10111','10001','10001','01111'],
-  H:['10001','10001','10001','11111','10001','10001','10001'],
-  T:['11111','00100','00100','00100','00100','00100','00100'],
-  A:['01110','10001','10001','11111','10001','10001','10001'],
-  C:['01111','10000','10000','10000','10000','10000','01111'],
-  K:['10001','10010','10100','11000','10100','10010','10001'],
-};
-
-export function drawFrame(ctx, seconds) {
+export function drawFrame(ctx, seconds, text = 'BE RIGHT BACK') {
   const scene = sceneAt(seconds), t = scene.time;
   const rect = (x,y,w,h,c) => {ctx.fillStyle=c; ctx.fillRect(Math.round(x),Math.round(y),w,h);};
   rect(0,0,WIDTH,HEIGHT,palette.background);
@@ -34,12 +22,13 @@ export function drawFrame(ctx, seconds) {
   for (const x of [24,88,152,216,280]) {
     rect(x,12,16,2,palette.wall); rect(x+8,169,8,1,palette.edge);
   }
-  const text = 'BE RIGHT BACK', size = 3, left = Math.floor((WIDTH-(text.length*6-1)*size)/2);
-  for (let i=0;i<text.length;i++) {
-    (letters[text[i]] || []).forEach((row,y) => [...row].forEach((pixel,x) => {
+  text = text.replace(/[a-zäöü]/g, ch => ch.toUpperCase());
+  const glyphs = [...text], size = Math.min(3, Math.floor(296/Math.max(1,glyphs.length*6-1))), left = Math.floor((WIDTH-(glyphs.length*6-1)*size)/2), top = 70+Math.floor((44-7*size)/2);
+  for (let i=0;i<glyphs.length;i++) {
+    (letters[glyphs[i]] || []).forEach((row,y) => [...row].forEach((pixel,x) => {
       if (pixel === '1') {
-        rect(left+i*18+x*size+1,80+y*size+1,3,3,'#172a40');
-        rect(left+i*18+x*size,79+y*size,3,3,palette.text);
+        rect(left+(i*6+x)*size+1,top+y*size+1,size,size,'#172a40');
+        rect(left+(i*6+x)*size,top+y*size,size,size,palette.text);
       }
     }));
   }

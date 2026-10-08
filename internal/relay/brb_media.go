@@ -82,7 +82,7 @@ func readMediaTrack(path string, typ uint8, step time.Duration) (mediaTrack, err
 	return track, nil
 }
 
-func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customImage, music bool, volume int) (*brbMedia, error) {
+func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customImage, music bool, volume int, text string) (*brbMedia, error) {
 	run := func(args ...string) error {
 		base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "67108864"}
 		cmd := exec.CommandContext(ctx, "ffmpeg", append(base, args...)...)
@@ -97,6 +97,7 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customIma
 	vf := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", cfg.Width, cfg.Height, cfg.Width, cfg.Height)
 	seconds := 2
 	videoArgs := []string{"-protocol_whitelist", "file,pipe", "-loop", "1", "-framerate", fps, "-i", filepath.Join(dir, "image.png")}
+	filters := []string{"-vf", vf}
 	tune := "stillimage"
 	if !customImage {
 		seconds = 32
@@ -105,12 +106,26 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customIma
 			return nil, errors.New("cannot prepare default BRB animation")
 		}
 		defer os.Remove(master)
-		videoArgs = []string{"-protocol_whitelist", "file,pipe", "-i", master}
+		band, err := brbTextImage(text)
+		if err != nil {
+			return nil, err
+		}
+		textPath := filepath.Join(dir, "text.png")
+		if err := writeBRBPNG(textPath, band); err != nil {
+			return nil, errors.New("cannot prepare arcade message")
+		}
+		defer os.Remove(textPath)
+		if err := defaultBRBImage(filepath.Join(dir, "image.png"), text); err != nil {
+			return nil, errors.New("cannot prepare arcade preview")
+		}
+		videoArgs = []string{"-protocol_whitelist", "file,pipe", "-i", master, "-loop", "1", "-i", textPath}
 		// Keep pixel edges crisp; the bundled 60 fps master supports every profile.
 		vf = "fps=" + fps + "," + fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=neighbor,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", cfg.Width, cfg.Height, cfg.Width, cfg.Height)
+		filters = []string{"-filter_complex_threads", "2", "-filter_complex", "[0:v][1:v]overlay=0:70:format=auto," + vf + "[video]", "-map", "[video]"}
 		tune = "animation"
 	}
-	videoArgs = append(videoArgs, "-t", fmt.Sprint(seconds), "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-tune", tune, "-profile:v", "high", "-bf", "0", "-g", fmt.Sprint(cfg.FPS*2), "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", videoPath)
+	videoArgs = append(videoArgs, filters...)
+	videoArgs = append(videoArgs, "-t", fmt.Sprint(seconds), "-an", "-c:v", "libx264", "-preset", "veryfast", "-tune", tune, "-profile:v", "high", "-bf", "0", "-g", fmt.Sprint(cfg.FPS*2), "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", videoPath)
 	if err := run(videoArgs...); err != nil {
 		return nil, err
 	}
@@ -170,7 +185,3 @@ var defaultBRBVideo []byte
 
 //go:embed artwork/poster.png
 var defaultBRBPoster []byte
-
-func defaultBRBImage(path string) error {
-	return os.WriteFile(path, defaultBRBPoster, 0600)
-}

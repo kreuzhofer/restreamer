@@ -18,6 +18,7 @@ import (
 )
 
 type brbSettings struct {
+	Text        string            `json:"text"`
 	Profile     config.BRBProfile `json:"profile"`
 	Generation  string            `json:"generation"`
 	CustomImage bool              `json:"custom_image"`
@@ -46,7 +47,7 @@ func (s *Server) initializeBRB() error {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return errors.New("cannot create BRB storage directory")
 	}
-	settings := brbSettings{Volume: 50, Profile: s.cfg.BRB.BRBProfile}
+	settings := brbSettings{Text: defaultBRBText, Volume: 50, Profile: s.cfg.BRB.BRBProfile}
 	data, err := os.ReadFile(filepath.Join(root, "current.json"))
 	if err == nil {
 		if len(data) > 4096 || json.Unmarshal(data, &settings) != nil || !strings.HasPrefix(settings.Generation, "assets-") || strings.ContainsAny(settings.Generation, "/\\") || settings.Volume < 0 || settings.Volume > 100 {
@@ -54,6 +55,10 @@ func (s *Server) initializeBRB() error {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return errors.New("cannot read BRB settings")
+	}
+	settings.Text, err = normalizeBRBText(settings.Text)
+	if err != nil {
+		return err
 	}
 	if err := settings.Profile.Validate(); err != nil {
 		return err
@@ -72,7 +77,7 @@ func (s *Server) initializeBRB() error {
 		if err = copyAsset(filepath.Join(root, settings.Generation, "image.png"), filepath.Join(dir, "image.png")); err != nil {
 			return err
 		}
-	} else if err = defaultBRBImage(filepath.Join(dir, "image.png")); err != nil {
+	} else if err = defaultBRBImage(filepath.Join(dir, "image.png"), settings.Text); err != nil {
 		return err
 	}
 	if settings.Generation != "" {
@@ -84,7 +89,7 @@ func (s *Server) initializeBRB() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume)
+	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
 	if err != nil {
 		return err
 	}
@@ -175,7 +180,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for key, values := range r.MultipartForm.Value {
-		if (key != "volume" && key != "reset_image" && key != "remove_music" && key != "width" && key != "height" && key != "fps" && key != "sample_rate") || len(values) != 1 {
+		if (key != "text" && key != "volume" && key != "reset_image" && key != "remove_music" && key != "width" && key != "height" && key != "fps" && key != "sample_rate") || len(values) != 1 {
 			http.Error(w, "Unknown or repeated BRB setting", 400)
 			return
 		}
@@ -183,6 +188,14 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	s.broadcast.mu.Lock()
 	settings := s.broadcast.media.settings
 	s.broadcast.mu.Unlock()
+	if values, ok := r.MultipartForm.Value["text"]; ok {
+		value, err := normalizeBRBText(values[0])
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		settings.Text = value
+	}
 	if value := r.FormValue("volume"); value != "" {
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 || n > 100 {
@@ -237,7 +250,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		}
 		settings.CustomImage = true
 	} else if r.FormValue("reset_image") == "true" {
-		if err = defaultBRBImage(imagePath); err != nil {
+		if err = defaultBRBImage(imagePath, settings.Text); err != nil {
 			fail(errors.New("cannot prepare default image"))
 			return
 		}
@@ -275,7 +288,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume)
+	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
 	if err != nil {
 		fail(err)
 		return

@@ -4,13 +4,14 @@ import {createHash} from 'node:crypto';
 import {readFile, writeFile, mkdir, mkdtemp, rename, rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
-import {drawFrame, WIDTH, HEIGHT, FPS, DURATION} from './animation.mjs';
+import letters from './font.json' with {type:'json'};
+import {drawFrame, WIDTH, HEIGHT, FPS, DURATION, palette} from './animation.mjs';
 import {rasterCanvas} from './raster.mjs';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const output=join(root,'internal/relay/artwork');
-const sources=['artwork/brb/animation.mjs','artwork/brb/raster.mjs','artwork/brb/render.mjs'];
-const assets=['internal/relay/artwork/arcade.mkv','internal/relay/artwork/poster.png'];
+const sources=['artwork/brb/animation.mjs','artwork/brb/raster.mjs','artwork/brb/render.mjs','artwork/brb/font.json'];
+const assets=['internal/relay/artwork/arcade.mkv','internal/relay/artwork/poster.png','internal/relay/artwork/text.json'];
 async function hashes(paths){const result={};for(const path of paths)result[path]=createHash('sha256').update(await readFile(join(root,path))).digest('hex');return result;}
 if(process.argv.includes('--check')) {
   const manifest=JSON.parse(await readFile(join(output,'manifest.json'),'utf8'));
@@ -29,7 +30,7 @@ if(process.argv.includes('--check')) {
     try {
       const canvas=rasterCanvas(WIDTH,HEIGHT);
       for(let i=0;i<frames;i++) {
-        drawFrame(canvas,frames===1?3:i/FPS);
+        drawFrame(canvas,frames===1?3:i/FPS,'');
         if(!child.stdin.write(Buffer.from(canvas.pixels))) await Promise.race([
           once(child.stdin,'drain'),
           finished.then(([code])=>{throw new Error(`FFmpeg stopped before rendering completed (${code})`);}),
@@ -44,6 +45,7 @@ if(process.argv.includes('--check')) {
     await encode(join(temp,'arcade.mkv'),FPS*DURATION,['-an','-c:v','libx264rgb','-crf','0','-preset','veryslow','-threads','2']);
     await encode(join(temp,'poster.png'),1,['-frames:v','1','-threads','1']);
     for(const name of ['arcade.mkv','poster.png']) await rename(join(temp,name),join(output,name));
+    await writeFile(join(output,'text.json'),JSON.stringify({glyphs:letters,background:palette.background,foreground:palette.text,shadow:'#172a40'},null,2)+'\n');
     await writeFile(join(output,'manifest.json'),JSON.stringify({width:WIDTH,height:HEIGHT,fps:FPS,duration:DURATION,hashes:await hashes([...sources,...assets])},null,2)+'\n');
     console.log(`Rendered ${DURATION}s arcade loop at ${WIDTH}×${HEIGHT}, ${FPS} fps.`);
   } finally {await rm(temp,{recursive:true,force:true});}

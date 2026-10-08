@@ -51,6 +51,7 @@
      <div class="brb-assets">
       <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
       <div class="brb-fields">
+       <label>Arcade message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Default animation only. One line, automatically sized to fit. Up to 40 characters: A–Z, 0–9, ÄÖÜß, spaces and . , ! ? : ' - / ( ) + &amp;. Displayed in uppercase. Click Prepare &amp; save BRB to apply.</small>
        <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels. Fitted without cropping.</small>
        <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Use the default animated arcade screen</label>
        <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes. Loops during BRB.</small>
