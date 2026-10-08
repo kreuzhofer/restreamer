@@ -243,7 +243,10 @@ visible alongside bitrate. FPS counts H.264 media packets per elapsed second
 (one packet per video frame for standard OBS output), excluding configuration
 headers, end markers, audio, and metadata. It measures arrival/write rate, so
 network bursts can produce short spikes even for a constant-frame-rate source.
-No decoding or GPU is required.
+No decoding or GPU is required. **This observed packet-arrival FPS is not used
+for BRB compatibility.** BRB compares the frame rate signalled in H.264 SPS/VUI
+codec headers against the active saved profile; it does not infer it from these
+graph samples.
 
 Each destination also shows **Relay drops**, with expandable frame counters:
 
@@ -434,8 +437,10 @@ Expand **BRB screen, music & video profile** in the dashboard:
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
 - Choose resolution, frame rate (including **25 and 30 fps**), and audio sample
-  rate while master forwarding is **off**. Save, then configure/reconnect OBS to
-  match. Video must be 8-bit 4:2:0 H.264; audio must be AAC-LC stereo. Declared
+  rate while master forwarding is **off**. **Selecting a value does not apply
+  it: click Prepare & save BRB and wait for success.** The dashboard shows the
+  active saved profile separately, flags unsaved changes, and highlights the save
+  button. Configure/reconnect OBS to match the saved profile. Video must be 8-bit 4:2:0 H.264; audio must be AAC-LC stereo. Declared
   incompatible resolution, video timing, or audio headers reject that publisher
   with a visible BRB error while the prepared fallback stays available.
 - **Prepare & save BRB** validates and encodes assets before atomically activating
@@ -457,6 +462,31 @@ when a target/master is off), not dropped. These counters do not acknowledge
 platform playback. Test switching against your intended destinations before a
 production broadcast; local tests exercise H.264 decoder changes and B-frames,
 but cannot establish every platform's ingest behavior.
+
+BRB compatibility diagnostics log each accepted video/audio codec header at
+INFO and each rejection as `input incompatible with BRB` at WARN. The structured
+fields are `media`, `source`, `compatible`, `ingest`, `brb`, `brb_profile`, and
+`mismatches`. Each mismatch has a `field`, the decoded `ingest` value, and the
+required `brb` value. The dashboard error also lists these differences. Expected
+values come from the **active saved profile**, not unsaved dropdown selections or
+an initial JSON profile superseded by saved settings.
+
+For example, a 25 fps input against a saved 30 fps profile reports
+`{"field":"fps","ingest":25,"brb":30}`. Video diagnostics include width, height,
+luma/chroma bit depths, chroma format, NAL length size, SPS/PPS counts, and frame
+rate. FPS comes from `h264_sps_vui`: `time_scale / (2 * num_units_in_tick)`.
+Both raw timing numbers and `fixed_frame_rate_flag` are logged; the existing
+comparison tolerance is 0.1 fps. This describes signalled encoder timing, not a
+measurement of rendered frames or what the OBS settings UI currently displays.
+Absent VUI timing is explicitly `not_signalled` and skips the FPS comparison;
+zero timing values are invalid. It never substitutes the observed graph rate.
+
+Audio diagnostics come from `aac_audio_specific_config`, including sample rate,
+channel count, AAC object/extension types, frame-length and core-coder flags.
+Malformed headers are identified without inventing unreadable values or logging
+raw payloads/parser errors. Video and audio headers are logged separately; if a
+publisher is rejected before the other header arrives, its properties cannot be
+reported. Stream keys, credentials and arbitrary peer metadata are never logged.
 
 Authenticated APIs: `PUT /api/brb` takes `{"enabled":true}` / `false` for manual
 mode, with the same JSON/control-header requirements as other controls.

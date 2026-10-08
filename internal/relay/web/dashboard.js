@@ -197,6 +197,11 @@ function renderBRB() {
  $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : !snapshot.forwarding ? brb.manual ? 'Manual BRB selected · master forwarding is off' : 'BRB ready · master forwarding is off' : active ? brb.manual ? 'Manual BRB · broadcast still live' : 'Waiting for OBS · broadcast still live' : brb.manual ? 'Switching to manual BRB…' : 'OBS live · automatic protection armed';
  $('#brb-help').textContent = brb.manual ? 'OBS reconnecting will not end manual BRB. Switch BRB off when you are ready.' : 'OBS disconnects activate BRB automatically, with no time limit. Only master off ends the broadcast.';
  $('#brb-settings').hidden = !brb.ready;
+ const profile = snapshot.brb_profile;
+ $('#brb-active-profile').hidden = !brb.ready || !profile;
+ if (profile) $('#brb-active-profile').textContent = `Active saved profile: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
+ $('#brb-unsaved').hidden = !brb.ready || !assetsDirty || assetsPending;
+ $('#brb-save').classList.toggle('needs-save', assetsDirty && !assetsPending);
  $('#brb-error').hidden = !brb.error;
  $('#brb-error').textContent = brb.error || '';
  $('#brb-profile').disabled = snapshot.forwarding || assetsPending || !connected;
@@ -259,7 +264,13 @@ async function saveBRB(event) {
 }
 $('#brb-toggle').addEventListener('click', toggleBRB);
 $('#brb-form').addEventListener('submit', saveBRB);
-$('#brb-form').addEventListener('input', () => { assetsDirty = true; });
+function brbFormChanged() {
+ assetsDirty = true;
+ $('#brb-save-status').textContent = 'Not applied yet. Click Prepare & save BRB to activate your changes.';
+ renderBRB();
+}
+$('#brb-form').addEventListener('input', brbFormChanged);
+$('#brb-form').addEventListener('change', brbFormChanged);
 $('#stop-cancel').addEventListener('click', () => $('#stop-dialog').close());
 $('#stop-confirm').addEventListener('click', () => { $('#stop-dialog').close(); setForwarding(false); });
 $('#forwarding-toggle').addEventListener('click', toggleForwarding);

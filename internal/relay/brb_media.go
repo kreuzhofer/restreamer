@@ -11,15 +11,11 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
-	amp4 "github.com/abema/go-mp4"
-	"github.com/bluenviron/mediacommon/v2/pkg/codecs/h264"
-	"github.com/bluenviron/mediacommon/v2/pkg/codecs/mpeg4audio"
 	"github.com/kreuzhofer/restreamer/internal/config"
 	"github.com/kreuzhofer/restreamer/internal/rtmp"
 )
@@ -193,35 +189,4 @@ func defaultBRBImage(path string) error {
 	}
 	defer f.Close()
 	return png.Encode(f, img)
-}
-
-func (s *Server) validateBRBInput(m *rtmp.Message) error {
-	s.broadcast.mu.Lock()
-	cfg := s.broadcast.media.settings.Profile
-	s.broadcast.mu.Unlock()
-	if m.Type == rtmp.Video && len(m.Body) > 1 && m.Body[1] == 0 {
-		if len(m.Body) < 12 {
-			return errors.New("BRB requires valid H.264 headers")
-		}
-		var avc amp4.AVCDecoderConfiguration
-		avc.SetType(amp4.BoxTypeAvcC())
-		_, err := amp4.Unmarshal(bytes.NewReader(m.Body[5:]), uint64(len(m.Body)-5), &avc, amp4.Context{})
-		if err != nil || avc.LengthSizeMinusOne != 3 || len(avc.SequenceParameterSets) != 1 || len(avc.PictureParameterSets) != 1 {
-			return errors.New("BRB requires one H.264 SPS/PPS and four-byte NAL lengths")
-		}
-		var sps h264.SPS
-		if sps.Unmarshal(avc.SequenceParameterSets[0].NALUnit) != nil || sps.Width() != cfg.Width || sps.Height() != cfg.Height || sps.BitDepthLumaMinus8 != 0 || sps.BitDepthChromaMinus8 != 0 || sps.ChromaFormatIdc != 1 {
-			return errors.New("OBS must match the configured BRB resolution and use 8-bit 4:2:0 H.264")
-		}
-		if fps := sps.FPS(); fps != 0 && math.Abs(fps-float64(cfg.FPS)) > 0.1 {
-			return errors.New("OBS frame rate must match the selected BRB profile")
-		}
-	}
-	if m.Type == rtmp.Audio && len(m.Body) > 1 && m.Body[1] == 0 {
-		var a mpeg4audio.Config
-		if a.Unmarshal(m.Body[2:]) != nil || a.Type != 2 || a.ExtensionType != 0 || a.ChannelCount != 2 || a.SampleRate != cfg.SampleRate || a.FrameLengthFlag || a.DependsOnCoreCoder {
-			return errors.New("OBS must use AAC-LC stereo at the configured BRB sample rate")
-		}
-	}
-	return nil
 }

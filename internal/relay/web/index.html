@@ -43,6 +43,8 @@
   <section class="panel brb-panel" aria-labelledby="brb-title">
    <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
    <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div><button id="brb-toggle" class="toggle" type="button" role="switch" aria-label="Manual BRB" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button></div>
+   <p id="brb-active-profile" class="brb-active-profile" hidden></p>
+   <div id="brb-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; save BRB</b> to apply your changes. OBS must match the active saved profile shown above.</p></div>
    <p id="brb-error" class="notice" role="alert" hidden></p>
    <details id="brb-settings"><summary>BRB screen, music &amp; video profile</summary>
     <form id="brb-form">
@@ -56,7 +58,7 @@
        <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
       </div>
      </div>
-     <fieldset id="brb-profile"><legend>Match your OBS output</legend><p>Change the profile while master forwarding is off, then reconnect OBS with matching settings. H.264 video and AAC-LC stereo audio.</p><div class="profile-fields">
+     <fieldset id="brb-profile"><legend>Match your OBS output</legend><p>Change the profile while master forwarding is off, then click <strong>Prepare &amp; save BRB</strong> below. Selecting a value does not apply it. Reconnect OBS with matching settings after saving. H.264 video and AAC-LC stereo audio.</p><div class="profile-fields">
       <label>Resolution <select id="brb-resolution"><option value="1280x720">1280 × 720</option><option value="1920x1080" selected>1920 × 1080</option><option value="2560x1440">2560 × 1440</option><option value="3840x2160">3840 × 2160</option></select></label>
       <label>Frame rate <select id="brb-fps" name="fps"><option>24</option><option>25</option><option selected>30</option><option>50</option><option>60</option></select></label>
       <label>Audio sample rate <select id="brb-sample-rate" name="sample_rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>

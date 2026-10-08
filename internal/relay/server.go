@@ -213,7 +213,6 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 				s.broadcast.mu.Lock()
 				s.broadcast.lastError = err.Error()
 				s.broadcast.mu.Unlock()
-				s.log.Warn("input incompatible with BRB", "reason", err.Error())
 				return
 			}
 		}
