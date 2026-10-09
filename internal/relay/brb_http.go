@@ -89,7 +89,12 @@ func (s *Server) initializeBRB() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	release, err := s.preparation.acquire(ctx)
+	if err != nil {
+		return errors.New("BRB preparation cancelled or timed out while waiting for other media preparation")
+	}
 	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
+	release()
 	if err != nil {
 		return err
 	}
@@ -317,7 +322,13 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
+	release, err := s.preparation.acquire(ctx)
+	if err != nil {
+		fail(errors.New("BRB preparation cancelled or timed out while waiting for other media preparation; retry when ready"))
+		return
+	}
 	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
+	release()
 	if err != nil {
 		fail(err)
 		return

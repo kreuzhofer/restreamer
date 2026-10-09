@@ -366,20 +366,26 @@
 
   function renderJobs() {
     if (!draft) return;
-    const busy = jobs.some(job => ['queued', 'running', 'cancelling'].includes(job.state));
+    const outstanding = jobs.filter(job => ['queued', 'running', 'cancelling'].includes(job.state));
+    const busy = outstanding.length >= 8;
     $('generate-design').disabled = dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
-    const active = jobs.find(job => ['queued', 'running', 'cancelling'].includes(job.state));
-    $('generation-status').textContent = active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available · one job at a time';
-    const relevant = jobs.filter(job => job.design_snapshot.id === draft.id);
+    const active = jobs.find(job => ['running', 'cancelling'].includes(job.state));
+    $('generation-status').textContent = `${outstanding.length}/8 outstanding · ${active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available'} · one render at a time`;
+    const relevant = jobs;
     $('generation-jobs').replaceChildren();
     for (const job of relevant) {
       const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id;
-      const title = document.createElement('strong'); title.textContent = `${job.state} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
+      const title = document.createElement('strong'); title.textContent = `${job.design_snapshot.name} · ${job.design_snapshot.stage.toUpperCase()} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
       const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps`;
       row.append(title, identity);
+      if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
+      if (['failed', 'interrupted', 'cancelled'].includes(job.state)) {
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'preview-button'; retry.textContent = 'Retry captured revision'; retry.disabled = busy;
+        retry.addEventListener('click', async () => { retry.disabled = true; try { await request(`/api/generator/jobs/${job.id}/retry`, 'POST', {}); await loadJobs(); } catch (error) { generationError(error.message); retry.disabled = false; } }); row.append(retry);
+      }
       if (job.error) { const error = document.createElement('p'); error.textContent = job.error; row.append(error); }
       if (['queued', 'running', 'cancelling'].includes(job.state)) {
         const progress = document.createElement('progress'); progress.max = 100; progress.value = job.progress; progress.setAttribute('aria-label', 'Generation progress'); row.append(progress);
@@ -389,7 +395,7 @@
       if (job.state === 'ready') {
         const detail = document.createElement('p');
         const selected = Object.values(stageSelections).some(value => value === job.media_revision);
-        detail.textContent = `Media ${job.media_revision.slice(0, 12)} · ${selected ? 'selected for a stage' : 'not selected for a stage'} · ${onAirRevision === job.media_revision ? 'on air' : 'not on air'}${job.design_snapshot.version !== draft.version ? ' · newer editable draft exists' : ''}`;
+        detail.textContent = `Media ${job.media_revision.slice(0, 12)} · ${selected ? 'selected for a stage' : 'not selected for a stage'} · ${onAirRevision === job.media_revision ? 'on air' : 'not on air'}${job.design_snapshot.id === draft.id && job.design_snapshot.version !== draft.version ? ' · newer editable draft exists' : ''}`;
         const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
       }
       $('generation-jobs').append(row);
