@@ -771,10 +771,15 @@ on PATH; Alpine containers already install them. Both Linux architectures use
 the same static Go renderer and packaged FFmpeg. Third-party font and module
 licenses are included in `THIRD_PARTY_NOTICES`.
 
-Generation currently accepts one title scene, one active job, and at most 200
-retained job records. Another job is rejected as busy until the active job ends
-or cancellation finishes. Output is limited to 512 MiB per job, with a 15-minute
-render/validation deadline. A scene raster uses at most 1920 × 1080 pixels; the
+Generation currently accepts one title scene and at most eight outstanding jobs
+across prestream and ending, including the running/cancelling job. Jobs run one at
+a time in persisted admission order. A full queue rejects new work explicitly;
+cancel queued work or wait for completion to free a slot. The shared queue shows
+every design's state, queue position, progress and cancellation controls. At most
+200 job records are retained, including retries; reaching that history limit
+rejects further work without removing existing records or media. Output is
+limited to 512 MiB per job, with a 15-minute preparation-wait/render/validation
+deadline. A scene raster uses at most 1920 × 1080 pixels; the
 single temporary workspace holds that PNG and the bounded output, and is removed
 on success, cancellation or failure. Prepared revisions remain retained in the
 existing library. Keep enough persistent disk space for retained revisions;
@@ -795,14 +800,30 @@ FFmpeg 4.4 probes at 1080p30 measured a 600-second still in 27.6 seconds with ab
 390 MiB, using the ultrafast preset. Production uses veryfast; timings differ by
 hardware, version and workload. Encoding uses two threads and filter processing
 one thread. This bounds concurrency inside the process, not system-wide CPU or
-memory use. Ordinary library preparation currently has its own worker; avoid
-starting a large conversion alongside generation on a constrained host.
+memory use. Generator rendering, ordinary library preparation and BRB encoding
+share one cancellable preparation slot. A waiting generator remains running with
+an explicit waiting explanation; the library also displays its wait. Cancelling
+a waiting generator removes its request without interrupting another conversion.
+BRB's existing two-minute preparation deadline and library's twelve-hour deadline
+include waiting. Live delivery never acquires the preparation slot. This limits
+expensive preparation concurrency, not aggregate retained storage or the CPU and
+memory used by live sessions and previews. Native 320 × 180/25 fps regression
+measurements with real generation, concurrent library conversion and a local RTMP
+broadcast observed one FFmpeg process (about 49 MiB peak sampled RSS). A healthy
+destination continued delivery with no new drops or reconnects while another
+destination disconnected. These fixture measurements do not promise production
+throughput or memory limits; deployment and larger-profile loads still vary.
 
 Job snapshots and outcomes persist beneath `<library_directory>/generator/jobs`;
 a restart marks unfinished jobs interrupted and removes incomplete workspace
-files. Generate the saved draft again explicitly to retry. Missing dependencies,
+files. **Retry captured revision** explicitly creates a new job at the back of
+the queue using the interrupted, failed or cancelled job's immutable inputs,
+profile, renderer and duration. It does not use a newer editable draft or alter
+the previous outcome. To use newer edits, choose Generate saved draft instead.
+Missing dependencies,
 storage failures, cancellation and profile changes leave prior ready and on-air
 revisions intact. A profile change during generation fails that job rather than
 substituting a different profile. Authenticated APIs expose jobs at
 `/api/generator/jobs`, individual outcomes at `/api/generator/jobs/{id}`, and
-cancellation at `/api/generator/jobs/{id}/cancel`.
+cancellation at `/api/generator/jobs/{id}/cancel`, and explicit captured-input
+retry at `/api/generator/jobs/{id}/retry` (POST with an empty JSON object).

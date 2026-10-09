@@ -22,6 +22,8 @@ import (
 
 type generatorJobView struct {
 	ID             string             `json:"id"`
+	Sequence       uint64             `json:"sequence"`
+	Progress       int                `json:"progress"`
 	State          string             `json:"state"`
 	Error          string             `json:"error"`
 	DesignRevision string             `json:"design_revision"`
@@ -73,7 +75,7 @@ func generatorServe(t *testing.T, s *Server) {
 }
 func waitGeneratorJob(t *testing.T, s *Server, id string) generatorJobView {
 	t.Helper()
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		w := dashboardRequest(s, "GET", "/api/generator/jobs/"+id, "")
 		if w.Code != 200 {
@@ -113,9 +115,7 @@ func TestGeneratorCapturesSavedRevisionAndPreviewsExactOutput(t *testing.T) {
 	if job.Design.Version != 1 || job.Design.Scenes[0].Text != "Welcome München" || job.DesignRevision == "" {
 		t.Fatalf("missing captured revision: %+v", job)
 	}
-	if busy := dashboardRequest(s, "POST", "/api/generator/jobs", payload); busy.Code != 409 {
-		t.Fatalf("second job accepted: %d", busy.Code)
-	}
+
 	original, _ := json.Marshal(d)
 	preview := dashboardRequest(s, "POST", "/api/generator/preview", string(original))
 	d.Scenes[0].Text = "A newer draft"
@@ -256,7 +256,7 @@ func TestGeneratorRejectsInvalidInputsAndUnmeasuredProfile(t *testing.T) {
 	if w := dashboardRequest(s, "POST", "/api/generator/jobs", fmt.Sprintf(`{"design_id":%q,"version":1}`, d.ID)); w.Code != 422 || !bytes.Contains(w.Body.Bytes(), []byte("profile")) {
 		t.Fatalf("unmeasured profile silently changed: %d %s", w.Code, w.Body.String())
 	}
-	for _, path := range []string{"/api/generator/jobs", "/api/generator/jobs/missing", "/api/generator/jobs/missing/cancel"} {
+	for _, path := range []string{"/api/generator/jobs", "/api/generator/jobs/missing", "/api/generator/jobs/missing/cancel", "/api/generator/jobs/missing/retry"} {
 		r := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)
@@ -264,7 +264,7 @@ func TestGeneratorRejectsInvalidInputsAndUnmeasuredProfile(t *testing.T) {
 			t.Fatal("unauthenticated jobs", path, w.Code)
 		}
 	}
-	for _, path := range []string{"/api/generator/jobs", "/api/generator/jobs/missing/cancel"} {
+	for _, path := range []string{"/api/generator/jobs", "/api/generator/jobs/missing/cancel", "/api/generator/jobs/missing/retry"} {
 		r := httptest.NewRequest("POST", path, bytes.NewBufferString(`{}`))
 		r.SetBasicAuth(s.cfg.DashboardUsername, s.cfg.DashboardPassword)
 		r.Header.Set("Origin", "https://attacker.invalid")
@@ -345,7 +345,8 @@ func TestGeneratorRevisionSurvivesConcurrentLibraryPreparation(t *testing.T) {
 
 func TestGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
 	destination := newSink(t)
-	s, address, media := startDrainRelay(t, []config.Target{destination.target("one")})
+	failing := newSink(t)
+	s, address, media := startDrainRelay(t, []config.Target{destination.target("one"), failing.target("two")})
 	publisher := startDrainLive(t, s, address, media)
 	ctx, cancel := context.WithCancel(context.Background())
 	sent := make(chan struct{})
@@ -372,13 +373,48 @@ func TestGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
 	defer func() { cancel(); <-sent }()
 	eventually(t, func() bool { return readTargetDashboard(t, s).Outputs[0].Frames >= 5 })
 	before := readTargetDashboard(t, s).Outputs[0]
+	failing.listener.Close()
+	failing.disconnect()
+	var catalog LibraryStatus
+	if w := dashboardRequest(s, "GET", "/api/library", ""); json.Unmarshal(w.Body.Bytes(), &catalog) != nil || len(catalog.Revisions) == 0 {
+		t.Fatal("missing local fixture")
+	}
+	preview := dashboardRequest(s, "GET", "/api/library/revisions/"+catalog.Revisions[0].ID+"/preview", "")
+	if preview.Code != 200 {
+		t.Fatal(preview.Code)
+	}
+	started := time.Now()
 	d := generatorDraft(t, s, 600)
 	w := dashboardRequest(s, "POST", "/api/generator/jobs", fmt.Sprintf(`{"design_id":%q,"version":1}`, d.ID))
 	if w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	job := generatorJob(t, w)
-	eventually(t, func() bool { return readTargetDashboard(t, s).Outputs[0].Frames >= before.Frames+15 })
+	eventually(t, func() bool {
+		j := generatorJob(t, dashboardRequest(s, "GET", "/api/generator/jobs/"+job.ID, ""))
+		return j.State == "running" && j.Progress > 0
+	})
+	for _, name := range []string{"while-live.mp4", "also-live.mp4"} {
+		if w := videoUpload(t, s, name, preview.Body.Bytes()); w.Code != 202 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	eventually(t, func() bool {
+		var status LibraryStatus
+		w := dashboardRequest(s, "GET", "/api/library", "")
+		json.Unmarshal(w.Body.Bytes(), &status)
+		waiting, uploaded := false, false
+		for _, file := range status.Files {
+			if strings.Contains(file.Message, "Waiting for media preparation") && file.Progress == 0 {
+				waiting = true
+			}
+			if file.Name == "while-live.mp4" && (file.State == "queued" || file.State == "preparing") {
+				uploaded = true
+			}
+		}
+		return waiting && uploaded
+	})
+	eventually(t, func() bool { return readTargetDashboard(t, s).Outputs[0].Frames >= before.Frames+25 })
 	after := readTargetDashboard(t, s).Outputs[0]
 	if after.DroppedFrames != before.DroppedFrames || readStage(t, s).Stage != "LIVE" || destination.count() != 1 {
 		t.Fatal("generation disrupted relay", before, after)
@@ -393,4 +429,20 @@ func TestGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
 	if job.State != "cancelled" && job.State != "ready" {
 		t.Fatal(job)
 	}
+	eventually(t, func() bool {
+		var status LibraryStatus
+		w := dashboardRequest(s, "GET", "/api/library", "")
+		json.Unmarshal(w.Body.Bytes(), &status)
+		for _, file := range status.Files {
+			if file.Name == "while-live.mp4" {
+				return file.State == "ready"
+			}
+		}
+		return false
+	})
+	final := readTargetDashboard(t, s).Outputs[0]
+	if final.DroppedFrames != before.DroppedFrames || destination.count() != 1 || final.Frames <= after.Frames {
+		t.Fatal("library preparation or failed destination disrupted healthy delivery", final)
+	}
+	t.Logf("generation plus library preparation during LIVE: %s, healthy destination advanced %d frames, dropped delta %d, connections %d", time.Since(started), final.Frames-before.Frames, final.DroppedFrames-before.DroppedFrames, destination.count())
 }

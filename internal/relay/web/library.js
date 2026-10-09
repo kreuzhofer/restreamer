@@ -18,7 +18,7 @@
     el('library-count').textContent = `${catalog.files.length} ${catalog.files.length === 1 ? 'file' : 'files'}`;
     el('library-error').hidden = !(error || catalogError || catalog.error);
     el('library-error').textContent = error || catalogError || catalog.error || '';
-    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.error ? ` · ${file.error}` : ''}` : 'No MP4 files discovered yet.';
+    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.message ? ` · ${file.message}` : ''}${file.error ? ` · ${file.error}` : ''}` : 'No MP4 files discovered yet.';
     el('library-once').disabled = el('library-loop').disabled = !usable || stage.stage === 'OFF' || ending || !ready(candidate) || !!catalog.error;
     el('library-preview').disabled = !connected || !ready(candidate);
     el('library-prepare').disabled = !usable || !file || ['preparing', 'discovering', 'queued'].includes(file.state);

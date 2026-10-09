@@ -24,6 +24,7 @@ type generatorStore struct {
 	jobsMu             sync.Mutex
 	jobsRoot, workRoot string
 	jobs               map[string]*GenerationJob
+	sequence           uint64
 	wake               chan struct{}
 	cancel             context.CancelFunc
 }
