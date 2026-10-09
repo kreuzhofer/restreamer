@@ -814,8 +814,10 @@ limited to 512 MiB per job, with a 15-minute preparation-wait/render/validation
 deadline. A scene raster uses at most 1920 × 1080 pixels; the temporary workspace
 holds at most 512 MiB of normalized scene segments and PCM audio plus a raster during
 encoding, then at most 512 MiB of final output (under 1 GiB combined). Only one
-scene is rasterized and encoded at a time; a concat demuxer joins cuts without a
-many-input filter graph. Source audio and silence are assembled on cumulative frame boundaries, and
+scene is normalized at a time; a concat demuxer joins independent bodies and
+transition pieces. A crossfade decodes at most two normalized scenes; composition
+never repeatedly encodes a growing prefix. All pieces and source/final PCM share
+the same workspace cap. Source audio and silence are assembled on cumulative frame boundaries, and
 one continuous AAC track is encoded for the complete sequence, avoiding per-scene audio priming gaps. The workspace is removed
 on success, cancellation or failure. Prepared revisions remain retained in the
 existing library. Keep enough persistent disk space for retained revisions;
@@ -825,7 +827,7 @@ Supported generation profiles are the active even-sized 320 × 180 through
 1920 × 1080 profile at 24, 25 or 30 fps, with stereo 44.1 or 48 kHz audio. Higher
 profiles remain available for other media and quick previews, but generation
 rejects them explicitly instead of silently downscaling. Generation supports up
-to 600 seconds total; each scene duration rounds independently to the nearest
+to 600 seconds of scene durations before overlaps; each scene duration rounds independently to the nearest
 complete video frame and must contain at least one frame. With cuts, total
 duration is the sum of those rounded scene durations. Both the editor and the
 generated result display that total (for example, two 1.02-second scenes at
@@ -977,3 +979,27 @@ preview timing tolerance; scene timing comes from video frames.
 Soundtrack revision, mode, level and fades are saved in designs and templates,
 and captured immutably by jobs and retries. New uploads or draft edits never
 change an existing generated revision, stage selection, or on-air result.
+
+
+### Scene transitions
+
+Choose **Cut** or **Crossfade** to the next scene in the generator. An omitted
+transition remains a cut for existing designs. The setting belongs to the
+outgoing scene and follows scene reorder/duplicate/template copies. The last
+scene retains its outgoing setting for later reordering but does not apply it.
+A prestream loop boundary is configured separately when available.
+
+A crossfade overlaps the outgoing tail and incoming head, including enabled
+source-video audio. Music continues once over the resulting sequence. Durations
+round to the nearest video frame; a crossfade needs at least one frame. Incoming
+and outgoing overlaps together must fit their shared scene, preventing three-way
+blends. A scene may consist entirely of its two overlaps. A one-frame crossfade
+has no intermediate video blend frame; use a longer overlap for a visible fade.
+
+The editor and captured job show the total after subtracting overlaps. For
+example, 0.8-, 0.6- and 1-second scenes with two 0.2-second crossfades produce
+2 seconds at25fps. Quick preview shows the selected individual scene and explains
+its transition; generate and play the exact output to inspect motion and audio.
+Invalid overlap edits remain saved with field errors, while generation preserves
+previous ready output. Source audio is combined on cumulative sample boundaries
+before continuous music and the single final AAC encode.

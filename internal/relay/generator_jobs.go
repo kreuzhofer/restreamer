@@ -137,7 +137,7 @@ func generationIssues(d mediaauthor.Design, p config.BRBProfile) []mediaauthor.I
 	if p.Validate() != nil || p.Width > 1920 || p.Height > 1080 || p.FPS > 30 {
 		issues = append(issues, mediaauthor.Issue{Field: "profile", Message: "Generation supports active profiles up to 1920 × 1080 at 24, 25 or 30 fps. Change the profile explicitly before generating."})
 	}
-	issues = append(issues, mediaauthor.ValidateCutTiming(d, p.FPS)...)
+	issues = append(issues, mediaauthor.ValidateTiming(d, p.FPS)...)
 	return issues
 }
 func fmtSceneField(i int, field string) string { return "scenes." + strconv.Itoa(i) + "." + field }
@@ -230,7 +230,7 @@ func newGenerationJob(d mediaauthor.Design, p config.BRBProfile) (GenerationJob,
 		return GenerationJob{}, err
 	}
 	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: generatorRenderer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	j.Duration = mediaauthor.CutDuration(d, p.FPS)
+	j.Duration = mediaauthor.SequenceDuration(d, p.FPS)
 	encoded, _ := json.Marshal(struct {
 		Design   mediaauthor.Design
 		Profile  config.BRBProfile

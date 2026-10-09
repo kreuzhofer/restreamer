@@ -36,6 +36,19 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	defer pcm.Close()
 	// Reserve the complete continuous PCM stream before accepting scene segments.
 	segmentBytes := sampleBoundary(int(math.Round(j.Duration*float64(p.FPS))), p.SampleRate, p.FPS) * 4
+	plan, timingIssues := mediaauthor.PlanTiming(j.Design, p.FPS)
+	if len(timingIssues) > 0 {
+		return "", errors.New("Captured transition timing is invalid.")
+	}
+	transitions := false
+	for _, timing := range plan.Scenes {
+		transitions = transitions || timing.Outgoing > 0
+	}
+	if transitions {
+		for _, timing := range plan.Scenes {
+			segmentBytes += (sampleBoundary(timing.Start+timing.Frames, p.SampleRate, p.FPS) - sampleBoundary(timing.Start, p.SampleRate, p.FPS)) * 4
+		}
+	}
 	completedFrames := 0
 	totalFrames := int(math.Round(j.Duration * float64(p.FPS)))
 	for i, scene := range j.Design.Scenes {
@@ -43,14 +56,29 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 			return "", ctx.Err()
 		}
 		frames := int(math.Round(scene.DurationSeconds * float64(p.FPS)))
-		if err := s.appendScenePCM(ctx, scene, p, completedFrames, frames, pcm, dir, maxGeneratorOutputBytes-segmentBytes); err != nil {
-			return "", err
+		scenePCM := pcm
+		priorFrames := completedFrames
+		if transitions {
+			scenePCM, err = os.Create(filepath.Join(dir, fmt.Sprintf("scene-%03d.pcm", i)))
+			if err != nil {
+				return "", errors.New("Cannot create transition audio workspace.")
+			}
+			priorFrames = plan.Scenes[i].Start
+		}
+		audioErr := s.appendScenePCM(ctx, scene, p, priorFrames, frames, scenePCM, dir, maxGeneratorOutputBytes-segmentBytes)
+		if transitions {
+			if closeErr := scenePCM.Close(); audioErr == nil {
+				audioErr = closeErr
+			}
+		}
+		if audioErr != nil {
+			return "", audioErr
 		}
 		still := filepath.Join(dir, "scene.png")
 		name := fmt.Sprintf("scene-%03d.mp4", i)
 		segment := filepath.Join(dir, name)
 		sceneProgress := func(seconds float64) {
-			progress(int(min(90, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*90))))
+			progress(int(min(60, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*60))))
 		}
 		if scene.IsVideo() {
 			if err := s.renderVideoSegment(ctx, scene, p, segment, dir, maxGeneratorOutputBytes-segmentBytes, sceneProgress); err != nil {
@@ -65,7 +93,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 				"-map", "0:v:0", "-an", "-frames:v", strconv.Itoa(frames), "-vf", "setsar=1,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-keyint_min", strconv.Itoa(p.FPS), "-sc_threshold", "0", "-threads", "2",
 				"-video_track_timescale", strconv.Itoa(p.FPS * 1000), "-fs", strconv.FormatInt(maxGeneratorOutputBytes-segmentBytes, 10), "-progress", "pipe:1", segment}
 			if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) {
-				progress(int(min(90, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*90))))
+				progress(int(min(60, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*60))))
 			}); err != nil {
 				return "", err
 			}
@@ -83,6 +111,15 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	}
 	if err := pcm.Close(); err != nil {
 		return "", errors.New("Cannot save continuous scene audio.")
+	}
+	if transitions {
+		var assembly string
+		assembly, segmentBytes, err = s.assembleTransitions(ctx, plan, p, dir, segmentBytes, progress)
+		if err != nil {
+			return "", err
+		}
+		concat.Reset()
+		concat.WriteString(assembly)
 	}
 	if j.Design.Soundtrack != nil {
 		gain, err := s.mixGeneratorMusic(ctx, *j, pcmPath, dir, maxGeneratorOutputBytes-segmentBytes)

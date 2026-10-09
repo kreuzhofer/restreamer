@@ -1,11 +1,6 @@
 // Package mediaauthor defines authored media independently of broadcast playback.
 package mediaauthor
 
-import (
-	"fmt"
-	"math"
-)
-
 // ThemeRef pins appearance independently of scene content and timing.
 type ThemeRef struct {
 	ID       string `json:"id"`
@@ -45,7 +40,13 @@ func (v VideoScene) Volume() float64 {
 	return *v.AudioVolumePercent
 }
 
+type Transition struct {
+	Kind            string  `json:"kind"`
+	DurationSeconds float64 `json:"duration_seconds,omitempty"`
+}
+
 type Scene struct {
+	Transition      *Transition   `json:"transition,omitempty"`
 	MediaKind       string        `json:"media_kind,omitempty"`
 	Video           *VideoScene   `json:"video,omitempty"`
 	Image           *AssetRef     `json:"image,omitempty"`
@@ -90,34 +91,6 @@ type Design struct {
 type Issue struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
-}
-
-// CutDuration rounds every scene independently to the nearest video frame.
-func CutDuration(d Design, fps int) float64 {
-	if fps <= 0 {
-		return 0
-	}
-	frames := 0.0
-	for _, scene := range d.Scenes {
-		if scene.DurationSeconds > 0 && !math.IsNaN(scene.DurationSeconds) && !math.IsInf(scene.DurationSeconds, 0) {
-			frames += math.Round(scene.DurationSeconds * float64(fps))
-		}
-	}
-	return frames / float64(fps)
-}
-
-// ValidateCutTiming keeps displayed timing and generation admission consistent.
-func ValidateCutTiming(d Design, fps int) []Issue {
-	issues := make([]Issue, 0)
-	for i, scene := range d.Scenes {
-		if scene.DurationSeconds > 600 || (scene.DurationSeconds > 0 && math.Round(scene.DurationSeconds*float64(fps)) < 1) {
-			issues = append(issues, Issue{fmt.Sprintf("scenes.%d.duration_seconds", i), "Use at least one video frame and at most 600 seconds."})
-		}
-	}
-	if CutDuration(d, fps) > 600 {
-		issues = append(issues, Issue{"scenes", "The complete sequence must be at most 600 seconds after rounding each scene to video frames."})
-	}
-	return issues
 }
 
 // DesignAssetRefs retains references even when a draft temporarily changes layout.
