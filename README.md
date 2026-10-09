@@ -1030,3 +1030,10 @@ its transition; generate and play the exact output to inspect motion and audio.
 Invalid overlap edits remain saved with field errors, while generation preserves
 previous ready output. Source audio is combined on cumulative sample boundaries
 before continuous music and the single final AAC encode.
+
+A native FFmpeg 4.4 measurement at 1080p30 with two-second title scenes and
+0.4-second overlaps took 2.40 seconds for 3 scenes and 16.58 seconds for 20 scenes.
+The 20-scene run produced 32.4 seconds of output, with one preparation process,
+at most two FFmpeg inputs, sampled peak encoder RSS 178 MiB and workspace 7.9 MiB.
+These synthetic still-scene measurements are not deployment performance guarantees;
+video, themes and longer scenes can use more memory, storage and time.
