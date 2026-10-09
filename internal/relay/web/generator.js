@@ -32,7 +32,7 @@
     name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
     font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
     duration_seconds: ['scene-duration', 'duration-error'], content_region: ['region-width', 'region-error'],
-    alignment: ['scene-alignment', 'alignment-error'], image: ['scene-image', 'image-error'], items: ['list-content', 'items-error']
+    video: ['scene-video', 'video-error'], 'video.trim': ['video-trim-start', 'video-trim-error'], 'video.audio_enabled': ['video-audio', 'video-audio-error'], 'video.audio_volume_percent': ['video-volume', 'video-volume-error'], alignment: ['scene-alignment', 'alignment-error'], image: ['scene-image', 'image-error'], items: ['list-content', 'items-error']
   };
   async function request(path, method = 'GET', body, signal) {
     const response = await fetch(new URL(path, location.origin), {method, credentials: 'same-origin', signal,
@@ -120,6 +120,9 @@
     if (!scene) return;
     $('selected-scene-heading').textContent = `Scene ${selectedScene + 1} · ${scene.layout}`;
     $('scene-layout').value = scene.layout;
+    $('scene-media-kind').value = scene.media_kind || 'image';
+    $('media-kind-controls').hidden = scene.layout !== 'media';
+    renderVideoPicker();
     $('scene-text').value = scene.text;
     $('scene-font').value = scene.font || '';
     $('scene-size').value = scene.font_size || '';
@@ -153,6 +156,8 @@
     draft.name = $('design-name').value;
     const scene = draft.scenes[selectedScene]; if (!scene) return;
     scene.layout = $('scene-layout').value;
+    scene.media_kind = $('scene-media-kind').value;
+    if (scene.video) { scene.video.trim_start_seconds = Number($('video-trim-start').value); scene.video.trim_end_seconds = Number($('video-trim-end').value); scene.video.repeat = $('video-repeat').checked; scene.video.audio_enabled = $('video-audio').checked; scene.video.audio_volume_percent = Number($('video-volume').value); }
     const imageValue = $('scene-image').value;
     if (imageValue) { const [id, revision] = imageValue.split(':'); scene.image = {id, revision: Number(revision)}; } else delete scene.image;
     scene.text = $('scene-text').value; scene.font = $('scene-font').value;
@@ -197,6 +202,7 @@
     previewAbort?.abort();
     $('preview-state').textContent = 'Validating the current scene…';
     $('scene-preview').hidden = true;
+    stopSourcePreview();
     previewTimer = setTimeout(updatePreview, 450);
   }
   async function updatePreview() {
@@ -279,7 +285,7 @@
   $('scene-form').addEventListener('input', event => {
     if (event.target.id === 'design-theme') return;
     captureFields();
-    if (event.target.id === 'scene-layout') renderSelectedScene();
+    if (event.target.id === 'scene-layout' || event.target.id === 'scene-media-kind') renderSelectedScene();
     if (event.target.id === 'scene-image') renderImagePicker();
     changed();
   });
@@ -454,10 +460,10 @@
   function assetError(message) { $('asset-error').textContent = message; $('asset-error').hidden = !message; }
   function renderImagePicker() {
     const scene = draft?.scenes[selectedScene]; if (!scene) return;
-    $('scene-image-controls').hidden = !scene.image && !['text-image', 'media'].includes(scene.layout);
+    $('scene-image-controls').hidden = scene.layout === 'media' && scene.media_kind === 'video' || !scene.image && !['text-image', 'media'].includes(scene.layout);
     const value = scene.image ? `${scene.image.id}:${scene.image.revision}` : '';
     const options = [new Option('No image selected', '')];
-    for (const asset of assets) for (const revision of asset.revisions) options.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
+    for (const asset of assets.filter(asset => asset.kind === 'image')) for (const revision of asset.revisions) options.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
     if (value && !options.some(option => option.value === value)) options.push(new Option(`Unavailable image · revision ${scene.image.revision}`, value));
     $('scene-image').replaceChildren(...options); $('scene-image').value = value;
     const asset = assets.find(asset => asset.id === scene.image?.id);
@@ -465,48 +471,119 @@
   }
   function renderAssets() {
     const target = $('asset-upload-target').value;
-    $('asset-upload-target').replaceChildren(new Option('New independent image', ''), ...assets.map(asset => new Option(`New revision of ${asset.name}`, asset.id)));
+    $('asset-upload-target').replaceChildren(new Option(`New independent ${$('asset-kind').value}`, ''), ...assets.filter(asset => asset.kind === $('asset-kind').value).map(asset => new Option(`New revision of ${asset.name}`, asset.id)));
     $('asset-upload-target').value = assets.some(asset => asset.id === target) ? target : '';
     $('asset-list').replaceChildren();
     for (const asset of assets) {
       const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id;
       const summary = document.createElement('summary'); summary.textContent = `${asset.name} · revision ${asset.revision} · ${asset.uses.length} use(s)`;
-      const img = document.createElement('img'); img.alt = asset.name; img.loading = 'lazy'; img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
+      const img = document.createElement(asset.kind === 'video' ? 'video' : 'img'); if (asset.kind === 'video') { img.controls = true; img.muted = true; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       const list = document.createElement('ul');
       for (const use of asset.uses) { const item = document.createElement('li'); item.textContent = `${use.kind}: ${use.name} · revision ${use.revision}`; list.append(item); }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete unused image'; remove.disabled = asset.uses.length > 0;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = `Delete unused ${asset.kind}`; remove.disabled = asset.uses.length > 0;
       remove.addEventListener('click', async () => {
-        if (!window.confirm(`Delete unused image “${asset.name}” and all its revisions?`)) return;
+        if (!window.confirm(`Delete unused asset “${asset.name}” and all its revisions?`)) return;
         remove.disabled = true;
         try { await request(`/api/generator/assets/${asset.id}`, 'DELETE', {}); assetError(''); await loadAssets(); }
         catch (error) { assetError(error.message); await loadAssets(); }
       });
       card.append(summary, img, list, remove); $('asset-list').append(card);
     }
-    renderImagePicker(); renderThemeAssets();
+    renderImagePicker(); renderVideoPicker(); renderThemeAssets();
   }
   async function loadAssets() {
     if (assetsFetching) return;
     assetsFetching = true;
     try { assets = await (await request('/api/generator/assets')).json(); renderAssets(); }
-    catch (error) { assetError(`Image library unavailable: ${error.message}`); }
+    catch (error) { assetError(`Asset library unavailable: ${error.message}`); }
     finally { assetsFetching = false; }
   }
+  function selectedVideoMeta() {
+    const ref = draft?.scenes[selectedScene]?.video?.asset;
+    return assets.find(asset => asset.id === ref?.id)?.revisions.find(revision => revision.revision === ref.revision);
+  }
+  function renderVideoPicker() {
+    const scene = draft?.scenes[selectedScene]; if (!scene) return;
+    const active = scene.layout === 'media' && scene.media_kind === 'video';
+    $('scene-video-controls').hidden = !active; $('source-video-preview').hidden = !active;
+    const value = scene.video ? `${scene.video.asset.id}:${scene.video.asset.revision}` : '';
+    const choices = [new Option('No video selected', '')];
+    for (const asset of assets.filter(asset => asset.kind === 'video')) for (const revision of asset.revisions) choices.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
+    if (value && !choices.some(option => option.value === value)) choices.push(new Option('Unavailable selected video', value));
+    $('scene-video').replaceChildren(...choices); $('scene-video').value = value;
+    $('video-trim-start').value = scene.video?.trim_start_seconds || 0;
+    $('video-trim-end').value = scene.video?.trim_end_seconds || '';
+    $('video-repeat').checked = !!scene.video?.repeat; $('video-audio').checked = !!scene.video?.audio_enabled;
+    $('video-volume').value = scene.video?.audio_volume_percent ?? 100;
+    const meta = selectedVideoMeta();
+    $('video-source-info').textContent = meta ? `Source: ${meta.duration_seconds.toFixed(3)} seconds · ${meta.width} × ${meta.height} · ${meta.has_audio ? 'audio available; muted unless enabled' : 'no audio track; keep source audio disabled'}` : 'Select a video revision.';
+    const asset = assets.find(asset => asset.id === scene.video?.asset.id);
+    $('adopt-video-revision').hidden = !asset || asset.revision === scene.video.asset.revision;
+  }
+  $('scene-video').addEventListener('change', () => {
+    const scene = draft?.scenes[selectedScene]; if (!scene) return;
+    const [id, revision] = $('scene-video').value.split(':');
+    if (!id) delete scene.video;
+    else {
+      const fresh = scene.video?.asset.id !== id;
+      scene.video = {...(fresh ? {} : scene.video), asset: {id, revision: Number(revision)}};
+      if (fresh) { scene.video.audio_volume_percent = 100; const meta = selectedVideoMeta(); if (meta) scene.duration_seconds = meta.duration_seconds; }
+    }
+    renderSelectedScene(); changed();
+  });
+  $('adopt-video-revision').addEventListener('click', () => {
+    const scene = draft?.scenes[selectedScene]; const asset = assets.find(asset => asset.id === scene?.video?.asset.id);
+    if (!asset) return; scene.video.asset.revision = asset.revision; renderVideoPicker(); changed();
+  });
+  let sourcePreview;
+  function stopSourcePreview() { const video = $('source-video'); video.pause(); video.onloadedmetadata = null; sourcePreview = null; $('source-video-status').textContent = 'Source preview stopped. Play to review the current settings.'; }
+  $('source-video-stop').addEventListener('click', stopSourcePreview);
+  $('source-video-play').addEventListener('click', async () => {
+    stopSourcePreview(); const scene = draft?.scenes[selectedScene], meta = selectedVideoMeta();
+    if (!scene?.video || !meta || validationIssues.some(issue => issue.field.startsWith(`scenes.${selectedScene}.`))) { $('source-video-status').textContent = 'Resolve the video scene validation before previewing.'; return; }
+    const video = $('source-video'); const start = scene.video.trim_start_seconds || 0;
+    sourcePreview = {start, end: scene.video.trim_end_seconds || meta.duration_seconds, remaining: scene.duration_seconds, last: start, repeat: scene.video.repeat};
+    video.src = `/api/generator/assets/${scene.video.asset.id}/revisions/${scene.video.asset.revision}`;
+    video.muted = !scene.video.audio_enabled; video.volume = (scene.video.audio_volume_percent ?? 100) / 100;
+    video.onloadedmetadata = () => { if (sourcePreview) video.currentTime = start; };
+    video.play().catch(() => { stopSourcePreview(); $('source-video-status').textContent = 'Source preview could not start.'; });
+    $('source-video-status').textContent = 'Playing selected source timing and audio. Generate to review exact composition and frame timing.';
+  });
+  function advanceSourcePreview() {
+    const video = $('source-video'), state = sourcePreview;
+    if (!state || (video.paused && !video.ended)) return;
+    const position = video.currentTime; state.remaining -= Math.max(0, position - state.last); state.last = position;
+    if (state.remaining <= 0.01) { stopSourcePreview(); $('source-video-status').textContent = 'Source range preview finished.'; }
+    else if (position >= state.end - 0.01 || video.ended) {
+      if (state.repeat) { video.currentTime = state.start; state.last = state.start; video.play().catch(() => { stopSourcePreview(); $('source-video-status').textContent = 'Source preview could not repeat.'; }); }
+      else { stopSourcePreview(); $('source-video-status').textContent = 'Selected source range finished.'; }
+    }
+  }
+  $('source-video').addEventListener('timeupdate', advanceSourcePreview);
+  $('source-video').addEventListener('ended', advanceSourcePreview);
+  if ($('source-video').requestVideoFrameCallback) {
+    const frame = () => { advanceSourcePreview(); $('source-video').requestVideoFrameCallback(frame); }; $('source-video').requestVideoFrameCallback(frame);
+  }
+  $('asset-kind').addEventListener('change', () => {
+    const video = $('asset-kind').value === 'video'; $('asset-file').accept = video ? 'video/mp4,.mp4' : 'image/png,image/jpeg';
+    $('asset-file-label').textContent = video ? 'H.264/AAC MP4 video' : 'PNG or JPEG'; $('asset-file').value = ''; renderAssets();
+  });
   $('asset-upload').addEventListener('submit', async event => {
     event.preventDefault(); if (assetUploading) return;
     const file = $('asset-file').files[0]; if (!file) return;
-    if (file.size > 10 * 1048576) { assetError('Choose a PNG or JPEG up to 10 MiB.'); return; }
+    const kind = $('asset-kind').value;
+    if (file.size > (kind === 'video' ? 512 : 10) * 1048576) { assetError(`Choose a ${kind} up to ${kind === 'video' ? 512 : 10} MiB.`); return; }
     const target = assets.find(asset => asset.id === $('asset-upload-target').value);
     const data = new FormData(); data.append('file', file);
-    assetUploading = true; $('asset-upload-button').disabled = true; assetError(''); $('asset-status').textContent = 'Uploading image; preparation waits for current media work…';
+    assetUploading = true; $('asset-upload-button').disabled = true; assetError(''); $('asset-status').textContent = 'Uploading asset; preparation waits for current media work…';
     try {
-      const path = target ? `/api/generator/assets/${target.id}/revisions?version=${target.revision}` : '/api/generator/assets';
+      const path = target ? `/api/generator/assets/${target.id}/revisions?version=${target.revision}&kind=${kind}` : `/api/generator/assets?kind=${kind}`;
       const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'X-Restreamer-Control': '1'}, body: data});
       if (!response.ok) throw new Error(await response.text());
       const asset = await response.json(); $('asset-file').value = '';
       $('asset-status').textContent = `${asset.name} saved as revision ${asset.revision}. Choose its revision in a scene to use it.`;
       await loadAssets();
-    } catch (error) { assetError(error.message); $('asset-status').textContent = 'Image was not acknowledged as saved; previous revisions remain unchanged.'; }
+    } catch (error) { assetError(error.message); $('asset-status').textContent = 'Asset was not acknowledged as saved; previous revisions remain unchanged.'; }
     finally { assetUploading = false; $('asset-upload-button').disabled = false; }
   });
   $('adopt-image-revision').addEventListener('click', () => {

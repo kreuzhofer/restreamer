@@ -305,3 +305,68 @@ func TestGeneratorThemeRoutesPreserveControlSecurity(t *testing.T) {
 		t.Fatal("unsupported effect accepted", w.Code)
 	}
 }
+
+func TestGeneratorThemeVideoRetainsLogoAndContinuousEffectAcrossRepeats(t *testing.T) {
+	s := libraryServer(t)
+	video := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "source.mp4", generatorVideoFixture(t, true)))
+	logo := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets", "logo.png", assetPNG(t, color.NRGBA{G: 255, A: 255})))
+	theme := mediaauthor.RetroTheme(2)
+	theme.Style.BackgroundColor = "#553377"
+	theme.Style.Logo = &mediaauthor.AssetRef{ID: logo.ID, Revision: 1}
+	theme.Style.LogoHeightPercent = 8
+	raw, _ := json.Marshal(map[string]any{"name": "Video brand", "base": mediaauthor.ThemeRef{ID: "retro", Revision: 2}, "style": theme.Style})
+	w := dashboardRequest(s, "POST", "/api/generator/themes", string(raw))
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &theme)
+	body := fmt.Sprintf(`{"name":"Themed video","stage":"ending","theme":{"id":%q,"revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","content_region":{"width_percent":60,"height_percent":60},"duration_seconds":2,"video":{"asset":{"id":%q,"revision":1},"trim_end_seconds":1,"repeat":true,"audio_enabled":true}}]}`, theme.ID, video.ID)
+	w = dashboardRequest(s, "POST", "/api/generator/designs", body)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var d mediaauthor.Design
+	json.Unmarshal(w.Body.Bytes(), &d)
+	want := make([]image.Image, 2)
+	for i, frame := range []int{0, 35} {
+		preview := dashboardRequest(s, "POST", fmt.Sprintf("/api/generator/preview?frame=%d", frame), w.Body.String())
+		var err error
+		want[i], err = png.Decode(preview.Body)
+		if err != nil {
+			t.Fatal(preview.Code, err)
+		}
+	}
+	generatorServe(t, s)
+	path := exactGeneratedVideo(t, s, d)
+	for i, frame := range []int{0, 35} {
+		data, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-vf", fmt.Sprintf("select=eq(n\\,%d)", frame), "-frames:v", "1", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "-").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		outside := func(src image.Image) image.Image {
+			im := image.NewRGBA(src.Bounds())
+			draw.Draw(im, im.Bounds(), src, image.Point{}, draw.Src)
+			draw.Draw(im, image.Rect(64, 36, 256, 144), image.NewUniform(color.Black), image.Point{}, draw.Src)
+			return im
+		}
+		if diff := scenePixelDifference(outside(got), outside(want[i])); diff > 5 {
+			t.Fatalf("frame%d lost themed backdrop/logo/effect: %.2f background got%v want%v logo got%v want%v", frame, diff, got.At(0, 0), want[i].At(0, 0), got.At(280, 8), want[i].At(280, 8))
+		}
+		band := func(src image.Image) image.Image {
+			im := image.NewRGBA(image.Rect(0, 0, 320, 12))
+			draw.Draw(im, im.Bounds(), src, image.Pt(0, 168), draw.Src)
+			return im
+		}
+		match, other := scenePixelDifference(band(got), band(want[i])), scenePixelDifference(band(got), band(want[1-i]))
+		if match+0.2 >= other {
+			t.Fatalf("effect reset with source loop: frame%d match%.2f other%.2f", frame, match, other)
+		}
+	}
+	if tonePower(decodePCM(t, path), 1.4, 880) < 1e8 {
+		t.Fatal("theme composition lost repeated source audio")
+	}
+}

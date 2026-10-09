@@ -830,7 +830,7 @@ on PATH; Alpine containers already install them. Both Linux architectures use
 the same static Go renderer and packaged FFmpeg. Third-party font and module
 licenses are included in `THIRD_PARTY_NOTICES`.
 
-Generation accepts up to 20 title/list scenes and at most eight outstanding jobs
+Generation accepts up to 20 scenes and at most eight outstanding jobs
 across prestream and ending, including the running/cancelling job. Jobs run one at
 a time in persisted admission order. A full queue rejects new work explicitly;
 cancel queued work or wait for completion to free a slot. The shared queue shows
@@ -839,11 +839,11 @@ every design's state, queue position, progress and cancellation controls. At mos
 rejects further work without removing existing records or media. Output is
 limited to 512 MiB per job, with a 15-minute preparation-wait/render/validation
 deadline. A scene raster uses at most 1920 × 1080 pixels; the temporary workspace
-holds at most 512 MiB of normalized video-only scene segments plus a raster during
+holds at most 512 MiB of normalized scene segments and PCM audio plus a raster during
 encoding, then at most 512 MiB of final output (under 1 GiB combined). Only one
 scene is rasterized and encoded at a time; a concat demuxer joins cuts without a
-many-input filter graph. One continuous silent AAC track is encoded for the
-complete sequence, avoiding per-scene audio priming gaps. The workspace is removed
+many-input filter graph. Source audio and silence are assembled on cumulative frame boundaries, and
+one continuous AAC track is encoded for the complete sequence, avoiding per-scene audio priming gaps. The workspace is removed
 on success, cancellation or failure. Prepared revisions remain retained in the
 existing library. Keep enough persistent disk space for retained revisions;
 200 maximum-size generated outputs can occupy 100 GiB before library media.
@@ -900,11 +900,12 @@ retry at `/api/generator/jobs/{id}/retry` (POST with an empty JSON object).
 
 ### Reusable images and logos
 
-The generator's **Reusable images** library accepts PNG and JPEG files up to
+The generator's **Reusable media** library accepts PNG and JPEG files up to
 10 MiB and 20 megapixels, matching the existing BRB image input bounds. Uploads
 are decoded only after checking their format and dimensions, then normalized to
 PNG with transparency preserved. Normalized images are limited to 32 MiB, with
-200 total retained image revisions per server (at most 6.25 GiB of image data).
+200 total retained asset revisions per server. Image-only storage uses at most
+6.25 GiB; video revisions can increase this to 100 GiB.
 One upload runs at a time and shares the media preparation slot; waiting has a
 one-minute deadline. Exact image viewing shares the eight preview-reader slots.
 These are storage and admission limits, not throughput guarantees.
@@ -924,14 +925,42 @@ image revision**, to adopt an update explicitly. Quick preview and generation
 resolve the same pinned bytes and verify their stored digest; changed or missing
 files produce errors instead of substitution.
 
-The image library lists uses in saved designs, content templates, captured jobs,
+The media library lists uses in saved designs, content templates, captured jobs,
 prepared results,
 saved stage selections, on-air media and suspended return media. Deletion removes
 an entire unused asset and all its revisions; any reference blocks deletion.
 Failed and cancelled jobs retain their captured image inputs for explicit retry.
 Switching a scene's layout preserves its selected image; choose **No image
-selected** to remove that reference. Refresh the image library to see changes
+selected** to remove that reference. Refresh the media library to see changes
 made in another tab. Assets and metadata persist under
 `<library_directory>/generator/assets`; temporary uploads are removed on failure
 or recovered at restart. Existing BRB uploads remain independent of this library
 until shared themes are introduced.
+
+### Reusable video scenes
+
+Choose **Video** in **Reusable media** to upload MP4 files with one H.264 video
+track and optional mono/stereo AAC audio at 8–48 kHz. Sources may be up to
+512 MiB, 1920 × 1080, 60 fps and 600 seconds, with a minimum duration of 0.04
+seconds. Extra tracks and unsupported codecs are rejected. Uploads share the
+preparation slot, decode before acceptance, and have a 15-minute deadline.
+These bounds limit resource use; conversion time still depends on the source.
+
+In a **Full-screen media** scene choose **Video** and a source revision. Selecting
+a new source starts the scene at its source duration with audio muted. Set trim
+start/end to select a range (zero end means the source end), then set scene
+duration. Shorter scenes stop early; longer scenes require **Repeat selected
+range**. Only that range repeats. Enable source audio explicitly and adjust its
+independent volume from 0–100%. Enabling audio on a silent source is a field
+error. Video is contained within the content region without cropping.
+
+Quick preview shows the first selected source frame in the composition. **Play
+selected range** previews source timing, repetition and audio; **Preview exact
+revision** plays the generated composition with exact frame timing. Generation
+normalizes one source at a time at the captured profile, assembles continuous
+PCM audio, and encodes AAC once for the complete sequence.
+
+Video assets follow the same immutable revision, explicit adoption, reuse,
+template, retry and deletion protections as images. Switching media kind or
+layout retains inactive references and settings. Choose **No video selected** to
+remove a reference. Replacing an asset never changes captured jobs or outputs.

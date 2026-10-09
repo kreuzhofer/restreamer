@@ -344,6 +344,13 @@ func TestGeneratorRevisionSurvivesConcurrentLibraryPreparation(t *testing.T) {
 }
 
 func TestGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
+	testGeneratorKeepsLocalRTMPDeliveryResponsive(t, false)
+}
+func TestGeneratorVideoKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
+	testGeneratorKeepsLocalRTMPDeliveryResponsive(t, true)
+}
+func testGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T, video bool) {
+	t.Helper()
 	destination := newSink(t)
 	failing := newSink(t)
 	s, address, media := startDrainRelay(t, []config.Target{destination.target("one"), failing.target("two")})
@@ -385,6 +392,10 @@ func TestGeneratorKeepsLocalRTMPDeliveryResponsive(t *testing.T) {
 	}
 	started := time.Now()
 	d := generatorDraft(t, s, 600)
+	if video {
+		asset := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "live-sponsor.mp4", generatorVideoFixture(t, true)))
+		d = videoDesign(t, s, asset.ID, 600, 0, 0, 50, true, true)
+	}
 	w := dashboardRequest(s, "POST", "/api/generator/jobs", fmt.Sprintf(`{"design_id":%q,"version":1}`, d.ID))
 	if w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())

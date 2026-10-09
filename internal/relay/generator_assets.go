@@ -29,12 +29,15 @@ const maxAssetImageBytes = 32 << 20
 const maxAssetRevisions = 200
 
 type AssetRevision struct {
-	Revision  int    `json:"revision"`
-	Digest    string `json:"sha256"`
-	Bytes     int64  `json:"bytes"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	CreatedAt string `json:"created_at"`
+	Revision        int     `json:"revision"`
+	Digest          string  `json:"sha256"`
+	Bytes           int64   `json:"bytes"`
+	Width           int     `json:"width"`
+	Height          int     `json:"height"`
+	CreatedAt       string  `json:"created_at"`
+	DurationSeconds float64 `json:"duration_seconds,omitempty"`
+	FPS             float64 `json:"fps,omitempty"`
+	HasAudio        bool    `json:"has_audio,omitempty"`
 }
 type GeneratorAsset struct {
 	ID        string          `json:"id"`
@@ -56,7 +59,14 @@ type assetResponse struct {
 }
 
 func (g *generatorStore) assetPath(ref mediaauthor.AssetRef) string {
-	return filepath.Join(g.assetsRoot, ref.ID, strconv.Itoa(ref.Revision)+".png")
+	return assetRevisionPath(g.assetsRoot, ref, g.assets[ref.ID].Kind)
+}
+func assetRevisionPath(root string, ref mediaauthor.AssetRef, kind string) string {
+	extension := ".png"
+	if kind == "video" {
+		extension = ".mp4"
+	}
+	return filepath.Join(root, ref.ID, strconv.Itoa(ref.Revision)+extension)
 }
 func validAssetName(name string) bool {
 	if name == "" || !utf8.ValidString(name) || len(name) > 180 || strings.ContainsAny(name, "/\\") {
@@ -86,17 +96,17 @@ func (g *generatorStore) loadAssets() error {
 			return errors.New("invalid asset storage entry")
 		}
 		var a GeneratorAsset
-		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || a.Kind != "image" || a.Revision != len(a.Revisions) || a.Revision < 1 {
-			return errors.New("invalid image asset metadata")
+		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || (a.Kind != "image" && a.Kind != "video") || a.Revision != len(a.Revisions) || a.Revision < 1 {
+			return errors.New("invalid asset metadata")
 		}
 		for i, r := range a.Revisions {
-			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels {
-				return errors.New("invalid image revision metadata")
+			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || (a.Kind == "image" && (r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels)) || (a.Kind == "video" && !validVideoMetadata(r)) {
+				return errors.New("invalid asset revision metadata")
 			}
 		}
 		total += len(a.Revisions)
 		if total > maxAssetRevisions {
-			return errors.New("image revision limit exceeded")
+			return errors.New("asset revision limit exceeded")
 		}
 		g.assets[a.ID] = a
 	}
@@ -114,14 +124,19 @@ func (g *generatorStore) assetRevision(ref mediaauthor.AssetRef) (AssetRevision,
 func (g *generatorStore) assetIssues(d mediaauthor.Design) []mediaauthor.Issue {
 	out := make([]mediaauthor.Issue, 0)
 	for i, scene := range d.Scenes {
-		if scene.Image == nil {
-			continue
+		refs := map[string]*mediaauthor.AssetRef{"image": scene.Image}
+		if scene.Video != nil {
+			refs["video"] = &scene.Video.Asset
 		}
-		ref := *scene.Image
-		r, ok := g.assetRevision(ref)
-		info, err := os.Lstat(g.assetPath(ref))
-		if !ok || err != nil || !info.Mode().IsRegular() || info.Size() != r.Bytes {
-			out = append(out, mediaauthor.Issue{Field: fmt.Sprintf("scenes.%d.image", i), Message: "The selected image revision is unavailable. Choose an available image revision explicitly."})
+		for kind, ref := range refs {
+			if ref == nil {
+				continue
+			}
+			r, ok := g.assetRevision(*ref)
+			info, err := os.Lstat(g.assetPath(*ref))
+			if !ok || g.assets[ref.ID].Kind != kind || err != nil || !info.Mode().IsRegular() || info.Size() != r.Bytes {
+				out = append(out, mediaauthor.Issue{Field: fmt.Sprintf("scenes.%d.%s", i, kind), Message: "The selected " + kind + " revision is unavailable. Choose an available revision explicitly."})
+			}
 		}
 	}
 	return out

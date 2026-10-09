@@ -99,8 +99,15 @@ jobs:
           # then play its exact retained revision through isolated rehearsal.
           export GENERATOR_URL=http://127.0.0.1:18080 GENERATOR_USER=ci GENERATOR_PASSWORD=ci-dashboard-password
           export GENERATOR_SMOKE_OUTPUT=/tmp/generated-smoke.mp4 GENERATOR_SMOKE_STATE=/tmp/generated-smoke.json
+          export GENERATOR_SMOKE_SOURCE=/tmp/generator-source.mp4
+          docker exec restreamer-smoke ffmpeg -v error -f lavfi -i testsrc2=size=320x180:rate=25 \
+            -f lavfi -i sine=frequency=880:sample_rate=48000 -t 1.6 -c:v libx264 -threads 2 \
+            -pix_fmt yuv420p -c:a aac -ac 2 -movflags frag_keyframe+empty_moov -f mp4 pipe:1 > "$GENERATOR_SMOKE_SOURCE"
           python3 tests/generator-smoke.py
           ffmpeg -v error -xerror -i /tmp/generated-smoke.mp4 -f null -
+          ffmpeg -v error -xerror -i /tmp/generated-smoke-video.mp4 -f null -
+          ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -f s16le /tmp/generated-smoke-audio.pcm
+          python3 -c 'import array; from pathlib import Path; samples = array.array("h", Path("/tmp/generated-smoke-audio.pcm").read_bytes()); assert samples and max(map(abs, samples)) > 500, "Generated source audio is silent"'
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -173,8 +180,54 @@ jobs:
             -H 'X-Restreamer-Control: 1' --data-binary @/tmp/before-restart-command.json)" = 409
           jq -e '.state == "rejected"' /tmp/restarted-command-result.json
 
+  generator-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t restreamer:arm64-test .
+      - name: Generate and preview media in the native ARM64 container
+        shell: bash
+        run: |
+          docker volume create restreamer-arm64-state
+          trap 'docker logs restreamer-arm64-smoke; docker rm -f restreamer-arm64-smoke; docker volume rm restreamer-arm64-state' EXIT
+          start_container() {
+            docker run -d --name restreamer-arm64-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+              -p 127.0.0.1:18080:8080 -v restreamer-arm64-state:/data \
+              -e INGEST_STREAM_KEY=ci-test-key-123456 -e TARGET_STATE_FILE=/data/targets.json \
+              -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb \
+              -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test \
+              -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test restreamer:arm64-test
+            for attempt in {1..60}; do
+              if docker exec restreamer-arm64-smoke /restreamer healthcheck; then return 0; fi
+              if [ "$(docker inspect --format '{{.State.Running}}' restreamer-arm64-smoke)" != true ]; then
+                echo "ARM64 container exited before becoming healthy" >&2
+                return 1
+              fi
+              sleep 1
+            done
+            echo "ARM64 container did not become healthy within the startup deadline" >&2
+            return 1
+          }
+          start_container
+          export GENERATOR_URL=http://127.0.0.1:18080 GENERATOR_USER=ci GENERATOR_PASSWORD=ci-dashboard-password
+          export GENERATOR_SMOKE_OUTPUT=/tmp/generated-smoke.mp4 GENERATOR_SMOKE_STATE=/tmp/generated-smoke.json
+          export GENERATOR_SMOKE_SOURCE=/tmp/generator-source.mp4
+          docker exec restreamer-arm64-smoke ffmpeg -v error -f lavfi -i testsrc2=size=320x180:rate=25 \
+            -f lavfi -i sine=frequency=880:sample_rate=48000 -t 1.6 -c:v libx264 -threads 2 \
+            -pix_fmt yuv420p -c:a aac -ac 2 -movflags frag_keyframe+empty_moov -f mp4 pipe:1 > "$GENERATOR_SMOKE_SOURCE"
+          python3 tests/generator-smoke.py
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke.mp4
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke-video.mp4
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm
+          python3 -c 'import array; from pathlib import Path; samples = array.array("h", Path("/tmp/generated-smoke-audio.pcm").read_bytes()); assert samples and max(map(abs, samples)) > 500, "Generated source audio is silent"'
+          docker rm -f restreamer-arm64-smoke
+          start_container
+          python3 tests/generator-smoke.py --verify-restart
+
   image:
-    needs: test
+    needs: [test, generator-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read

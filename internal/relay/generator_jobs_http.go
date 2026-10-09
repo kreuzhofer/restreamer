@@ -42,7 +42,7 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	profile := s.library.profile
 	s.library.mu.Unlock()
 	theme, _ := g.resolveTheme(draft.Theme)
-	if issues := append(append(generationIssues(draft, profile, theme), g.assetIssues(draft)...), g.themeIssues(draft.Theme)...); len(issues) > 0 {
+	if issues := append(append(generationIssues(draft, profile, theme), g.assetIssues(draft)...), append(g.themeIssues(draft.Theme), g.videoIssues(draft, profile.FPS)...)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"error": "Resolve design validation before generating.", "issues": issues})
 		return
 	}

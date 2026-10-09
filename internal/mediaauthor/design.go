@@ -28,7 +28,26 @@ type AssetRef struct {
 	Revision int    `json:"revision"`
 }
 
+type VideoScene struct {
+	Asset              AssetRef `json:"asset"`
+	TrimStartSeconds   float64  `json:"trim_start_seconds,omitempty"`
+	TrimEndSeconds     float64  `json:"trim_end_seconds,omitempty"`
+	Repeat             bool     `json:"repeat,omitempty"`
+	AudioEnabled       bool     `json:"audio_enabled,omitempty"`
+	AudioVolumePercent *float64 `json:"audio_volume_percent,omitempty"`
+}
+
+func (s Scene) IsVideo() bool { return s.Layout == "media" && s.MediaKind == "video" }
+func (v VideoScene) Volume() float64 {
+	if v.AudioVolumePercent == nil {
+		return 100
+	}
+	return *v.AudioVolumePercent
+}
+
 type Scene struct {
+	MediaKind       string        `json:"media_kind,omitempty"`
+	Video           *VideoScene   `json:"video,omitempty"`
 	Image           *AssetRef     `json:"image,omitempty"`
 	ID              string        `json:"id"`
 	Layout          string        `json:"layout"`
@@ -90,6 +109,10 @@ func DesignAssetRefs(d Design) []AssetRef {
 	refs := make([]AssetRef, 0)
 	seen := make(map[AssetRef]bool)
 	for _, scene := range d.Scenes {
+		if scene.Video != nil && !seen[scene.Video.Asset] {
+			refs = append(refs, scene.Video.Asset)
+			seen[scene.Video.Asset] = true
+		}
 		if scene.Image != nil && !seen[*scene.Image] {
 			refs = append(refs, *scene.Image)
 			seen[*scene.Image] = true

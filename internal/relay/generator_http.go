@@ -194,6 +194,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	s.generator.mu.Lock()
 	issues = append(issues, s.generator.assetIssues(draft)...)
 	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
+	issues = append(issues, s.generator.videoIssues(draft, profile.FPS)...)
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
 		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
@@ -218,7 +219,10 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": selectedIssues})
 		return
 	}
-	asset, err := s.loadSceneImage(draft.Scenes[sceneIndex])
+	if draft.Scenes[sceneIndex].IsVideo() {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(35 * time.Second))
+	}
+	asset, err := s.loadScenePreview(r.Context(), draft.Scenes[sceneIndex])
 	if err != nil {
 		generatorJSON(w, 422, map[string]any{"issues": []mediaauthor.Issue{{Field: fmtSceneField(sceneIndex, "image"), Message: err.Error()}}})
 		return

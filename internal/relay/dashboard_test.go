@@ -303,13 +303,14 @@ func TestRapidAndOfflineSwitches(t *testing.T) {
 	dest := newSink(t)
 	target := dest.target("one")
 	target.Enabled = "false"
-	s, address := startRelay(t, []config.Target{target})
+	s, address := startRelayWithLogger(t, []config.Target{target}, slog.New(slog.NewTextHandler(io.Discard, nil)), true)
 	if err := s.setTarget("one", true); err != nil {
 		t.Fatal(err)
 	}
-	if s.outputs[0].snapshot().State != "idle" || dest.count() != 0 {
-		t.Fatal("offline toggle connected")
+	if s.outputs[0].snapshot().State != "paused" || dest.count() != 0 {
+		t.Fatalf("offline toggle: state=%s connections=%d", s.outputs[0].snapshot().State, dest.count())
 	}
+	s.setForwarding(true)
 	c := publishInput(t, address)
 	eventually(t, func() bool { return s.outputs[0].snapshot().State == "waiting_for_keyframe" })
 	var wg sync.WaitGroup
