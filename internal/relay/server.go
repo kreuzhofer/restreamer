@@ -18,28 +18,33 @@ import (
 )
 
 type Server struct {
-	library        *videoLibrary
-	generator      *generatorStore
-	cfg            config.Config
-	log            *slog.Logger
-	active         atomic.Bool
-	forwarding     atomic.Bool
-	previewMu      sync.Mutex
-	previewHub     *hub
-	previewDone    <-chan struct{}
-	previewSlots   chan struct{}
-	outputs        []*output
-	inputBytes     atomic.Uint64
-	inputFrames    atomic.Uint64
-	metrics        metrics
-	controlMu      sync.Mutex
-	initOnce       sync.Once
-	initErr        error
-	broadcast      *broadcast
-	mediaMu        sync.Mutex
-	brbCandidateMu sync.Mutex
-	brbCandidate   *brbThemeCandidate
-	preparation    *preparationGate
+	library               *videoLibrary
+	generator             *generatorStore
+	cfg                   config.Config
+	log                   *slog.Logger
+	active                atomic.Bool
+	forwarding            atomic.Bool
+	previewMu             sync.Mutex
+	previewHub            *hub
+	previewDone           <-chan struct{}
+	previewSlots          chan struct{}
+	outputs               []*output
+	inputBytes            atomic.Uint64
+	inputFrames           atomic.Uint64
+	metrics               metrics
+	controlMu             sync.Mutex
+	initOnce              sync.Once
+	initErr               error
+	broadcast             *broadcast
+	mediaMu               sync.Mutex
+	brbPreparationMu      sync.Mutex
+	brbPreparation        *brbThemePreparation
+	brbPreparationCancel  context.CancelFunc
+	brbPreparationDone    chan struct{}
+	brbPreparationStopped bool
+	brbCandidateMu        sync.Mutex
+	brbCandidate          *brbThemeCandidate
+	preparation           *preparationGate
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
@@ -98,6 +103,7 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	defer stop()
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	defer s.stopBRBPreparation()
 	defer cancel()
 	wg.Add(1)
 	go func() { defer wg.Done(); s.sampleLoop(ctx) }()

@@ -156,6 +156,9 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 }
 
 func (s *Server) loadBRBCandidate() error {
+	if err := s.loadBRBPreparation(); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(filepath.Join(s.cfg.BRB.Directory, "theme-candidate.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s.cleanBRBGenerations("")
@@ -202,111 +205,6 @@ func (s *Server) cleanBRBGenerations(candidate string) error {
 	return nil
 }
 
-func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
-	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(10 * time.Second))
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(3 * time.Minute))
-	if !s.generatorAvailable(w) {
-		return
-	}
-	var input struct {
-		Theme mediaauthor.ThemeRef `json:"theme"`
-		Base  string               `json:"base_generation"`
-	}
-	if !generatorDecode(w, r, &input) {
-		return
-	}
-	if !s.mediaMu.TryLock() {
-		http.Error(w, "Another BRB preparation is running", 409)
-		return
-	}
-	defer s.mediaMu.Unlock()
-	s.broadcast.mu.Lock()
-	settings := s.broadcast.media.settings
-	s.broadcast.mu.Unlock()
-	if input.Base != settings.Generation {
-		http.Error(w, "BRB settings changed; reload before preparing a theme", 409)
-		return
-	}
-	// Reject unmeasured profiles before copying inputs or waiting for preparation.
-	if settings.Profile.Width > 1920 || settings.Profile.Height > 1080 || settings.Profile.FPS > 30 {
-		http.Error(w, "Shared BRB themes support up to 1920 × 1080 and 30 fps; legacy BRB is unchanged", 422)
-		return
-	}
-
-	g := s.generator
-	g.mu.Lock()
-	theme, err := g.resolveTheme(input.Theme)
-	g.mu.Unlock()
-	if err != nil {
-		http.Error(w, "Choose an available exact theme revision", 422)
-		return
-	}
-	sourceSettings := settings
-	settings.Theme = &theme
-	root := s.cfg.BRB.Directory
-	dir, err := os.MkdirTemp(root, "assets-")
-	if err != nil {
-		http.Error(w, "Cannot create BRB candidate storage", 507)
-		return
-	}
-	keep := false
-	defer func() {
-		if !keep {
-			os.RemoveAll(dir)
-		}
-	}()
-	if settings.CustomImage {
-		if err = copyAsset(brbSourceImage(root, sourceSettings), filepath.Join(dir, "image.png")); err != nil {
-			http.Error(w, err.Error(), 422)
-			return
-		}
-	}
-	if settings.Music {
-		if err = copyAsset(filepath.Join(root, input.Base, "music"), filepath.Join(dir, "music")); err != nil {
-			http.Error(w, err.Error(), 422)
-			return
-		}
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		http.Error(w, "BRB preparation cancelled while waiting for other media preparation", 422)
-		return
-	}
-	defer release()
-	media, err := s.encodeBRBSettings(ctx, settings, dir)
-	if err != nil {
-		http.Error(w, err.Error(), 422)
-		return
-	}
-	// Preview remuxes the exact encoded tracks. Music still loops independently on air.
-	args := []string{"-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "video.flv"), "-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "audio.flv"), "-map", "0:v:0", "-map", "1:a:0", "-t", "4", "-c", "copy", "-movflags", "+faststart", "-fs", "134217728", filepath.Join(dir, "preview.mp4")}
-	if err = runBRBFFmpeg(ctx, args...); err != nil {
-		http.Error(w, "Cannot prepare exact BRB preview", 422)
-		return
-	}
-	if ctx.Err() != nil {
-		http.Error(w, "BRB preparation cancelled; current media is unchanged", 422)
-		return
-	}
-	settings.Generation = filepath.Base(dir)
-	media.settings = settings
-	candidate := &brbThemeCandidate{ID: settings.Generation, Base: input.Base, Settings: settings, AudioDuration: media.audio.duration.Seconds(), VideoDuration: media.video.duration.Seconds(), media: media}
-	s.brbCandidateMu.Lock()
-	defer s.brbCandidateMu.Unlock()
-	if err = writeState(filepath.Join(root, "theme-candidate.json"), candidate); err != nil {
-		http.Error(w, "Cannot retain BRB candidate; current media is unchanged", 507)
-		return
-	}
-	old := s.brbCandidate
-	s.brbCandidate = candidate
-	keep = true
-	if old != nil {
-		os.RemoveAll(filepath.Join(root, old.ID))
-	}
-	generatorJSON(w, 201, candidate)
-}
 func (s *Server) brbThemeCandidateHTTP(w http.ResponseWriter, r *http.Request) {
 	s.brbCandidateMu.Lock()
 	candidate := s.brbCandidate

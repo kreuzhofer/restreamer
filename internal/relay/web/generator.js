@@ -275,12 +275,12 @@
         $('scene-issues').append(entry);
       }
       $('preview-profile').textContent = `${result.profile.width} × ${result.profile.height} · ${result.profile.fps} fps`;
-      const selectedInvalid = result.issues.some(issue => !issue.field.startsWith('scenes.') || issue.field.startsWith(`scenes.${selectedScene}.`));
+      const selectedInvalid = result.preview_issues.some(issue => !issue.field.startsWith('scenes.') || issue.field.startsWith(`scenes.${selectedScene}.`));
       if (!snapshot.scenes[selectedScene] || selectedInvalid) {
         $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Draft edits are still saved.';
         return;
       }
-      const response = await request(`/api/generator/preview?scene=${selectedScene}&frame=${Math.round(Math.min(600, Math.max(0, Number($('preview-time').value) || 0)) * result.profile.fps)}`, 'POST', snapshot, previewAbort.signal);
+      const response = await request(`/api/generator/preview?scene=${selectedScene}&frame=${Math.round(Math.min(3600, Math.max(0, Number($('preview-time').value) || 0)) * result.profile.fps)}`, 'POST', snapshot, previewAbort.signal);
       const bitmap = await createImageBitmap(await response.blob());
       if (sequence !== previewSequence) { bitmap.close(); return; }
       const canvas = $('scene-preview');

@@ -190,7 +190,6 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	if themeErr != nil {
 		issues = append(issues, mediaauthor.Issue{Field: "theme", Message: themeErr.Error()})
 	}
-	issues = append(issues, mediaauthor.ValidateTiming(draft, profile.FPS)...)
 	s.generator.mu.Lock()
 	issues = append(issues, s.generator.assetIssues(draft)...)
 	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
@@ -198,9 +197,12 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	issues = append(issues, s.generator.musicIssues(draft, profile.FPS, profile.SampleRate)...)
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
-		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.SequenceDuration(draft, profile.FPS)})
+		previewIssues := append(append([]mediaauthor.Issue{}, issues...), mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)
+		issues = append(issues, mediaauthor.ValidateTiming(draft, profile.FPS)...)
+		generatorJSON(w, 200, map[string]any{"issues": issues, "preview_issues": previewIssues, "profile": profile, "duration_seconds": mediaauthor.SequenceDuration(draft, profile.FPS)})
 		return
 	}
+	issues = append(issues, mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)
 	sceneIndex := 0
 	if selected := r.URL.Query().Get("scene"); selected != "" {
 		var err error
@@ -237,8 +239,8 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	frame := 0
 	if value := r.URL.Query().Get("frame"); value != "" {
 		frame, err = strconv.Atoi(value)
-		if err != nil || frame < 0 || frame > profile.FPS*600 {
-			http.Error(w, "Preview frame must be within 600 seconds", 400)
+		if err != nil || frame < 0 || frame > profile.FPS*3600 {
+			http.Error(w, "Preview frame must be within 3600 seconds", 400)
 			return
 		}
 	}

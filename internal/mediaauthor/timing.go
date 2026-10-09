@@ -21,13 +21,11 @@ func PlanTiming(d Design, fps int) (SequenceTiming, []Issue) {
 	if fps <= 0 {
 		return plan, issues
 	}
-	raw := 0
 	for i, scene := range d.Scenes {
-		if math.IsNaN(scene.DurationSeconds) || math.IsInf(scene.DurationSeconds, 0) || scene.DurationSeconds <= 0 || scene.DurationSeconds > 600 || math.Round(scene.DurationSeconds*float64(fps)) < 1 {
-			issues = append(issues, Issue{fmt.Sprintf("scenes.%d.duration_seconds", i), "Use at least one video frame and at most 600 seconds."})
+		if math.IsNaN(scene.DurationSeconds) || math.IsInf(scene.DurationSeconds, 0) || scene.DurationSeconds <= 0 || scene.DurationSeconds > 3600 || math.Round(scene.DurationSeconds*float64(fps)) < 1 {
+			issues = append(issues, Issue{fmt.Sprintf("scenes.%d.duration_seconds", i), "Use at least one video frame and at most 3600 seconds."})
 		} else {
 			plan.Scenes[i].Frames = int(math.Round(scene.DurationSeconds * float64(fps)))
-			raw += plan.Scenes[i].Frames
 		}
 		if tr := scene.Transition; tr != nil {
 			field := fmt.Sprintf("scenes.%d.transition", i)
@@ -89,9 +87,6 @@ func PlanTiming(d Design, fps int) (SequenceTiming, []Issue) {
 			issues = append(issues, Issue{"loop_transition.kind", "Choose cut or crossfade at the loop boundary."})
 		}
 	}
-	if raw > 600*fps {
-		issues = append(issues, Issue{"scenes", "The scenes before overlaps must total at most 600 seconds after rounding to video frames."})
-	}
 	return plan, issues
 }
 
@@ -102,10 +97,26 @@ func SequenceDuration(d Design, fps int) float64 {
 	p, _ := PlanTiming(d, fps)
 	return float64(max(0, p.Frames)) / float64(fps)
 }
-func ValidateTiming(d Design, fps int) []Issue {
+
+// ValidatePreviewTiming checks authored timing without the generation work cap.
+func ValidatePreviewTiming(d Design, fps int) []Issue {
 	plan, issues := PlanTiming(d, fps)
 	_, finishIssues := EndingFadeFrames(d, fps, plan.Frames)
 	return append(issues, finishIssues...)
+}
+
+// ValidateTiming additionally enforces the bounded generation workload.
+func ValidateTiming(d Design, fps int) []Issue {
+	issues := ValidatePreviewTiming(d, fps)
+	plan, _ := PlanTiming(d, fps)
+	raw := 0
+	for _, scene := range plan.Scenes {
+		raw += scene.Frames
+	}
+	if fps > 0 && raw > 600*fps {
+		issues = append(issues, Issue{"scenes", "Generation requires scenes before overlaps to total at most 600 seconds after rounding to video frames. Quick scene previews remain available."})
+	}
+	return issues
 }
 
 // CompositionDuration is the complete scene/music timeline before circular overlap.

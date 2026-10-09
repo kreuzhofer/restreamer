@@ -252,7 +252,11 @@ func TestGeneratorRejectsInvalidInputsAndUnmeasuredProfile(t *testing.T) {
 	for _, seconds := range []float64{0.001, 601} {
 		d := generatorDraft(t, s, seconds)
 		w := dashboardRequest(s, "POST", "/api/generator/jobs", fmt.Sprintf(`{"design_id":%q,"version":1}`, d.ID))
-		if w.Code != 422 || !bytes.Contains(w.Body.Bytes(), []byte("duration_seconds")) {
+		field := "duration_seconds"
+		if seconds > 600 {
+			field = `"field":"scenes"`
+		}
+		if w.Code != 422 || !bytes.Contains(w.Body.Bytes(), []byte(field)) {
 			t.Fatalf("invalid duration accepted: %d %s", w.Code, w.Body.String())
 		}
 	}

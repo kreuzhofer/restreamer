@@ -317,7 +317,7 @@ func TestBRBThemeFailedAndCancelledPreparationDoesNotInterruptLocalBroadcast(t *
 
 func TestBRBThemeControlsAreAuthenticatedAndSameOrigin(t *testing.T) {
 	s := libraryServer(t)
-	for _, entry := range []struct{ method, path string }{{"POST", "/api/brb/theme/prepare"}, {"GET", "/api/brb/theme/candidate"}, {"GET", "/api/brb/theme/candidate/preview"}, {"POST", "/api/brb/theme/activate"}, {"DELETE", "/api/brb/theme/candidate"}} {
+	for _, entry := range []struct{ method, path string }{{"POST", "/api/brb/theme/prepare"}, {"GET", "/api/brb/theme/preparation"}, {"POST", "/api/brb/theme/preparation/cancel"}, {"GET", "/api/brb/theme/candidate"}, {"GET", "/api/brb/theme/candidate/preview"}, {"POST", "/api/brb/theme/activate"}, {"DELETE", "/api/brb/theme/candidate"}} {
 		req := httptest.NewRequest(entry.method, entry.path, strings.NewReader(`{}`))
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, req)

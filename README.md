@@ -547,7 +547,11 @@ before replacing the current fallback. If BRB is on air, activation restarts its
 video and music. Candidate activation checks the captured base generation and
 profile. Later BRB settings/profile changes make it stale: preview remains
 available, but a new preparation is required before activation. Cancelling a
-preparation or discarding a candidate leaves the current BRB unchanged. The
+preparation or discarding a candidate leaves the current BRB unchanged. Accepted
+preparation belongs to the server: closing or reloading the browser does not cancel
+it. Reload discovers its status and result; **Cancel preparation** targets that
+exact preparation. Server shutdown or restart reports an interrupted preparation
+that must be started again, preserving current media and any earlier candidate. The
 existing `/api/brb/assets` prepare-and-save contract remains available.
 
 Shared-theme BRB uses the same embedded typography, images/logos, palette,
@@ -579,10 +583,14 @@ the authoring catalog loads; it does not silently re-render or adopt a newer
 theme. Prepared candidates also persist. Legacy startup still refreshes its
 arcade assets, so candidates based on a prior legacy generation become stale.
 Theme image revisions remain protected from deletion, with active/prepared BRB
-uses visible in the asset catalog. Missing or invalid retained media is reported
+uses visible in the asset catalog, including in-flight preparation references. Missing or invalid retained media is reported
 explicitly. Authenticated same-origin routes are `/api/brb/theme/prepare`,
 `/api/brb/theme/candidate` (read/discard), `/api/brb/theme/candidate/preview`, and
-`/api/brb/theme/activate`.
+`/api/brb/theme/activate`. Preparation status is available at
+`GET /api/brb/theme/preparation`; cancel with
+`POST /api/brb/theme/preparation/cancel` and its exact `id`. Prepare keeps its
+synchronous `201` candidate response; optional `async: true` returns a `202`
+preparation record. Only one preparation and one latest status record are retained.
 
 The **Shared streaming profile** in the **OBS input** card controls resolution,
 frame rate (including **25 and 30 fps**), and audio sample rate for OBS, BRB,
@@ -857,8 +865,9 @@ never permit unrestricted pixel positioning. Validation identifies the scene
 and list item; choose its error to open it. A valid scene can still be previewed
 while a different scene needs correction.
 Durations must be finite, greater than zero, and at most 3600 seconds; font sizes
-range from 24 to 120 at 1080p. These are bounded authoring limits, not rendering
-performance promises. Drafts retain invalid durations/unsupported glyphs for
+range from 24 to 120 at 1080p. Quick scene previews remain available for longer drafts, while validation reports
+the separate 600-second generation cap (the scene sum before overlaps). These are
+bounded authoring limits, not rendering performance promises. Drafts retain invalid durations/unsupported glyphs for
 correction; preview validation uses the current streaming profile (up to 4K).
 Only one quick preview or validation runs at a time per server. Preview requires
 the existing dashboard authentication and same-origin control header, and uses

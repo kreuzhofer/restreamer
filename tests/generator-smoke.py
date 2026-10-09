@@ -56,9 +56,15 @@ if '--verify-ending' in sys.argv:
     saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
     prefix = Path(sys.argv[sys.argv.index('--verify-ending') + 1])
     frames = prefix.with_suffix('.rgb').read_bytes()
-    assert len(frames) == saved['ending_frames'] * 16 * 16 * 3, len(frames)
-    last_frame = frames[-16 * 16 * 3:]
-    assert max(last_frame) == 0, ('Ending must finish on a black frame', min(last_frame), max(last_frame), sorted(set(last_frame)))
+    probe = json.loads(prefix.with_suffix('.json').read_text())
+    assert len(probe['streams']) == 1, probe
+    video = probe['streams'][0]
+    assert int(video['nb_read_frames']) == saved['ending_frames'], probe
+    assert math.isclose(float(video['duration']), saved['ending_duration'], abs_tol=.001), probe
+    # Inspect one native-size final frame. Scaling can round exact black to
+    # RGB(0,0,1) on AMD64, which tests the scaler rather than the encoded finish.
+    assert len(frames) == int(video['width']) * int(video['height']) * 3, len(frames)
+    assert max(frames) == 0, 'Ending must finish on a black frame'
     samples = array.array('h', prefix.with_suffix('.pcm').read_bytes())
     end = round(saved['ending_duration'] * saved['sample_rate'])
     tail = samples[end - saved['sample_rate'] // 100:end]

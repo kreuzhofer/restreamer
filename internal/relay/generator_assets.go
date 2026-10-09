@@ -233,6 +233,11 @@ func (s *Server) assetUsesLocked(id string) ([]AssetUse, error) {
 		addBRB(s.brbCandidate.Settings, "brb_prepared")
 	}
 	s.brbCandidateMu.Unlock()
+	s.brbPreparationMu.Lock()
+	if p := s.brbPreparation; p != nil && p.pending() {
+		addBRB(p.Settings, "brb_preparing")
+	}
+	s.brbPreparationMu.Unlock()
 	stage := s.broadcast.stageStatus(time.Now())
 	selected := s.library.selections()
 	for _, u := range append([]AssetUse{}, uses...) {

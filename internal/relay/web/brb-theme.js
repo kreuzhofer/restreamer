@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let current, connected = false, otherPending = false, dirty = false;
-  let themes = [], candidate = null, reviewed = '', preparing = false, operation = false, fetching = false, controller;
+  let themes = [], candidate = null, reviewed = '', preparing = false, operation = false, fetching = false, preparation = null;
   async function request(path, method = 'GET', body, signal) {
     const response = await fetch(new URL(path, location.origin), {method, credentials: 'same-origin', signal, headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: body === undefined ? undefined : JSON.stringify(body)});
     if (!response.ok) throw new Error((await response.text()).trim() || `Request failed (${response.status})`);
@@ -18,6 +18,7 @@
     $('brb-theme-prepare').disabled = unsupportedProfile || !connected || otherPending || dirty || preparing || operation || !themes.length;
     $('brb-theme-select').disabled = preparing || operation;
     $('brb-theme-cancel').hidden = !preparing;
+    $('brb-theme-cancel').disabled = !connected || operation || preparation?.state === 'cancelling';
     $('brb-theme-candidate').hidden = !candidate;
     if (!candidate) return;
     const stale = candidate.base_generation !== current.generation;
@@ -41,9 +42,17 @@
     candidate = next; render();
   }
   async function loadCandidate() {
-    if (!connected || fetching || preparing || operation || !current?.generation) return;
+    if (!connected || fetching || operation || !current?.generation) return;
     fetching = true;
-    try { adoptCandidate(await (await request('/api/brb/theme/candidate')).json()); }
+    try {
+      const previous = preparation;
+      preparation = await (await request('/api/brb/theme/preparation')).json();
+      preparing = preparation?.state === 'running' || preparation?.state === 'cancelling';
+      if (preparation && (previous?.id !== preparation.id || previous?.state !== preparation.state)) {
+        status(preparing ? (preparation.state === 'cancelling' ? 'Cancelling this preparation…' : 'Preparing captured BRB settings. You can close this page; work continues on the server.') : preparation.state === 'ready' ? 'Prepared, not active. Preview the exact result, then activate explicitly.' : preparation.error || `Preparation ${preparation.state}. Current BRB is unchanged.`);
+      }
+      adoptCandidate(await (await request('/api/brb/theme/candidate')).json());
+    }
     catch (error) { status(error.message); }
     finally { fetching = false; }
   }
@@ -52,13 +61,24 @@
   $('brb-theme-prepare').addEventListener('click', async () => {
     if (!current || preparing || operation || otherPending || dirty) return;
     const [id, revision] = $('brb-theme-select').value.split(':');
-    preparing = true; controller = new AbortController();
-    status('Preparing captured BRB settings. Current media stays active.'); render();
-    try { adoptCandidate(await (await request('/api/brb/theme/prepare', 'POST', {theme: {id, revision: Number(revision)}, base_generation: current.generation}, controller.signal)).json()); status('Prepared, not active. Preview the exact result, then activate explicitly.'); }
-    catch (error) { status(error.name === 'AbortError' ? 'Preparation cancelled. Current BRB and any earlier candidate are unchanged.' : error.message); }
-    finally { preparing = false; controller = null; render(); loadCandidate(); }
+    operation = true;
+    status('Accepting captured BRB settings. Current media stays active.'); render();
+    try {
+      preparation = await (await request('/api/brb/theme/prepare', 'POST', {theme: {id, revision: Number(revision)}, base_generation: current.generation, async: true})).json();
+      preparing = true;
+      status('Preparing on the server. You can close this page and return to the result.');
+    }
+    catch (error) { status(error.message); }
+    finally { operation = false; render(); loadCandidate(); }
   });
-  $('brb-theme-cancel').addEventListener('click', () => controller?.abort());
+  $('brb-theme-cancel').addEventListener('click', async () => {
+    if (!preparation || !preparing || operation) return;
+    const id = preparation.id;
+    operation = true; render();
+    try { await request('/api/brb/theme/preparation/cancel', 'POST', {id}); status('Cancelling this preparation. Current BRB and any earlier candidate stay unchanged.'); }
+    catch (error) { status(error.message); }
+    finally { operation = false; render(); loadCandidate(); }
+  });
   $('brb-theme-preview').addEventListener('click', () => {
     if (!candidate) return;
     reviewed = '';

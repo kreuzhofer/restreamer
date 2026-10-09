@@ -59,38 +59,35 @@ func (g *generatorStore) themeIssues(ref mediaauthor.ThemeRef) []mediaauthor.Iss
 	if err != nil {
 		return []mediaauthor.Issue{{Field: "theme", Message: err.Error()}}
 	}
-	out := make([]mediaauthor.Issue, 0)
-	for field, ref := range map[string]*mediaauthor.AssetRef{"background": t.Style.Background, "logo": t.Style.Logo} {
-		if ref == nil {
-			continue
-		}
-		if !validDesignID(ref.ID) || ref.Revision < 1 || ref.Revision > maxAssetRevisions {
-			out = append(out, mediaauthor.Issue{Field: "theme." + field, Message: "Choose an available exact image revision."})
-			continue
-		}
-		meta, ok := g.assetRevision(*ref)
-		a := g.assets[ref.ID]
-		info, err := os.Lstat(g.assetPath(*ref))
-		if !ok || a.Kind != "image" || err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
-			out = append(out, mediaauthor.Issue{Field: "theme." + field, Message: "The theme's pinned image revision is unavailable."})
-		}
-	}
-	return out
+	return g.themeImageIssues(t.Style, "theme.")
 }
 func (g *generatorStore) themeStyleAssetIssues(style mediaauthor.Style) []mediaauthor.Issue {
+	return g.themeImageIssues(style, "style.")
+}
+
+// Both the style editor and pinned design themes validate the same exact images.
+func (g *generatorStore) themeImageIssues(style mediaauthor.Style, prefix string) []mediaauthor.Issue {
 	out := make([]mediaauthor.Issue, 0)
-	for field, ref := range map[string]*mediaauthor.AssetRef{"background": style.Background, "logo": style.Logo} {
+	for _, entry := range []struct {
+		field string
+		ref   *mediaauthor.AssetRef
+	}{{"background", style.Background}, {"logo", style.Logo}} {
+		ref := entry.ref
 		if ref == nil {
 			continue
 		}
+		message := ""
 		if !validDesignID(ref.ID) || ref.Revision < 1 || ref.Revision > maxAssetRevisions {
-			out = append(out, mediaauthor.Issue{Field: "theme." + field, Message: "Choose an available exact image revision."})
-			continue
+			message = "Choose an available exact image revision."
+		} else {
+			meta, ok := g.assetRevision(*ref)
+			info, err := os.Lstat(g.assetPath(*ref))
+			if !ok || g.assets[ref.ID].Kind != "image" || err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
+				message = "The pinned image revision is unavailable. Choose an available image revision."
+			}
 		}
-		meta, ok := g.assetRevision(*ref)
-		info, err := os.Lstat(g.assetPath(*ref))
-		if !ok || g.assets[ref.ID].Kind != "image" || err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
-			out = append(out, mediaauthor.Issue{Field: "style." + field, Message: "Choose an available image revision."})
+		if message != "" {
+			out = append(out, mediaauthor.Issue{Field: prefix + entry.field, Message: message})
 		}
 	}
 	return out

@@ -111,12 +111,11 @@ jobs:
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-audio.pcm
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
-          ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf scale=16:16 -vsync 0 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
+          ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=width,height,nb_read_frames,duration -of json /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.json
+          ending_last=$(jq '.ending_frames - 1' "$GENERATOR_SMOKE_STATE")
+          ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf "select=eq(n\,$ending_last)" -vsync 0 -frames:v 1 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
           ffmpeg -v error -i /tmp/generated-smoke-ending.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-ending.pcm
-          if ! python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending; then
-            python3 tests/diagnose-ending.py /tmp/generated-smoke-ending.mp4 /tmp/generator-ending-diagnostics restreamer-smoke || true
-            exit 1
-          fi
+          python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -189,15 +188,6 @@ jobs:
             -H 'X-Restreamer-Control: 1' --data-binary @/tmp/before-restart-command.json)" = 409
           jq -e '.state == "rejected"' /tmp/restarted-command-result.json
 
-      - name: Retain failed synthetic ending media
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ending-media-diagnostic
-          path: /tmp/generator-ending-diagnostics/
-          if-no-files-found: ignore
-          retention-days: 3
-
   generator-arm64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
@@ -243,7 +233,9 @@ jobs:
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
-          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -vf scale=16:16 -vsync 0 -pix_fmt rgb24 -f rawvideo pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.rgb
+          docker exec -i restreamer-arm64-smoke ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=width,height,nb_read_frames,duration -of json -i pipe:0 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.json
+          ending_last=$(jq '.ending_frames - 1' "$GENERATOR_SMOKE_STATE")
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -vf "select=eq(n\,$ending_last)" -vsync 0 -frames:v 1 -pix_fmt rgb24 -f rawvideo pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.rgb
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.pcm
           python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           docker rm -f restreamer-arm64-smoke

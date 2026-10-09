@@ -64,6 +64,8 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/library/revisions/{revision}/preview", s.libraryRevisionPreview)
 	private.HandleFunc("POST /api/library/upload", s.libraryUpload)
 	private.HandleFunc("POST /api/brb/theme/prepare", s.brbThemePrepare)
+	private.HandleFunc("GET /api/brb/theme/preparation", s.brbThemePreparationHTTP)
+	private.HandleFunc("POST /api/brb/theme/preparation/cancel", s.brbThemePreparationCancelHTTP)
 	private.HandleFunc("GET /api/brb/theme/candidate", s.brbThemeCandidateHTTP)
 	private.HandleFunc("GET /api/brb/theme/candidate/preview", s.brbThemePreview)
 	private.HandleFunc("POST /api/brb/theme/activate", s.brbThemeActivate)
