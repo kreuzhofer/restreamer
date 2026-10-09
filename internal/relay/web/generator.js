@@ -682,6 +682,7 @@
   function editTheme(theme) {
     editingTheme = structuredClone(theme); themeDirty = false; themeError('');
     $('theme-name').value = theme.name; $('theme-library').value = themeKey(theme);
+    for (const key of ['background', 'logo']) $(`theme-${key}`).replaceChildren();
     renderThemeAssets();
     for (const [key] of themeFields) {
       const value = ['width_percent','height_percent'].includes(key) ? theme.style.content_region[key] : theme.style[key];
