@@ -245,7 +245,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if animatedArcade(theme.Style) {
-		inputs.Background, err = arcadePreviewFrame(r.Context(), profile, frame)
+		inputs.Background, err = arcadePreviewFrame(r.Context(), profile, frame, theme.Style)
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

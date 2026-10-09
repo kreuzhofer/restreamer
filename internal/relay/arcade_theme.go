@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
@@ -35,12 +36,18 @@ func themedBRBSeconds(style mediaauthor.Style) int {
 	return 4
 }
 
+// Contain the illustration just like static ThemeBackdrop, including non-16:9
+// profiles. Colors have already passed six-digit validation before rendering.
+func arcadeBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string {
+	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=area,format=rgb24,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x%s,setsar=1", p.Width, p.Height, p.Width, p.Height, strings.TrimPrefix(style.BackgroundColor, "#"))
+}
+
 // Preview uses the same prepared master, frame-rate conversion and sizing as encoding.
 // The existing preview admission lock bounds concurrent decoder memory.
-func arcadePreviewFrame(ctx context.Context, p config.BRBProfile, frame int) (image.Image, error) {
+func arcadePreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style) (image.Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),scale=%d:%d:flags=area,format=rgb24,setsar=1", p.FPS, frame%(16*p.FPS), p.Width, p.Height)
+	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),%s", p.FPS, frame%(16*p.FPS), arcadeBackdropFilter(p, style))
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-filter_threads", "1", "-i", "pipe:0", "-vf", filter, "-frames:v", "1", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "pipe:1")
 	cmd.Stdin = bytes.NewReader(afterHoursLoop)
 	data, err := cmd.Output()
@@ -56,12 +63,12 @@ func arcadePreviewFrame(ctx context.Context, p config.BRBProfile, frame int) (im
 
 // arcadeOverlayArgs composes transparent content over the immutable artwork loop.
 // It only writes into the caller-owned, bounded preparation workspace.
-func arcadeOverlayArgs(dir, foreground string, p config.BRBProfile) ([]string, error) {
+func arcadeOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style) ([]string, error) {
 	master := filepath.Join(dir, "arcade-master.mp4")
 	if err := os.WriteFile(master, afterHoursLoop, 0600); err != nil {
 		return nil, errors.New("Cannot save arcade preparation master; check storage.")
 	}
-	filter := fmt.Sprintf("[1:v]fps=%d,scale=%d:%d:flags=area,format=rgb24,setsar=1[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, p.Width, p.Height)
+	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, arcadeBackdropFilter(p, style))
 	return []string{"-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground, "-threads", "2", "-stream_loop", "-1", "-i", master, "-filter_complex", filter, "-map", "[v]"}, nil
 }
 
@@ -125,7 +132,7 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 		args = append(args, "-stream_loop", "-1")
 	}
 	args = append(args, "-threads", "2", "-i", normalized, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", border, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
-	filter = fmt.Sprintf("[0:v]fps=%d,scale=%d:%d:flags=area,format=rgb24,setsar=1[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, p.Width, p.Height, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
+	filter = fmt.Sprintf("[0:v]fps=%d,%s[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, arcadeBackdropFilter(p, style), region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
 	args = append(args, "-filter_complex", filter, "-map", "[v]", "-an", "-frames:v", strconv.Itoa(frames))
 	args = append(args, videoEncodingArgs(p)...)
 	args = append(args, "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)

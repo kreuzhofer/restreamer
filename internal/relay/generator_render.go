@@ -108,7 +108,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 				"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
 			}
 			if animatedArcade(theme.Style) {
-				arcadeArgs, err := arcadeOverlayArgs(dir, still, p)
+				arcadeArgs, err := arcadeOverlayArgs(dir, still, p, theme.Style)
 				if err != nil {
 					return "", err
 				}

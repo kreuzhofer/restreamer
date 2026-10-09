@@ -283,3 +283,27 @@ func TestArcadeCustomBorderStaysBehindFullFrameVideo(t *testing.T) {
 		t.Fatalf("border overlays full-frame video only in prepared output: %.2f", delta)
 	}
 }
+
+func TestArcadeArtworkKeepsProportionsOnFourByThreeProfile(t *testing.T) {
+	s := arcadeThemeServer(t)
+	if w := assetRequest(t, s, map[string]string{"width": "640", "height": "480"}, "", nil); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	d := generatorDraft(t, s, 1)
+	d.Theme = mediaauthor.ThemeRef{ID: "arcade-after-hours", Revision: 1}
+	d.Scenes[0].Text = ""
+	raw, _ := json.Marshal(d)
+	w := dashboardRequest(s, "POST", "/api/generator/preview", string(raw))
+	img, err := png.Decode(w.Body)
+	if err != nil {
+		t.Fatal(w.Code, err)
+	}
+	for y := 0; y < 50; y++ {
+		for x := 0; x < 640; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			if r/257 != 2 || g/257 != 16 || b/257 != 47 {
+				t.Fatalf("artwork stretched into the letterbox at %d,%d", x, y)
+			}
+		}
+	}
+}

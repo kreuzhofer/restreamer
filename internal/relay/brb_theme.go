@@ -127,7 +127,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	}
 	inputs.TransparentBackdrop = false
 	if animatedArcade(settings.Theme.Style) {
-		inputs.Background, err = arcadePreviewFrame(ctx, p, 0)
+		inputs.Background, err = arcadePreviewFrame(ctx, p, 0, settings.Theme.Style)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +142,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	args := []string{"-filter_threads", "1", "-filter_complex_threads", "1", "-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", filepath.Join(dir, "base.png")}
 	style := settings.Theme.Style
 	if animatedArcade(style) {
-		args, err = arcadeOverlayArgs(dir, filepath.Join(dir, "base.png"), p)
+		args, err = arcadeOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style)
 		if err != nil {
 			return nil, err
 		}
