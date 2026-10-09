@@ -8,6 +8,37 @@
   const revision = () => catalog.revisions.find(item => item.id === el('library-revision').value);
   const ready = item => item?.state === 'ready';
   const copy = value => JSON.parse(JSON.stringify(value));
+  // Navigation carries review intent only. Never save or command from a URL.
+  const parameters = new URLSearchParams(location.search);
+  const intentFields = ['media_revision', 'media_stage', 'media_action', 'server_id', 'context'];
+  let intent = intentFields.some(key => parameters.has(key)) ? Object.fromEntries(intentFields.map(key => [key, parameters.get(key) || ''])) : null;
+  let intentError = '';
+  if (intent && (intentFields.some(key => parameters.getAll(key).length > 1) || !/^[a-f0-9]{64}$/.test(intent.media_revision) || intent.media_stage !== 'prestream' || !['select_next', 'replace_now', 'replace_on_return'].includes(intent.media_action) || (intent.media_action === 'select_next' ? intent.server_id || intent.context : !/^[^\s]{1,256}$/.test(intent.server_id) || !/^[^\s]{1,256}$/.test(intent.context)))) intentError = 'Invalid generated-result request. No selection or playback change was made.';
+  const intentLabel = () => intent?.media_action === 'select_next' ? 'Select for next PRESTREAM' : intent?.media_action === 'replace_on_return' ? 'Replace PRESTREAM on return' : 'Replace PRESTREAM now';
+  function intentProblem() {
+    if (intentError) return intentError;
+    const candidate = revision(), stage = snapshot?.stage;
+    if (!ready(candidate) || candidate.id !== intent.media_revision) return `This exact revision is ${candidate?.state || 'unavailable'}. No other revision was substituted.`;
+    if (intent.media_action === 'select_next') return '';
+    if (!stage || stage.server_id !== intent.server_id || stage.context !== intent.context) return 'The broadcast or saved selection changed since this request. The exact candidate is retained. Dismiss this request to choose a fresh action.';
+    const returning = intent.media_action === 'replace_on_return';
+    if ((returning ? stage.return_stage : stage.stage) !== 'PRESTREAM' || !(returning ? stage.return_media?.revision : stage.media?.revision)) return 'This request no longer applies to PRESTREAM. It cannot replace another stage or return destination. Dismiss it to choose a fresh action.';
+    if ((returning ? stage.return_media.revision : stage.media.revision) === intent.media_revision) return 'This exact revision is already selected for that playback. No replacement is needed.';
+    return '';
+  }
+  function renderIntent(usable) {
+    el('media-intent').hidden = !intent;
+    if (!intent) return;
+    const candidate = revision(), problem = intentProblem(), selecting = intent.media_action === 'select_next';
+    el('media-intent-title').textContent = intentLabel();
+    el('media-intent-detail').textContent = `Exact candidate: ${candidate?.name || 'Unavailable result'} · ${intent.media_revision}`;
+    el('media-intent-status').textContent = problem || (selecting ? 'Opening this result changes no saved selection or playback. Add it to the settings below, then explicitly Save selections.' : `Preview this exact revision, then review ${intentLabel()}. Current playback continues until confirmation. ${snapshot.stage.mode === 'preview_only' ? 'PREVIEW ONLY — NOT BROADCASTING.' : 'Real broadcast session.'}`);
+    el('media-intent-review').textContent = selecting ? 'Use for next PRESTREAM' : `Review ${intentLabel()}`;
+    el('media-intent-review').disabled = !usable || saving || !!problem || (!selecting && previewRevision !== intent.media_revision);
+    el('library-select').disabled = el('library-revision').disabled = true;
+    el('library-once').disabled = el('library-loop').disabled = true;
+    el('library-replace-now').disabled = el('library-replace-return').disabled = true;
+  }
 
   function render() {
     if (!snapshot) return;
@@ -15,10 +46,10 @@
     if (!snapshot.library_enabled) return;
     const stage = snapshot.stage || {}, p = stage.playback || {}, file = selected(), candidate = revision();
     const usable = connected && !pending && !window.broadcastStages?.busy(), clip = stage.stage === 'CLIP', ending = window.broadcastStages?.locked();
-    el('library-count').textContent = `${catalog.files.length} ${catalog.files.length === 1 ? 'file' : 'files'}`;
+    el('library-count').textContent = `${catalog.files.length} originals · ${catalog.revisions.length} revisions`;
     el('library-error').hidden = !(error || catalogError || catalog.error);
     el('library-error').textContent = error || catalogError || catalog.error || '';
-    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.message ? ` · ${file.message}` : ''}${file.error ? ` · ${file.error}` : ''}` : 'No MP4 files discovered yet.';
+    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.message ? ` · ${file.message}` : ''}${file.error ? ` · ${file.error}` : ''}` : 'All retained revisions, including generated results. To edit generated content, reopen its show design in Media generator.';
     el('library-once').disabled = el('library-loop').disabled = !usable || stage.stage === 'OFF' || ending || !ready(candidate) || !!catalog.error;
     el('library-preview').disabled = !connected || !ready(candidate);
     el('library-prepare').disabled = !usable || !file || ['preparing', 'discovering', 'queued'].includes(file.state);
@@ -49,6 +80,8 @@
     el('selection-add-shortcut').disabled = !connected || saving;
     for (const field of el('stage-selections-form').querySelectorAll('select,input')) field.disabled = !connected || saving;
     el('selection-save').textContent = saving ? 'Saving…' : 'Save selections';
+    el('library-select').disabled = el('library-revision').disabled = false;
+    renderIntent(usable);
   }
   function options(select, selectedValue, allowEmpty = true) {
     const values = catalog.revisions.map(item => new Option(`${item.name} · ${item.id.slice(0, 12)} · ${item.state}`, item.id));
@@ -76,11 +109,14 @@
     const unavailable = [value.prestream, value.ending, ...(value.shortcuts || []).map(item => item.revision)].filter(id => id && !ready(catalog.revisions.find(item => item.id === id)));
     el('selection-warning').textContent = unavailable.length ? 'Some selected revisions are missing, changed, incompatible, or need preparation. Explicitly choose a ready revision; changed files are never substituted automatically.' : 'Selections identify exact ready content. Saving does not start playback or replace media already playing or suspended.';
   }
-  function renderRevisions() {
-    const file = selected(), select = el('library-revision'), previous = select.value;
-    const available = catalog.revisions.filter(item => item.library_id === file?.id);
-    select.replaceChildren(...(available.length ? available.map(item => new Option(`${item.name} · ${item.id.slice(0, 12)} · ${item.state}`, item.id)) : [new Option('No prepared revision yet', '')]));
-    select.value = available.some(item => item.id === previous) ? previous : file?.revision || available[0]?.id || '';
+  function renderRevisions(changedFile = false) {
+    const file = selected(), select = el('library-revision');
+    const previous = intent ? intent.media_revision : changedFile ? '' : select.value;
+    const available = catalog.revisions.filter(item => !file || item.library_id === file.id);
+    const values = available.map(item => new Option(`${item.name} · ${item.id.slice(0, 12)} · ${item.state}`, item.id));
+    if (previous && !available.some(item => item.id === previous)) values.push(new Option(`Unavailable revision · ${previous}`, previous));
+    select.replaceChildren(...(values.length ? values : [new Option('No prepared revision yet', '')]));
+    select.value = intent ? intent.media_revision : previous || file?.revision || available[0]?.id || '';
   }
   async function loadCatalog() {
     if (fetching || !connected || !snapshot?.library_enabled) return;
@@ -92,7 +128,7 @@
       catalog = {...nextCatalog, revisions: nextCatalog.revisions || []}; saved = {...nextSelections, shortcuts: nextSelections.shortcuts || []}; catalogError = '';
       const select = el('library-select'), previous = select.value;
       const values = catalog.files.map(file => new Option(`${file.name} — ${file.state}${file.state === 'preparing' ? ` ${file.progress}%` : ''}`, file.id));
-      select.replaceChildren(...(values.length ? values : [new Option('No videos yet', '')]));
+      select.replaceChildren(new Option('All prepared revisions', ''), ...values);
       if (catalog.files.some(file => file.id === previous)) select.value = previous;
       renderRevisions();
       // Preserve an operator's edits and focus while background preparation progresses.
@@ -107,7 +143,23 @@
     window.broadcastStages?.request({action, ...extra}, confirmation);
     render();
   }
-  el('library-select').addEventListener('change', () => { renderRevisions(); render(); });
+  el('media-intent-dismiss').addEventListener('click', () => {
+    intent = null; intentError = '';
+    const url = new URL(location.href); for (const key of intentFields) url.searchParams.delete(key);
+    history.replaceState(null, '', url); render();
+  });
+  el('media-intent-review').addEventListener('click', () => {
+    if (!intent || intentProblem() || !connected || saving || window.broadcastStages?.busy()) return;
+    if (intent.media_action === 'select_next') {
+      draft ||= copy(saved); draft.prestream = intent.media_revision;
+      renderSelections(); render();
+      el('stage-selections-form').closest('details').open = true;
+      el('selection-prestream').focus(); el('selection-prestream').scrollIntoView({block: 'center'});
+    } else if (previewRevision === intent.media_revision) {
+      window.broadcastStages?.request({action: intent.media_action, revision: intent.media_revision}, true, {server_id: intent.server_id, context: intent.context});
+    }
+  });
+  el('library-select').addEventListener('change', () => { renderRevisions(true); render(); });
   el('library-revision').addEventListener('change', render);
   el('library-once').addEventListener('click', () => command('play_clip', {revision: revision()?.id, loop: false}));
   el('library-loop').addEventListener('click', () => command('play_clip', {revision: revision()?.id, loop: true}));
