@@ -726,8 +726,9 @@ Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin)
 ### Media generator drafts
 
 Open **Media generator** from the dashboard to create independent prestream or
-ending show designs. The first editor supports a multiline title scene, defaults
-to 10 seconds, and selects the built-in Retro theme revision independently of its
+ending show designs. Add, remove, reorder or independently duplicate title and
+list scenes. Each defaults to 10 seconds and selects the built-in Retro theme
+revision independently of its
 text and timing. Drafts autosave beneath `<library_directory>/generator/designs`
 (or the default BRB library directory). Wait for **Saved** before closing the tab.
 A failed save retains local edits and offers Retry; a concurrent-tab conflict
@@ -743,8 +744,16 @@ and text overflow produce field errors. Text wraps at spaces and explicit line
 breaks, preserves mixed case, and is never automatically shrunk or truncated.
 Clear the font-size field to inherit the theme's 64-point default.
 
-Draft input is limited to 64 KiB per request, 4096 UTF-8 bytes per title, 180 bytes
-per design name, and 200 saved designs. This first slice accepts one title scene.
+Draft input is limited to 64 KiB per request, 4096 UTF-8 bytes of combined title
+and item text per scene, 180 bytes per design name, and 200 saved designs. A
+composition has 1–20 scenes; list scenes have 1–20 separately editable items,
+each preserving explicit line breaks. Empty compositions can be saved for
+correction but cannot be previewed or generated. Each scene supports font and
+size overrides, left/center/right alignment, and a centered content region
+with width and height from 30–90% of the frame (blank inherits 80%). Layouts
+never permit unrestricted pixel positioning. Validation identifies the scene
+and list item; choose its error to open it. A valid scene can still be previewed
+while a different scene needs correction.
 Durations must be finite, greater than zero, and at most 3600 seconds; font sizes
 range from 24 to 120 at 1080p. These are bounded authoring limits, not rendering
 performance promises. Drafts retain invalid durations/unsupported glyphs for
@@ -771,11 +780,16 @@ on PATH; Alpine containers already install them. Both Linux architectures use
 the same static Go renderer and packaged FFmpeg. Third-party font and module
 licenses are included in `THIRD_PARTY_NOTICES`.
 
-Generation currently accepts one title scene, one active job, and at most 200
+Generation accepts up to 20 title/list scenes, one active job, and at most 200
 retained job records. Another job is rejected as busy until the active job ends
 or cancellation finishes. Output is limited to 512 MiB per job, with a 15-minute
 render/validation deadline. A scene raster uses at most 1920 × 1080 pixels; the
-single temporary workspace holds that PNG and the bounded output, and is removed
+temporary workspace holds at most 512 MiB of normalized video-only scene
+segments plus a raster during encoding, then at most 512 MiB of final output
+(under 1 GiB combined). Only one scene is rasterized and encoded at a time; a
+concat demuxer joins cuts without a many-input filter graph. One continuous
+silent AAC track is encoded for the complete sequence, avoiding per-scene audio
+priming gaps. The workspace is removed
 on success, cancellation or failure. Prepared revisions remain retained in the
 existing library. Keep enough persistent disk space for retained revisions;
 200 maximum-size generated outputs can occupy 100 GiB before library media.
@@ -784,16 +798,20 @@ Supported generation profiles are the active even-sized 320 × 180 through
 1920 × 1080 profile at 24, 25 or 30 fps, with stereo 44.1 or 48 kHz audio. Higher
 profiles remain available for other media and quick previews, but generation
 rejects them explicitly instead of silently downscaling. Generation supports up
-to 600 seconds; durations round to the nearest complete video frame and must
-contain at least one frame. The displayed generated duration reflects that
-rounding. Complete frame counts and audiovisual timing are checked before a
+to 600 seconds total; each scene duration rounds independently to the nearest
+complete video frame and must contain at least one frame. With cuts, total
+duration is the sum of those rounded scene durations. Both the editor and the
+generated result display that total (for example, two 1.02-second scenes at
+25 fps become two 26-frame scenes, totaling 2.08 seconds). Complete frame counts and audiovisual timing are checked before a
 revision becomes ready, including detection of output-limit truncation.
 
 These bounds are admission limits, not throughput or resource guarantees. Native
 FFmpeg 4.4 probes at 1080p30 measured a 600-second still in 27.6 seconds with about
 436 MiB peak memory, and 20 seconds of moving test media in 1.4 seconds with about
 390 MiB, using the ultrafast preset. Production uses veryfast; timings differ by
-hardware, version and workload. Encoding uses two threads and filter processing
+hardware, version and workload. A 20-input simultaneous scene probe used about
+848 MiB even for a short still sequence; the 20-scene admission cap therefore
+uses sequential normalization rather than simultaneous inputs. Encoding uses two threads and filter processing
 one thread. This bounds concurrency inside the process, not system-wide CPU or
 memory use. Ordinary library preparation currently has its own worker; avoid
 starting a large conversion alongside generation on a constrained host.

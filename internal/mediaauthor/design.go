@@ -1,17 +1,36 @@
 // Package mediaauthor defines authored media independently of broadcast playback.
 package mediaauthor
 
+import (
+	"fmt"
+	"math"
+)
+
 // ThemeRef pins appearance independently of scene content and timing.
 type ThemeRef struct {
 	ID       string `json:"id"`
 	Revision int    `json:"revision"`
 }
 
+// ContentRegion remains centered; percentages adjust its size without pixel positioning.
+// Zero values inherit the theme default.
+type ContentRegion struct {
+	WidthPercent  float64 `json:"width_percent,omitempty"`
+	HeightPercent float64 `json:"height_percent,omitempty"`
+}
+
+const MaxScenes = 20
+const MaxListItems = 20
+const MaxSceneTextBytes = 4096
+
 type Scene struct {
-	ID              string  `json:"id"`
-	Layout          string  `json:"layout"`
-	Text            string  `json:"text"`
-	DurationSeconds float64 `json:"duration_seconds"`
+	ID              string        `json:"id"`
+	Layout          string        `json:"layout"`
+	Text            string        `json:"text"`
+	Items           []string      `json:"items,omitempty"`
+	ContentRegion   ContentRegion `json:"content_region,omitempty"`
+	Alignment       string        `json:"alignment,omitempty"`
+	DurationSeconds float64       `json:"duration_seconds"`
 	// Empty font and zero font size inherit the selected theme.
 	Font     string  `json:"font,omitempty"`
 	FontSize float64 `json:"font_size,omitempty"`
@@ -30,4 +49,32 @@ type Design struct {
 type Issue struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
+}
+
+// CutDuration rounds every scene independently to the nearest video frame.
+func CutDuration(d Design, fps int) float64 {
+	if fps <= 0 {
+		return 0
+	}
+	frames := 0.0
+	for _, scene := range d.Scenes {
+		if scene.DurationSeconds > 0 && !math.IsNaN(scene.DurationSeconds) && !math.IsInf(scene.DurationSeconds, 0) {
+			frames += math.Round(scene.DurationSeconds * float64(fps))
+		}
+	}
+	return frames / float64(fps)
+}
+
+// ValidateCutTiming keeps displayed timing and generation admission consistent.
+func ValidateCutTiming(d Design, fps int) []Issue {
+	issues := make([]Issue, 0)
+	for i, scene := range d.Scenes {
+		if scene.DurationSeconds > 600 || (scene.DurationSeconds > 0 && math.Round(scene.DurationSeconds*float64(fps)) < 1) {
+			issues = append(issues, Issue{fmt.Sprintf("scenes.%d.duration_seconds", i), "Use at least one video frame and at most 600 seconds."})
+		}
+	}
+	if CutDuration(d, fps) > 600 {
+		issues = append(issues, Issue{"scenes", "The complete sequence must be at most 600 seconds after rounding each scene to video frames."})
+	}
+	return issues
 }

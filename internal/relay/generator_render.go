@@ -23,52 +23,58 @@ func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress 
 		return "", errors.New("Cannot create render workspace; check storage.")
 	}
 	defer os.RemoveAll(dir)
-	image, err := mediaauthor.RenderScene(j.Design.Scenes[0], j.Profile.Width, j.Profile.Height)
-	if err != nil {
-		return "", errors.New("The captured scene cannot be rendered; check its typography.")
-	}
-	still := filepath.Join(dir, "scene.png")
-	file, err := os.Create(still)
-	if err != nil {
-		return "", errors.New("Cannot save scene raster; check storage.")
-	}
-	err = png.Encode(file, image)
-	closeErr := file.Close()
-	if err != nil || closeErr != nil {
-		return "", errors.New("Cannot save scene raster; check storage.")
-	}
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-	output := filepath.Join(dir, "prepared.flv")
 	p := j.Profile
+	output := filepath.Join(dir, "prepared.flv")
+	// Normalize one still scene at a time. The concat demuxer opens only the
+	// current segment; a large design never creates a many-input filter graph.
+	var concat strings.Builder
+	var segmentBytes int64
+	completedFrames := 0
+	totalFrames := int(math.Round(j.Duration * float64(p.FPS)))
+	for i, scene := range j.Design.Scenes {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		still := filepath.Join(dir, "scene.png")
+		if err := writeSceneRaster(scene, p.Width, p.Height, still); err != nil {
+			return "", err
+		}
+		frames := int(math.Round(scene.DurationSeconds * float64(p.FPS)))
+		name := fmt.Sprintf("scene-%03d.mp4", i)
+		segment := filepath.Join(dir, name)
+		args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
+			"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
+			"-map", "0:v:0", "-an", "-frames:v", strconv.Itoa(frames), "-vf", "setsar=1,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-keyint_min", strconv.Itoa(p.FPS), "-sc_threshold", "0", "-threads", "2",
+			"-video_track_timescale", strconv.Itoa(p.FPS * 1000), "-fs", strconv.FormatInt(maxGeneratorOutputBytes-segmentBytes, 10), "-progress", "pipe:1", segment}
+		if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) {
+			progress(int(min(90, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*90))))
+		}); err != nil {
+			return "", err
+		}
+		info, err := os.Stat(segment)
+		if err != nil || info.Size() <= 0 {
+			return "", errors.New("Cannot read normalized scene; check storage.")
+		}
+		segmentBytes += info.Size()
+		if segmentBytes >= maxGeneratorOutputBytes {
+			return "", errors.New("Normalized scenes reached their combined 512 MiB limit. Shorten the design.")
+		}
+		fmt.Fprintf(&concat, "file '%s'\n", name)
+		completedFrames += frames
+	}
+	os.Remove(filepath.Join(dir, "scene.png"))
+	manifest := filepath.Join(dir, "sequence.txt")
+	if os.WriteFile(manifest, []byte(concat.String()), 0600) != nil {
+		return "", errors.New("Cannot save the scene sequence; check storage.")
+	}
+	// Audio is encoded once for the full sequence, avoiding per-scene AAC
+	// priming gaps. Scene intermediates plus final output are bounded to 1 GiB.
 	seconds := strconv.FormatFloat(j.Duration, 'f', 9, 64)
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
-		"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
-		"-f", "lavfi", "-i", fmt.Sprintf("anullsrc=r=%d:cl=stereo", p.SampleRate),
-		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds, "-vf", "setsar=1,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-keyint_min", strconv.Itoa(p.FPS), "-sc_threshold", "0", "-threads", "2",
-		"-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output}
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-	pipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", errors.New("Cannot start generation.")
-	}
-	if cmd.Start() != nil {
-		return "", errors.New("Cannot start FFmpeg; check the server installation.")
-	}
-	scanner := bufio.NewScanner(pipe)
-	for scanner.Scan() {
-		if value, ok := strings.CutPrefix(scanner.Text(), "out_time_us="); ok {
-			if n, err := strconv.ParseFloat(value, 64); err == nil {
-				progress(int(min(95, max(0, n/1e6/j.Duration*95))))
-			}
-		}
-	}
-	if err := cmd.Wait(); err != nil || scanner.Err() != nil {
-		return "", errors.New("Generation failed; check available storage and the FFmpeg installation.")
-	}
-	if ctx.Err() != nil {
-		return "", ctx.Err()
+		"-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest, "-f", "lavfi", "-i", fmt.Sprintf("anullsrc=r=%d:cl=stereo", p.SampleRate),
+		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds, "-c:v", "copy", "-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-threads", "2", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output}
+	if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) { progress(90 + int(min(5, max(0, seconds/j.Duration*5)))) }); err != nil {
+		return "", err
 	}
 	info, err := os.Stat(output)
 	if err != nil || info.Size() <= 0 || info.Size() >= maxGeneratorOutputBytes {
@@ -118,4 +124,44 @@ func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress 
 		return revision.ID, errors.New("The active streaming profile changed during generation. The completed candidate retains its original profile; generate again for the current profile.")
 	}
 	return revision.ID, nil
+}
+
+func writeSceneRaster(scene mediaauthor.Scene, width, height int, path string) error {
+	img, err := mediaauthor.RenderScene(scene, width, height)
+	if err != nil {
+		return errors.New("A captured scene cannot be rendered; check its typography and layout.")
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return errors.New("Cannot save scene raster; check storage.")
+	}
+	err = png.Encode(file, img)
+	closeErr := file.Close()
+	if err != nil || closeErr != nil {
+		return errors.New("Cannot save scene raster; check storage.")
+	}
+	return nil
+}
+
+func runGeneratorFFmpeg(ctx context.Context, args []string, progress func(float64)) error {
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	pipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return errors.New("Cannot start generation.")
+	}
+	if cmd.Start() != nil {
+		return errors.New("Cannot start FFmpeg; check the server installation.")
+	}
+	scanner := bufio.NewScanner(pipe)
+	for scanner.Scan() {
+		if value, ok := strings.CutPrefix(scanner.Text(), "out_time_us="); ok {
+			if n, err := strconv.ParseFloat(value, 64); err == nil {
+				progress(n / 1e6)
+			}
+		}
+	}
+	if err := cmd.Wait(); err != nil || scanner.Err() != nil {
+		return errors.New("Generation failed; check available storage and the FFmpeg installation.")
+	}
+	return ctx.Err()
 }

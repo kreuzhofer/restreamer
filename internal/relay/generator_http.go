@@ -10,6 +10,8 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
@@ -60,7 +62,7 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 			draft.Theme = mediaauthor.ThemeRef{ID: "retro", Revision: 1}
 		}
 		if !designBounds(draft) {
-			http.Error(w, "Design requires prestream or ending, one scene, a name up to 180 bytes, and text up to 4096 bytes", 400)
+			http.Error(w, "Design requires prestream or ending, at most 20 scenes, a name up to 180 bytes, and at most 4096 text bytes per scene", 400)
 			return
 		}
 	}
@@ -159,15 +161,31 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	profile := s.library.profile
 	s.library.mu.Unlock()
 	issues := mediaauthor.Validate(draft, profile.Width, profile.Height)
+	issues = append(issues, mediaauthor.ValidateCutTiming(draft, profile.FPS)...)
 	if r.URL.Path == "/api/generator/validate" {
-		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile})
+		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
 		return
 	}
-	if len(issues) > 0 {
-		generatorJSON(w, 422, map[string]any{"issues": issues})
+	sceneIndex := 0
+	if selected := r.URL.Query().Get("scene"); selected != "" {
+		var err error
+		sceneIndex, err = strconv.Atoi(selected)
+		if err != nil || sceneIndex < 0 || sceneIndex >= len(draft.Scenes) {
+			http.Error(w, "Select an existing scene", 400)
+			return
+		}
+	}
+	selectedIssues := make([]mediaauthor.Issue, 0)
+	for _, issue := range issues {
+		if !strings.HasPrefix(issue.Field, "scenes.") || strings.HasPrefix(issue.Field, fmtSceneField(sceneIndex, "")) {
+			selectedIssues = append(selectedIssues, issue)
+		}
+	}
+	if len(selectedIssues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": selectedIssues})
 		return
 	}
-	img, err := mediaauthor.RenderScene(draft.Scenes[0], profile.Width, profile.Height)
+	img, err := mediaauthor.RenderScene(draft.Scenes[sceneIndex], profile.Width, profile.Height)
 	if err != nil {
 		http.Error(w, "Cannot render scene preview", 422)
 		return

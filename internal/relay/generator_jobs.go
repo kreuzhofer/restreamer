@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,11 +100,7 @@ func generationIssues(d mediaauthor.Design, p config.BRBProfile) []mediaauthor.I
 	if p.Validate() != nil || p.Width > 1920 || p.Height > 1080 || p.FPS > 30 {
 		issues = append(issues, mediaauthor.Issue{Field: "profile", Message: "Generation supports active profiles up to 1920 × 1080 at 24, 25 or 30 fps. Change the profile explicitly before generating."})
 	}
-	for i, scene := range d.Scenes {
-		if scene.DurationSeconds > maxGeneratorSeconds || math.Round(scene.DurationSeconds*float64(p.FPS)) < 1 {
-			issues = append(issues, mediaauthor.Issue{Field: fmtSceneField(i, "duration_seconds"), Message: "Generation needs at least one video frame and at most 600 seconds."})
-		}
-	}
+	issues = append(issues, mediaauthor.ValidateCutTiming(d, p.FPS)...)
 	return issues
 }
 func fmtSceneField(i int, field string) string { return "scenes." + strconv.Itoa(i) + "." + field }
@@ -183,8 +178,8 @@ func newGenerationJob(d mediaauthor.Design, p config.BRBProfile) (GenerationJob,
 	if _, err := rand.Read(id[:]); err != nil {
 		return GenerationJob{}, err
 	}
-	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: "go-png-ffmpeg-v1", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	j.Duration = math.Round(d.Scenes[0].DurationSeconds*float64(p.FPS)) / float64(p.FPS)
+	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: "go-png-ffmpeg-v2", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	j.Duration = mediaauthor.CutDuration(d, p.FPS)
 	encoded, _ := json.Marshal(struct {
 		Design   mediaauthor.Design
 		Profile  config.BRBProfile
