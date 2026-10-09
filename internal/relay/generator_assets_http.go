@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"io"
 	"mime"
@@ -26,11 +28,17 @@ func (s *Server) generatorAssetsHTTP(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	out := make([]assetResponse, 0, len(g.assets))
+	allUses, err := s.assetUsesLocked("")
+	if err != nil {
+		http.Error(w, "Cannot inspect image uses; check saved designs", 503)
+		return
+	}
 	for _, a := range g.assets {
-		uses, err := s.assetUsesLocked(a.ID)
-		if err != nil {
-			http.Error(w, "Cannot inspect image uses; check saved designs", 503)
-			return
+		uses := make([]AssetUse, 0)
+		for _, use := range allUses {
+			if use.AssetID == a.ID {
+				uses = append(uses, use)
+			}
 		}
 		out = append(out, assetResponse{a, uses})
 	}
@@ -73,7 +81,7 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	part, err := parts.NextPart()
 	if err != nil || part.FormName() != "file" || !validAssetName(part.FileName()) {
-		http.Error(w, "Choose one image with a name up to180bytes and no control characters", 400)
+		http.Error(w, "Choose one image with a name up to 180 bytes and no control characters", 400)
 		return
 	}
 	name := part.FileName()
@@ -84,7 +92,15 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer os.RemoveAll(temp)
 	normalized := filepath.Join(temp, "image.png")
+	uploadCtx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	release, err := s.preparation.acquire(uploadCtx)
+	if err != nil {
+		http.Error(w, "Image preparation timed out while waiting; try again after current work finishes", 503)
+		return
+	}
 	meta, err := normalizeGeneratorImage(part, normalized)
+	release()
 	if err != nil {
 		http.Error(w, err.Error(), 422)
 		return
@@ -192,6 +208,13 @@ func (s *Server) generatorAssetImage(w http.ResponseWriter, r *http.Request) {
 	if !s.generatorAvailable(w) {
 		return
 	}
+	select {
+	case s.previewSlots <- struct{}{}:
+		defer func() { <-s.previewSlots }()
+	default:
+		http.Error(w, "Image viewer limit reached", 429)
+		return
+	}
 	revision, err := strconv.Atoi(r.PathValue("revision"))
 	if err != nil {
 		http.Error(w, "Image revision not found", 404)
@@ -217,11 +240,11 @@ func (s *Server) generatorAssetImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
-		http.Error(w, "Image revision is unavailable or changed", 409)
+	data, err := readImageRevision(f, meta)
+	if err != nil {
+		http.Error(w, err.Error(), 409)
 		return
 	}
 	w.Header().Set("Content-Type", "image/png")
-	http.ServeContent(w, r, "image.png", info.ModTime(), f)
+	http.ServeContent(w, r, "image.png", time.Time{}, bytes.NewReader(data))
 }

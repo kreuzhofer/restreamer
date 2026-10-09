@@ -171,6 +171,10 @@ func (s *Server) generatorTemplatesHTTP(w http.ResponseWriter, r *http.Request) 
 	next.Version = 1
 	next.Builtin = false
 	next.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if issues := g.assetIssues(next.Content); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
+		return
+	}
 	if err = g.writeTemplate(next); err != nil {
 		http.Error(w, "Template not saved; check generator storage and retry", 507)
 		return
@@ -221,6 +225,10 @@ func (s *Server) generatorTemplateHTTP(w http.ResponseWriter, r *http.Request) {
 	next.Version = current.Version + 1
 	next.Builtin = false
 	next.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if issues := g.assetIssues(next.Content); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
+		return
+	}
 	if err = g.writeTemplate(next); err != nil {
 		http.Error(w, "Template not saved; check generator storage and retry", 507)
 		return
@@ -288,6 +296,10 @@ func (s *Server) generatorTemplateCopyHTTP(w http.ResponseWriter, r *http.Reques
 	encoded, err := json.Marshal(draft)
 	if err != nil || len(encoded) > maxDesignBytes {
 		http.Error(w, "Copied design exceeds 64 KiB; shorten its name or reduce template content", 400)
+		return
+	}
+	if issues := g.assetIssues(draft); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
 	if err = g.write(draft); err != nil {

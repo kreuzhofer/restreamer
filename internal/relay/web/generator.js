@@ -21,11 +21,14 @@
   let reviewedRevision = '';
   let stageSelections = {};
   let onAirRevision = '';
+  let assets = [];
+  let assetsFetching = false;
+  let assetUploading = false;
   const fields = {
     name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
     font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
     duration_seconds: ['scene-duration', 'duration-error'], content_region: ['region-width', 'region-error'],
-    alignment: ['scene-alignment', 'alignment-error'], items: ['list-content', 'items-error']
+    alignment: ['scene-alignment', 'alignment-error'], image: ['scene-image', 'image-error'], items: ['list-content', 'items-error']
   };
   async function request(path, method = 'GET', body, signal) {
     const response = await fetch(new URL(path, location.origin), {method, credentials: 'same-origin', signal,
@@ -121,6 +124,8 @@
     $('region-width').value = scene.content_region?.width_percent || '';
     $('region-height').value = scene.content_region?.height_percent || '';
     $('list-content').hidden = scene.layout !== 'list';
+    document.querySelectorAll('[data-scene-text-controls]').forEach(control => { control.hidden = scene.layout === 'media'; });
+    renderImagePicker();
     $('list-items').replaceChildren();
     for (const [index, text] of (scene.items || []).entries()) {
       const row = document.createElement('div'); row.className = 'generator-list-item';
@@ -144,6 +149,8 @@
     draft.name = $('design-name').value;
     const scene = draft.scenes[selectedScene]; if (!scene) return;
     scene.layout = $('scene-layout').value;
+    const imageValue = $('scene-image').value;
+    if (imageValue) { const [id, revision] = imageValue.split(':'); scene.image = {id, revision: Number(revision)}; } else delete scene.image;
     scene.text = $('scene-text').value; scene.font = $('scene-font').value;
     scene.font_size = Number($('scene-size').value); scene.duration_seconds = Number($('scene-duration').value);
     scene.alignment = $('scene-alignment').value;
@@ -254,6 +261,7 @@
       saveState(dirty ? 'Unsaved local changes' : `Saved · version ${draft.version}`);
       history.replaceState(null, '', `/generator?id=${encodeURIComponent(draft.id)}`);
       listDesigns().catch(error => notify(error.message));
+      loadAssets();
     } catch (error) {
       conflict = error.status === 409;
       saveState(conflict ? 'Save conflict · local edits retained' : 'Not saved · local edits retained', error.message);
@@ -267,6 +275,7 @@
   $('scene-form').addEventListener('input', event => {
     captureFields();
     if (event.target.id === 'scene-layout') renderSelectedScene();
+    if (event.target.id === 'scene-image') renderImagePicker();
     changed();
   });
   $('save-retry').addEventListener('click', () => saveDraft());
@@ -433,6 +442,72 @@
     finally { jobRequest = false; renderJobs(); }
   });
   setInterval(loadJobs, 2000);
+
+
+  function assetError(message) { $('asset-error').textContent = message; $('asset-error').hidden = !message; }
+  function renderImagePicker() {
+    const scene = draft?.scenes[selectedScene]; if (!scene) return;
+    $('scene-image-controls').hidden = !scene.image && !['text-image', 'media'].includes(scene.layout);
+    const value = scene.image ? `${scene.image.id}:${scene.image.revision}` : '';
+    const options = [new Option('No image selected', '')];
+    for (const asset of assets) for (const revision of asset.revisions) options.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
+    if (value && !options.some(option => option.value === value)) options.push(new Option(`Unavailable image · revision ${scene.image.revision}`, value));
+    $('scene-image').replaceChildren(...options); $('scene-image').value = value;
+    const asset = assets.find(asset => asset.id === scene.image?.id);
+    $('adopt-image-revision').hidden = !asset || asset.revision === scene.image.revision;
+  }
+  function renderAssets() {
+    const target = $('asset-upload-target').value;
+    $('asset-upload-target').replaceChildren(new Option('New independent image', ''), ...assets.map(asset => new Option(`New revision of ${asset.name}`, asset.id)));
+    $('asset-upload-target').value = assets.some(asset => asset.id === target) ? target : '';
+    $('asset-list').replaceChildren();
+    for (const asset of assets) {
+      const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id;
+      const summary = document.createElement('summary'); summary.textContent = `${asset.name} · revision ${asset.revision} · ${asset.uses.length} use(s)`;
+      const img = document.createElement('img'); img.alt = asset.name; img.loading = 'lazy'; img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
+      const list = document.createElement('ul');
+      for (const use of asset.uses) { const item = document.createElement('li'); item.textContent = `${use.kind}: ${use.name} · revision ${use.revision}`; list.append(item); }
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete unused image'; remove.disabled = asset.uses.length > 0;
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Delete unused image “${asset.name}” and all its revisions?`)) return;
+        remove.disabled = true;
+        try { await request(`/api/generator/assets/${asset.id}`, 'DELETE', {}); assetError(''); await loadAssets(); }
+        catch (error) { assetError(error.message); await loadAssets(); }
+      });
+      card.append(summary, img, list, remove); $('asset-list').append(card);
+    }
+    renderImagePicker();
+  }
+  async function loadAssets() {
+    if (assetsFetching) return;
+    assetsFetching = true;
+    try { assets = await (await request('/api/generator/assets')).json(); renderAssets(); }
+    catch (error) { assetError(`Image library unavailable: ${error.message}`); }
+    finally { assetsFetching = false; }
+  }
+  $('asset-upload').addEventListener('submit', async event => {
+    event.preventDefault(); if (assetUploading) return;
+    const file = $('asset-file').files[0]; if (!file) return;
+    if (file.size > 10 * 1048576) { assetError('Choose a PNG or JPEG up to 10 MiB.'); return; }
+    const target = assets.find(asset => asset.id === $('asset-upload-target').value);
+    const data = new FormData(); data.append('file', file);
+    assetUploading = true; $('asset-upload-button').disabled = true; assetError(''); $('asset-status').textContent = 'Uploading image; preparation waits for current media work…';
+    try {
+      const path = target ? `/api/generator/assets/${target.id}/revisions?version=${target.revision}` : '/api/generator/assets';
+      const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'X-Restreamer-Control': '1'}, body: data});
+      if (!response.ok) throw new Error(await response.text());
+      const asset = await response.json(); $('asset-file').value = '';
+      $('asset-status').textContent = `${asset.name} saved as revision ${asset.revision}. Choose its revision in a scene to use it.`;
+      await loadAssets();
+    } catch (error) { assetError(error.message); $('asset-status').textContent = 'Image was not acknowledged as saved; previous revisions remain unchanged.'; }
+    finally { assetUploading = false; $('asset-upload-button').disabled = false; }
+  });
+  $('adopt-image-revision').addEventListener('click', () => {
+    const scene = draft?.scenes[selectedScene]; const asset = assets.find(asset => asset.id === scene?.image?.id);
+    if (!asset) return; scene.image = {id: asset.id, revision: asset.revision}; renderImagePicker(); changed();
+  });
+  $('asset-refresh').addEventListener('click', loadAssets);
+  loadAssets();
 
   window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {

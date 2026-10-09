@@ -44,6 +44,7 @@ type GeneratorAsset struct {
 	Revisions []AssetRevision `json:"revisions"`
 }
 type AssetUse struct {
+	AssetID  string `json:"asset_id"`
 	Kind     string `json:"kind"`
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -75,7 +76,7 @@ func (g *generatorStore) loadAssets() error {
 	}
 	total := 0
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
+		if strings.HasPrefix(entry.Name(), ".upload-") || strings.HasPrefix(entry.Name(), ".deleted-") {
 			if err := os.RemoveAll(filepath.Join(g.assetsRoot, entry.Name())); err != nil {
 				return errors.New("cannot clean interrupted asset upload")
 			}
@@ -137,13 +138,20 @@ func (g *generatorStore) assetUsesLocked(id string) ([]AssetUse, error) {
 	}
 	add := func(d mediaauthor.Design, kind, owner, name string) {
 		for _, ref := range mediaauthor.DesignAssetRefs(d) {
-			if ref.ID == id {
-				out = append(out, AssetUse{kind, owner, name, ref.Revision})
+			if id == "" || ref.ID == id {
+				out = append(out, AssetUse{AssetID: ref.ID, Kind: kind, ID: owner, Name: name, Revision: ref.Revision})
 			}
 		}
 	}
 	for _, d := range designs {
 		add(d, "design", d.ID, d.Name)
+	}
+	templates, err := g.listTemplates()
+	if err != nil {
+		return nil, err
+	}
+	for _, template := range templates {
+		add(template.Content, "template", template.ID, template.Name)
 	}
 	g.jobsMu.Lock()
 	defer g.jobsMu.Unlock()
@@ -171,13 +179,13 @@ func (s *Server) assetUsesLocked(id string) ([]AssetUse, error) {
 			continue
 		}
 		if stage.Media.Revision == u.ID {
-			uses = append(uses, AssetUse{"on_air", u.ID, u.Name, u.Revision})
+			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "on_air", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
 		if stage.ReturnMedia != nil && stage.ReturnMedia.Revision == u.ID {
-			uses = append(uses, AssetUse{"return", u.ID, u.Name, u.Revision})
+			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "return", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
 		if selected.Prestream == u.ID || selected.Ending == u.ID {
-			uses = append(uses, AssetUse{"selection", u.ID, u.Name, u.Revision})
+			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "selection", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
 	}
 	return uses, nil
@@ -204,13 +212,9 @@ func (s *Server) loadSceneImage(scene mediaauthor.Scene) (image.Image, error) {
 		return nil, errors.New("The captured image revision is unavailable.")
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxAssetImageBytes+1))
-	if err != nil || int64(len(data)) != meta.Bytes {
-		return nil, errors.New("Cannot read the captured image revision.")
-	}
-	digest := sha256.Sum256(data)
-	if hex.EncodeToString(digest[:]) != meta.Digest {
-		return nil, errors.New("The captured image revision changed. Upload a new revision and adopt it explicitly.")
+	data, err := readImageRevision(file, meta)
+	if err != nil {
+		return nil, err
 	}
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || format != "png" || config.Width != meta.Width || config.Height != meta.Height {
@@ -230,7 +234,7 @@ type assetLimitWriter struct {
 
 func (w *assetLimitWriter) Write(p []byte) (int, error) {
 	if int64(len(p)) > w.remaining {
-		return 0, errors.New("Normalized image exceeds32MiB; reduce its dimensions.")
+		return 0, errors.New("Normalized image exceeds 32 MiB; reduce its dimensions.")
 	}
 	n, err := w.Writer.Write(p)
 	w.remaining -= int64(n)
@@ -257,15 +261,15 @@ func normalizeGeneratorImage(src io.Reader, path string) (AssetRevision, error) 
 	syncErr := f.Sync()
 	closeErr := f.Close()
 	if err != nil || syncErr != nil || closeErr != nil {
-		return AssetRevision{}, errors.New("Cannot normalize image within32MiB; reduce dimensions or check storage.")
+		return AssetRevision{}, errors.New("Cannot normalize image within 32 MiB; reduce dimensions or check storage.")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return AssetRevision{}, err
+		return AssetRevision{}, errors.New("Cannot inspect normalized image; check storage.")
 	}
 	digest, err := mediaDigest(path)
 	if err != nil {
-		return AssetRevision{}, err
+		return AssetRevision{}, errors.New("Cannot verify normalized image; check storage.")
 	}
 	return AssetRevision{Digest: digest, Bytes: info.Size(), Width: config.Width, Height: config.Height, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}, nil
 }
@@ -273,4 +277,20 @@ func assetIdentity() (string, error) {
 	var id [16]byte
 	_, err := rand.Read(id[:])
 	return hex.EncodeToString(id[:]), err
+}
+
+func readImageRevision(file *os.File, meta AssetRevision) ([]byte, error) {
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
+		return nil, errors.New("The image revision is unavailable or changed.")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxAssetImageBytes+1))
+	if err != nil || int64(len(data)) != meta.Bytes {
+		return nil, errors.New("Cannot read the captured image revision.")
+	}
+	digest := sha256.Sum256(data)
+	if hex.EncodeToString(digest[:]) != meta.Digest {
+		return nil, errors.New("The captured image revision changed. Upload a new revision and adopt it explicitly.")
+	}
+	return data, nil
 }

@@ -870,3 +870,41 @@ substituting a different profile. Authenticated APIs expose jobs at
 `/api/generator/jobs`, individual outcomes at `/api/generator/jobs/{id}`, and
 cancellation at `/api/generator/jobs/{id}/cancel`, and explicit captured-input
 retry at `/api/generator/jobs/{id}/retry` (POST with an empty JSON object).
+
+### Reusable images and logos
+
+The generator's **Reusable images** library accepts PNG and JPEG files up to
+10 MiB and 20 megapixels, matching the existing BRB image input bounds. Uploads
+are decoded only after checking their format and dimensions, then normalized to
+PNG with transparency preserved. Normalized images are limited to 32 MiB, with
+200 total retained image revisions per server (at most 6.25 GiB of image data).
+One upload runs at a time and shares the media preparation slot; waiting has a
+one-minute deadline. Exact image viewing shares the eight preview-reader slots.
+These are storage and admission limits, not throughput guarantees.
+
+Use **Text with image** for text and an image in two columns inside the centered
+content region, or **Full-screen media** for a proportional full-frame image.
+Images are contained without cropping or distortion; transparent areas use the
+scene background. Setting custom content dimensions insets full-screen media.
+Text layouts retain typography and alignment controls; media layouts show only
+the applicable image, duration and content-region controls.
+
+Each upload creates an independent asset regardless of filename. Choose an
+existing asset as the upload destination to append an immutable revision;
+concurrent replacements require reloading its latest version. Existing scenes
+keep their exact selected revision. Choose another revision, or **Use latest
+image revision**, to adopt an update explicitly. Quick preview and generation
+resolve the same pinned bytes and verify their stored digest; changed or missing
+files produce errors instead of substitution.
+
+The image library lists uses in saved designs, content templates, captured jobs,
+prepared results,
+saved stage selections, on-air media and suspended return media. Deletion removes
+an entire unused asset and all its revisions; any reference blocks deletion.
+Failed and cancelled jobs retain their captured image inputs for explicit retry.
+Switching a scene's layout preserves its selected image; choose **No image
+selected** to remove that reference. Refresh the image library to see changes
+made in another tab. Assets and metadata persist under
+`<library_directory>/generator/assets`; temporary uploads are removed on failure
+or recovered at restart. Existing BRB uploads remain independent of this library
+until shared themes are introduced.

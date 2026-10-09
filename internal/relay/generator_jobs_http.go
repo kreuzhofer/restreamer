@@ -157,6 +157,8 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := s.generator
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.jobsMu.Lock()
 	defer g.jobsMu.Unlock()
 	previous := g.jobs[r.PathValue("id")]
@@ -170,6 +172,10 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if previous.Renderer != generatorRenderer {
 		http.Error(w, "The captured renderer is unavailable after a server update. This exact retry cannot run. Generate saved draft creates a new job and may include newer edits.", 409)
+		return
+	}
+	if issues := g.assetIssues(previous.Design); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
 	identity, err := newGenerationJob(previous.Design, previous.Profile)
