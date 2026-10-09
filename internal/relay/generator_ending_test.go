@@ -70,6 +70,8 @@ func TestGeneratorEndingFinishFadesWholeCompositionWithoutAddingTime(t *testing.
 	video := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "split.mp4", generatorSplitVideo(t)))
 	music := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "music.wav", musicFixture(t, "sine=frequency=1320:sample_rate=48000", 3)))
 	d := videoDesign(t, s, video.ID, 2, 0, 1, 100, true, true)
+	d.Theme.Revision = 2
+	d.Scenes[0].ContentRegion = mediaauthor.ContentRegion{WidthPercent: 60, HeightPercent: 60}
 	second := d.Scenes[0]
 	second.ID = "last"
 	second.DurationSeconds = .4
@@ -258,5 +260,21 @@ func TestGeneratorEndingFinishUsesFrameRoundedBoundaryAtSupportedRates(t *testin
 				}
 			}
 		})
+	}
+}
+
+func TestGeneratorEndingDefaultMustFitAfterInternalOverlaps(t *testing.T) {
+	s := libraryServer(t)
+	body := `{"name":"Short overlap ending","stage":"ending","theme":{"id":"retro","revision":1},"scenes":[{"id":"a","layout":"title","text":"One","duration_seconds":0.6,"transition":{"kind":"crossfade","duration_seconds":0.4}},{"id":"b","layout":"title","text":"Two","duration_seconds":0.6}]}`
+	w := dashboardRequest(s, "POST", "/api/generator/validate", body)
+	var result struct {
+		Duration float64             `json:"duration_seconds"`
+		Issues   []mediaauthor.Issue `json:"issues"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if result.Duration != .8 || len(result.Issues) != 1 || result.Issues[0].Field != "ending_fade_seconds" {
+		t.Fatal("default used raw scene sum instead of final composition", w.Body.String())
 	}
 }
