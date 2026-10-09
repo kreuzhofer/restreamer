@@ -12,6 +12,7 @@ import time
 import urllib.request
 import uuid
 import wave
+import zlib
 
 base = os.environ.get('GENERATOR_URL', 'http://127.0.0.1:18792')
 auth = base64.b64encode((os.environ.get('GENERATOR_USER', 'stage-test') + ':' + os.environ.get('GENERATOR_PASSWORD', 'stage-test')).encode()).decode()
@@ -66,6 +67,9 @@ if '--verify-restart' in sys.argv:
     assert video['state'] == 'ready' and video['media_revision'] == saved['video_revision'], video
     assert video['design_snapshot']['scenes'][0]['video']['asset'] == saved['video_asset'], video
     assert video['design_snapshot']['soundtrack']['asset'] == saved['music_asset'], video
+    assert video['design_snapshot']['theme'] == saved['theme'], video
+    assert video['theme_snapshot']['style']['effect'] == 'pixel-trail', video
+    assert video['theme_snapshot']['style']['logo'] == saved['logo_asset'], video
     print('Generated revision and captured inputs survived restart')
     sys.exit(0)
 
@@ -93,14 +97,29 @@ with wave.open(music_bytes, 'wb') as wav:
     wav.writeframes(b''.join(struct.pack('<h', round(5000 * math.sin(2 * math.pi * 440 * i / 48000))) for i in range(14400)))
 music = upload_asset('audio', 'smoke.wav', 'audio/wav', music_bytes.getvalue())
 music_ref = {'id': music['id'], 'revision': music['revision']}
-video_draft = request('/api/generator/designs', 'POST', {'name': 'Video trim and repeat smoke', 'stage': 'prestream'})
-video_draft['scenes'][0].update(layout='media', media_kind='video', duration_seconds=1.2, video=dict(asset=asset_ref, trim_start_seconds=.2, trim_end_seconds=.8, repeat=True, audio_enabled=True, audio_volume_percent=50))
+def png_chunk(kind, data):
+    return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+logo_png = b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('>IIBBBBB', 16, 8, 8, 2, 0, 0, 0)) + png_chunk(b'IDAT', zlib.compress((b'\x00' + b'\xff\xdd\x00' * 16) * 8)) + png_chunk(b'IEND', b'')
+logo = upload_asset('image', 'smoke.png', 'image/png', logo_png)
+logo_ref = {'id': logo['id'], 'revision': logo['revision']}
+theme = request('/api/generator/themes', 'POST', {'name': 'Container smoke theme', 'base': {'id': 'retro', 'revision': 2}})
+theme['style']['logo'] = logo_ref
+theme = request('/api/generator/themes/' + theme['id'], 'PUT', theme)
+theme_ref = {'id': theme['id'], 'revision': theme['revision']}
+video_draft = request('/api/generator/designs', 'POST', {'name': 'Video trim and repeat smoke', 'stage': 'prestream', 'theme': theme_ref})
+video_draft['scenes'][0].update(layout='media', media_kind='video', duration_seconds=1.2, content_region={'width_percent': 60, 'height_percent': 60}, video=dict(asset=asset_ref, trim_start_seconds=.2, trim_end_seconds=.8, repeat=True, audio_enabled=True, audio_volume_percent=50))
 video_draft['soundtrack'] = dict(asset=music_ref, mode='repeat', volume_percent=30, fade_in_seconds=.1, fade_out_seconds=.1)
 video_draft = request('/api/generator/designs/' + video_draft['id'], 'PUT', video_draft)
 video_job = request('/api/generator/jobs', 'POST', {'design_id': video_draft['id'], 'version': video_draft['version']})
+# A shared theme edit must not change the captured rendering or retained logo.
+theme['style']['effect'] = 'none'
+theme['style'].pop('logo')
+request('/api/generator/themes/' + theme['id'], 'PUT', theme)
 video_job = wait_for('/api/generator/jobs/' + video_job['id'], lambda item: item['state'] in ('ready', 'failed', 'cancelled', 'interrupted'))
 assert video_job['state'] == 'ready', video_job
 assert 0 < video_job['mix_gain'] <= 1, video_job
+assert video_job['theme_snapshot']['style']['effect'] == 'pixel-trail', video_job
+assert video_job['theme_snapshot']['style']['logo'] == logo_ref, video_job
 video_output = output.with_name(output.stem + '-video.mp4')
 video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview', raw=True))
 
@@ -114,7 +133,7 @@ stage_command('end_stream', revision=revision)
 wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
-result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_preview': str(video_output)}
+result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_preview': str(video_output)}
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))
 print(json.dumps(result))
