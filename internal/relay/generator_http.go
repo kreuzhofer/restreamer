@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image/png"
 	"io"
 	"mime"
@@ -32,16 +33,20 @@ func (s *Server) generatorAvailable(w http.ResponseWriter) bool {
 }
 
 func generatorDecode(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return generatorDecodeLimit(w, r, dst, maxDesignBytes)
+}
+
+func generatorDecodeLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
 	typ, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if !controlOriginAllowed(r) || typ != "application/json" {
 		http.Error(w, "Control requests require same origin and JSON", 403)
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxDesignBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if dec.Decode(dst) != nil || dec.Decode(new(any)) != io.EOF {
-		http.Error(w, "Invalid or oversized design JSON (maximum 64 KiB)", 400)
+		http.Error(w, fmt.Sprintf("Invalid or oversized authoring JSON (maximum %d KiB)", limit/1024), 400)
 		return false
 	}
 	return true
@@ -90,6 +95,10 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 	draft.Version = 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if err = g.write(draft); err != nil {
+		if errors.Is(err, errDesignTooLarge) {
+			http.Error(w, "Design exceeds 64 KiB after JSON encoding; reduce its content and retry", 400)
+			return
+		}
 		http.Error(w, "Draft not saved; check generator storage and retry", 507)
 		return
 	}
@@ -134,6 +143,10 @@ func (s *Server) generatorDesignHTTP(w http.ResponseWriter, r *http.Request) {
 	draft.Version = current.Version + 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if err = g.write(draft); err != nil {
+		if errors.Is(err, errDesignTooLarge) {
+			http.Error(w, "Design exceeds 64 KiB after JSON encoding; reduce its content and retry", 400)
+			return
+		}
 		http.Error(w, "Draft not saved; check generator storage and retry", 507)
 		return
 	}

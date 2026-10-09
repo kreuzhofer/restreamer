@@ -287,7 +287,8 @@
     const sequence = editSequence;
     try {
       const template = templates.find(item => item.id === $('new-template').value);
-      const theme = {id: 'retro', revision: 1};
+      const [themeID, themeRevision] = $('new-theme').value.split(':');
+      const theme = {id: themeID, revision: Number(themeRevision)};
       const path = template ? `/api/generator/templates/${template.id}/designs` : '/api/generator/designs';
       const body = template ? {name: $('new-name').value, version: template.version, theme} : {name: $('new-name').value, stage: $('new-stage').value, theme};
       const created = await (await request(path, 'POST', body)).json();

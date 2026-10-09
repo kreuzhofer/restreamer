@@ -739,7 +739,8 @@ Concurrent updates fail visibly and retain local work; reload the latest templat
 as a new design, or save local work as a new template.
 
 Up to 200 user templates persist beneath `<library_directory>/generator/templates`.
-Template requests share the 64 KiB authoring limit. The authenticated JSON API is
+Template requests allow 65 KiB, including a 1 KiB envelope around the existing
+64 KiB design limit. The authenticated JSON API is
 `/api/generator/templates` (list/create), `/api/generator/templates/{id}`
 (read/versioned update), and `/api/generator/templates/{id}/designs`
 (create an independent design from an exact template version and selected theme).

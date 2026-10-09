@@ -17,6 +17,8 @@ import (
 const maxDesignBytes = 64 << 10
 const maxDesigns = 200
 
+var errDesignTooLarge = errors.New("design exceeds 64 KiB after JSON encoding")
+
 type generatorStore struct {
 	mu                 sync.Mutex
 	previewMu          sync.Mutex
@@ -137,8 +139,11 @@ func (g *generatorStore) list() ([]mediaauthor.Design, error) {
 // a new version, so clients retain their local edits and can retry safely.
 func (g *generatorStore) write(d mediaauthor.Design) error {
 	data, err := json.Marshal(d)
-	if err != nil || len(data) > maxDesignBytes {
+	if err != nil {
 		return errors.New("invalid draft")
+	}
+	if len(data) > maxDesignBytes {
+		return errDesignTooLarge
 	}
 	f, err := os.CreateTemp(g.root, ".draft-*")
 	if err != nil {

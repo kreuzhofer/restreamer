@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -206,5 +207,77 @@ func TestTemplateControlsRejectUntrustedRequestsAndSaveFailures(t *testing.T) {
 	}
 	if w = dashboardRequest(s, "GET", "/api/generator/templates/"+template.ID, ""); w.Body.String() != saved {
 		t.Fatal("failed update changed saved template")
+	}
+}
+
+func TestTemplateEnvelopePreservesAValidNearLimitDesign(t *testing.T) {
+	s := libraryServer(t)
+	d := mediaauthor.Design{Name: "Large reusable composition", Stage: "prestream", Theme: mediaauthor.ThemeRef{ID: "retro", Revision: 1}}
+	for i := 0; i < 20; i++ {
+		d.Scenes = append(d.Scenes, mediaauthor.Scene{ID: fmt.Sprintf("scene-%d", i), Layout: "title", DurationSeconds: 1})
+	}
+	encoded, _ := json.Marshal(d)
+	remaining := maxDesignBytes - 128 - len(encoded)
+	for i := range d.Scenes {
+		n := remaining
+		if n > 4000 {
+			n = 4000
+		}
+		d.Scenes[i].Text = strings.Repeat("x", n)
+		remaining -= n
+	}
+	encoded, _ = json.Marshal(d)
+	w := dashboardRequest(s, "POST", "/api/generator/designs", string(encoded))
+	if w.Code != 201 {
+		t.Fatalf("valid near-limit draft: %d %s", w.Code, w.Body.String())
+	}
+	var saved mediaauthor.Design
+	json.Unmarshal(w.Body.Bytes(), &saved)
+	payload, _ := json.Marshal(ContentTemplate{Name: strings.Repeat("T", 180), Content: saved})
+	if len(payload) <= maxDesignBytes {
+		t.Fatal("fixture did not exercise template envelope overhead")
+	}
+	w = dashboardRequest(s, "POST", "/api/generator/templates", string(payload))
+	if w.Code != 201 {
+		t.Fatalf("template envelope rejected valid content: %d %s", w.Code, w.Body.String())
+	}
+	var template ContentTemplate
+	json.Unmarshal(w.Body.Bytes(), &template)
+	template.Name = strings.Repeat("U", 180)
+	payload, _ = json.Marshal(template)
+	if w = dashboardRequest(s, "PUT", "/api/generator/templates/"+template.ID, string(payload)); w.Code != 200 {
+		t.Fatalf("near-limit template update: %d %s", w.Code, w.Body.String())
+	}
+	restarted := New(s.cfg, s.log)
+	w = dashboardRequest(restarted, "GET", "/api/generator/templates/"+template.ID, "")
+	if w.Code != 200 {
+		t.Fatalf("reload: %d %s", w.Code, w.Body.String())
+	}
+	w = dashboardRequest(restarted, "POST", "/api/generator/templates/"+template.ID+"/designs", `{"name":"Recovered","version":2,"theme":{"id":"retro","revision":1}}`)
+	if w.Code != 201 {
+		t.Fatalf("copy: %d %s", w.Code, w.Body.String())
+	}
+	var copy mediaauthor.Design
+	json.Unmarshal(w.Body.Bytes(), &copy)
+	if !reflect.DeepEqual(copy.Scenes, saved.Scenes) {
+		t.Fatal("near-limit content lost during template round-trip")
+	}
+}
+
+func TestDesignEncodingLimitIsAnInputErrorAndPreservesSavedDraft(t *testing.T) {
+	s := libraryServer(t)
+	initial := dashboardRequest(s, "POST", "/api/generator/designs", `{"name":"Last good","stage":"prestream"}`)
+	var d mediaauthor.Design
+	json.Unmarshal(initial.Body.Bytes(), &d)
+	rawScenes := `[{"id":"one","layout":"title","duration_seconds":1,"text":"` + strings.Repeat("<", 4096) + `"},{"id":"two","layout":"title","duration_seconds":1,"text":"` + strings.Repeat("<", 4096) + `"},{"id":"three","layout":"title","duration_seconds":1,"text":"` + strings.Repeat("<", 4096) + `"}]`
+	body := fmt.Sprintf(`{"name":"Escaped content","stage":"prestream","version":%d,"theme":{"id":"retro","revision":1},"scenes":%s}`, d.Version, rawScenes)
+	for _, request := range []struct{ method, path string }{{"POST", "/api/generator/designs"}, {"PUT", "/api/generator/designs/" + d.ID}} {
+		w := dashboardRequest(s, request.method, request.path, body)
+		if w.Code != 400 || !strings.Contains(w.Body.String(), "64 KiB") {
+			t.Fatalf("encoding bound is not actionable input error: %d %s", w.Code, w.Body.String())
+		}
+	}
+	if w := dashboardRequest(s, "GET", "/api/generator/designs/"+d.ID, ""); w.Body.String() != initial.Body.String() {
+		t.Fatal("invalid-size save changed last good draft")
 	}
 }

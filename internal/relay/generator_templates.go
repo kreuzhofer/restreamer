@@ -79,7 +79,8 @@ func (g *generatorStore) readTemplate(id string) (ContentTemplate, error) {
 }
 
 func templateBounds(t ContentTemplate) bool {
-	return strings.TrimSpace(t.Name) != "" && len(t.Name) <= 180 && utf8.ValidString(t.Name) && designBounds(t.Content)
+	content, err := json.Marshal(t.Content)
+	return err == nil && len(content) <= maxDesignBytes && strings.TrimSpace(t.Name) != "" && len(t.Name) <= 180 && utf8.ValidString(t.Name) && designBounds(t.Content)
 }
 
 // Caller holds mu, sharing publication/deletion serialization with drafts and assets.
@@ -136,7 +137,7 @@ func (s *Server) generatorTemplatesHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	var next ContentTemplate
 	if r.Method == "POST" {
-		if !generatorDecode(w, r, &next) {
+		if !generatorDecodeLimit(w, r, &next, maxTemplateBytes) {
 			return
 		}
 		next.Content = templateContent(next.Content)
@@ -183,7 +184,7 @@ func (s *Server) generatorTemplateHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var next ContentTemplate
 	if r.Method == "PUT" {
-		if !generatorDecode(w, r, &next) {
+		if !generatorDecodeLimit(w, r, &next, maxTemplateBytes) {
 			return
 		}
 		next.Content = templateContent(next.Content)
@@ -284,6 +285,11 @@ func (s *Server) generatorTemplateCopyHTTP(w http.ResponseWriter, r *http.Reques
 	draft.ID = hex.EncodeToString(id[:])
 	draft.Version = 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	encoded, err := json.Marshal(draft)
+	if err != nil || len(encoded) > maxDesignBytes {
+		http.Error(w, "Copied design exceeds 64 KiB; shorten its name or reduce template content", 400)
+		return
+	}
 	if err = g.write(draft); err != nil {
 		http.Error(w, "Draft not saved; check generator storage and retry", 507)
 		return
