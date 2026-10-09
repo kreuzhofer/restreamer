@@ -9,8 +9,10 @@ import (
 // regions never intersect, so composition needs at most two scene inputs.
 type SceneTiming struct{ Start, Frames, Incoming, Outgoing int }
 type SequenceTiming struct {
-	Scenes []SceneTiming
-	Frames int
+	Scenes            []SceneTiming
+	Frames            int
+	CompositionFrames int
+	LoopFrames        int
 }
 
 func PlanTiming(d Design, fps int) (SequenceTiming, []Issue) {
@@ -62,6 +64,31 @@ func PlanTiming(d Design, fps int) (SequenceTiming, []Issue) {
 		}
 		plan.Frames += scene.Frames - scene.Outgoing
 	}
+	plan.CompositionFrames = plan.Frames
+	if d.Stage == "prestream" && d.LoopTransition != nil {
+		tr := d.LoopTransition
+		switch tr.Kind {
+		case "cut":
+			if tr.DurationSeconds != 0 {
+				issues = append(issues, Issue{"loop_transition.duration_seconds", "A loop cut has no overlap duration."})
+			}
+		case "crossfade":
+			if math.IsNaN(tr.DurationSeconds) || math.IsInf(tr.DurationSeconds, 0) || tr.DurationSeconds <= 0 || tr.DurationSeconds > 600 || math.Round(tr.DurationSeconds*float64(fps)) < 1 {
+				issues = append(issues, Issue{"loop_transition.duration_seconds", "Use a finite loop crossfade of at least one video frame and at most 600 seconds."})
+			} else if len(plan.Scenes) > 0 {
+				b := int(math.Round(tr.DurationSeconds * float64(fps)))
+				first, last := plan.Scenes[0], plan.Scenes[len(plan.Scenes)-1]
+				if b+first.Outgoing > first.Frames || last.Incoming+b > last.Frames || (len(plan.Scenes) == 1 && 2*b > first.Frames) {
+					issues = append(issues, Issue{"loop_transition.duration_seconds", "The loop crossfade and adjacent transitions must fit the first and last scenes; a single scene needs room for both ends."})
+				} else {
+					plan.LoopFrames = b
+					plan.Frames -= b
+				}
+			}
+		default:
+			issues = append(issues, Issue{"loop_transition.kind", "Choose cut or crossfade at the loop boundary."})
+		}
+	}
 	if raw > 600*fps {
 		issues = append(issues, Issue{"scenes", "The scenes before overlaps must total at most 600 seconds after rounding to video frames."})
 	}
@@ -76,3 +103,12 @@ func SequenceDuration(d Design, fps int) float64 {
 	return float64(max(0, p.Frames)) / float64(fps)
 }
 func ValidateTiming(d Design, fps int) []Issue { _, issues := PlanTiming(d, fps); return issues }
+
+// CompositionDuration is the complete scene/music timeline before circular overlap.
+func CompositionDuration(d Design, fps int) float64 {
+	if fps <= 0 {
+		return 0
+	}
+	p, _ := PlanTiming(d, fps)
+	return float64(max(0, p.CompositionFrames)) / float64(fps)
+}

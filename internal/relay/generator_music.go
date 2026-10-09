@@ -31,7 +31,7 @@ func (g *generatorStore) musicIssues(d mediaauthor.Design, fps, rate int) []medi
 		add("volume_percent", "Music volume must be between 0 and 100%.")
 	}
 	meta, ok := g.assetRevision(m.Asset)
-	length := sampleBoundary(int(math.Round(mediaauthor.SequenceDuration(d, fps)*float64(fps))), rate, fps)
+	length := sampleBoundary(int(math.Round(mediaauthor.CompositionDuration(d, fps)*float64(fps))), rate, fps)
 	if ok && m.Mode == "end" {
 		length = min(length, int64(math.Round(float64(meta.Samples)*float64(rate)/48000)))
 	}

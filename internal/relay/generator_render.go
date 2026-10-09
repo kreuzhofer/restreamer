@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
@@ -50,11 +51,11 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	}
 	defer pcm.Close()
 	// Reserve the complete continuous PCM stream before accepting scene segments.
-	segmentBytes := sampleBoundary(int(math.Round(j.Duration*float64(p.FPS))), p.SampleRate, p.FPS) * 4
 	plan, timingIssues := mediaauthor.PlanTiming(j.Design, p.FPS)
 	if len(timingIssues) > 0 {
 		return "", errors.New("Captured transition timing is invalid.")
 	}
+	segmentBytes := sampleBoundary(plan.CompositionFrames, p.SampleRate, p.FPS) * 4
 	transitions := false
 	for _, timing := range plan.Scenes {
 		transitions = transitions || timing.Outgoing > 0
@@ -65,7 +66,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 		}
 	}
 	completedFrames := 0
-	totalFrames := int(math.Round(j.Duration * float64(p.FPS)))
+	totalFrames := plan.CompositionFrames
 	for i, scene := range j.Design.Scenes {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -145,7 +146,9 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 		concat.WriteString(assembly)
 	}
 	if j.Design.Soundtrack != nil {
-		gain, err := s.mixGeneratorMusic(ctx, *j, pcmPath, dir, maxGeneratorOutputBytes-segmentBytes)
+		musicJob := *j
+		musicJob.Duration = float64(plan.CompositionFrames) / float64(p.FPS)
+		gain, err := s.mixGeneratorMusic(ctx, musicJob, pcmPath, dir, maxGeneratorOutputBytes-segmentBytes)
 		if err != nil {
 			return "", err
 		}
@@ -156,14 +159,35 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	if os.WriteFile(manifest, []byte(concat.String()), 0600) != nil {
 		return "", errors.New("Cannot save the scene sequence; check storage.")
 	}
+	if j.Design.Stage == "prestream" && plan.LoopFrames > 0 {
+		manifest, segmentBytes, err = s.prepareCircularSequence(ctx, plan, p, manifest, pcmPath, dir, segmentBytes)
+		if err != nil {
+			return "", err
+		}
+	}
 	// Audio is encoded once for the full sequence, avoiding per-scene AAC
 	// priming gaps. Scene intermediates plus final output are bounded to 1 GiB.
-	seconds := strconv.FormatFloat(j.Duration, 'f', 9, 64)
-	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
-		"-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest, "-f", "s16le", "-ar", strconv.Itoa(p.SampleRate), "-ac", "2", "-i", pcmPath,
-		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds, "-c:v", "copy", "-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-threads", "2", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output}
+	preroll := 0.0
+	if j.Design.Stage == "prestream" {
+		if err := warmCircularPCM(ctx, pcmPath, sampleBoundary(plan.Frames, p.SampleRate, p.FPS), maxGeneratorOutputBytes-segmentBytes); err != nil {
+			return "", err
+		}
+		preroll = float64(cyclicWarmSamples) / float64(p.SampleRate)
+	}
+	seconds := strconv.FormatFloat(j.Duration+2*preroll, 'f', 9, 64)
+	args := generatorBaseArgs()
+	if preroll > 0 {
+		args = append(args, "-itsoffset", decimal(preroll))
+	}
+	args = append(args, "-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest, "-f", "s16le", "-ar", strconv.Itoa(p.SampleRate), "-ac", "2", "-i", pcmPath,
+		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds, "-c:v", "copy", "-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-threads", "2", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output)
 	if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) { progress(90 + int(min(5, max(0, seconds/j.Duration*5)))) }); err != nil {
 		return "", err
+	}
+	if preroll > 0 {
+		if err := retainCircularFLV(ctx, output, time.Duration(plan.Frames)*time.Second/time.Duration(p.FPS)); err != nil {
+			return "", err
+		}
 	}
 	info, err := os.Stat(output)
 	if err != nil || info.Size() <= 0 || info.Size() >= maxGeneratorOutputBytes {
@@ -199,8 +223,11 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 		return "", ctx.Err()
 	}
 	entry := &LibraryEntry{ID: "generator-" + j.ID, Name: j.Design.Name, Profile: p, Duration: j.Duration, index: idx, path: output}
-	revision, err := s.library.prepareRetainedRevision(entry)
+	revision, err := s.library.prepareRetainedRevision(entry, GeneratedTiming{Version: 1, Frames: frames})
 	if err != nil {
+		if errors.Is(err, errGeneratedTimingCollision) {
+			return "", err
+		}
 		return "", errors.New("Cannot retain the generated media revision; check storage.")
 	}
 	s.library.mu.Lock()

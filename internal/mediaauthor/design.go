@@ -78,14 +78,15 @@ func (m Soundtrack) Volume() float64 {
 }
 
 type Design struct {
-	Soundtrack *Soundtrack `json:"soundtrack,omitempty"`
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	Stage      string      `json:"stage"`
-	Version    int         `json:"version"`
-	Theme      ThemeRef    `json:"theme"`
-	Scenes     []Scene     `json:"scenes"`
-	UpdatedAt  string      `json:"updated_at"`
+	LoopTransition *Transition `json:"loop_transition,omitempty"`
+	Soundtrack     *Soundtrack `json:"soundtrack,omitempty"`
+	ID             string      `json:"id"`
+	Name           string      `json:"name"`
+	Stage          string      `json:"stage"`
+	Version        int         `json:"version"`
+	Theme          ThemeRef    `json:"theme"`
+	Scenes         []Scene     `json:"scenes"`
+	UpdatedAt      string      `json:"updated_at"`
 }
 
 type Issue struct {

@@ -69,6 +69,9 @@ func (s *Server) initializeGenerator() error {
 }
 
 func designBounds(d mediaauthor.Design) bool {
+	if d.LoopTransition != nil && len(d.LoopTransition.Kind) > 20 {
+		return false
+	}
 	if d.Soundtrack != nil && (!validDesignID(d.Soundtrack.Asset.ID) || d.Soundtrack.Asset.Revision < 1 || d.Soundtrack.Asset.Revision > maxAssetRevisions || len(d.Soundtrack.Mode) > 20) {
 		return false
 	}

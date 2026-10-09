@@ -263,6 +263,9 @@ func TestGeneratorTransitionCancellationCleansWorkspaceAndPreservesReadyOutput(t
 		current := generatorJob(t, dashboardRequest(s, "GET", "/api/generator/jobs/"+job.ID, ""))
 		return current.State == "running" && current.Progress >= 60
 	})
+	if _, err := os.Stat(filepath.Join(s.cfg.BRB.Directory, "library", "generator", "work", job.ID)); err != nil {
+		t.Fatal("running workspace missing", err)
+	}
 	w := dashboardRequest(s, "POST", "/api/generator/jobs/"+job.ID+"/cancel", `{}`)
 	if w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())
@@ -270,7 +273,7 @@ func TestGeneratorTransitionCancellationCleansWorkspaceAndPreservesReadyOutput(t
 	if result := waitGeneratorJob(t, s, job.ID); result.State != "cancelled" || result.MediaRevision != "" {
 		t.Fatal("cancelled transition published output", result)
 	}
-	if _, err := os.Stat(filepath.Join(s.cfg.LibraryDirectory, "generator", "work", job.ID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(s.cfg.BRB.Directory, "library", "generator", "work", job.ID)); !os.IsNotExist(err) {
 		t.Fatal("cancelled workspace remains", err)
 	}
 	if w := dashboardRequest(s, "GET", "/api/library/revisions/"+good.MediaRevision+"/preview", ""); w.Code != 200 {

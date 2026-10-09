@@ -109,7 +109,7 @@ func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.Seque
 		return "", used, errors.New("Cannot save transition audio; check storage.")
 	}
 	info, err := os.Stat(pcm.Name())
-	if err != nil || info.Size() != sampleBoundary(plan.Frames, p.SampleRate, p.FPS)*4 {
+	if err != nil || info.Size() != sampleBoundary(plan.CompositionFrames, p.SampleRate, p.FPS)*4 {
 		return "", used, errors.New("Transition audio is incomplete.")
 	}
 	return manifest.String(), used, nil
