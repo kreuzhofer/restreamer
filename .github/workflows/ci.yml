@@ -106,8 +106,8 @@ jobs:
           python3 tests/generator-smoke.py
           ffmpeg -v error -xerror -i /tmp/generated-smoke.mp4 -f null -
           ffmpeg -v error -xerror -i /tmp/generated-smoke-video.mp4 -f null -
-          ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -f s16le /tmp/generated-smoke-audio.pcm
-          python3 -c 'import array; from pathlib import Path; samples = array.array("h", Path("/tmp/generated-smoke-audio.pcm").read_bytes()); assert samples and max(map(abs, samples)) > 500, "Generated source audio is silent"'
+          ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-audio.pcm
+          python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -220,8 +220,8 @@ jobs:
           python3 tests/generator-smoke.py
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke.mp4
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke-video.mp4
-          docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm
-          python3 -c 'import array; from pathlib import Path; samples = array.array("h", Path("/tmp/generated-smoke-audio.pcm").read_bytes()); assert samples and max(map(abs, samples)) > 500, "Generated source audio is silent"'
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm
+          python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
           docker rm -f restreamer-arm64-smoke
           start_container
           python3 tests/generator-smoke.py --verify-restart
