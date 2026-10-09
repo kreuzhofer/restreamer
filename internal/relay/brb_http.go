@@ -123,21 +123,46 @@ func (s *Server) initializeBRB() error {
 	return s.loadBRBCandidate()
 }
 
+// A normalized 20MP RGBA64 PNG can contain 160 MB of pixels plus PNG framing.
+// This storage-copy bound preserves that format without changing upload limits.
+const maxBRBStoredAssetBytes = 192 << 20
+
 func copyAsset(src, dst string) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return errors.New("cannot read saved BRB asset")
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return errors.New("cannot inspect saved BRB asset")
+	}
+	if info.Size() > maxBRBStoredAssetBytes {
+		return errors.New("saved BRB asset exceeds 192 MiB; replace the invalid stored source")
+	}
 	out, err := os.Create(dst)
 	if err != nil {
 		return errors.New("cannot prepare BRB asset")
 	}
-	_, err = io.Copy(out, io.LimitReader(f, 33<<20))
+	complete := false
+	defer func() {
+		if !complete {
+			os.Remove(dst)
+		}
+	}()
+	n, copyErr := io.Copy(out, io.LimitReader(f, maxBRBStoredAssetBytes+1))
 	closeErr := out.Close()
-	if err != nil || closeErr != nil {
+	after, statErr := f.Stat()
+	if n > maxBRBStoredAssetBytes {
+		return errors.New("saved BRB asset exceeds 192 MiB; replace the invalid stored source")
+	}
+	if copyErr != nil || closeErr != nil || statErr != nil {
 		return errors.New("cannot save BRB asset")
 	}
+	if n != info.Size() || after.Size() != info.Size() {
+		return errors.New("saved BRB asset changed while copying; retry preparation")
+	}
+	complete = true
 	return nil
 }
 

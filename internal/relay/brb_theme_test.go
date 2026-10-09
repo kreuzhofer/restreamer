@@ -8,6 +8,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/config"
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 	"github.com/kreuzhofer/restreamer/internal/rtmp"
+	"image"
 	"image/color"
 	"image/png"
 	"net/http/httptest"
@@ -440,5 +441,76 @@ func TestReplacingBRBCandidateKeepsConcurrentPreviewOpen(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatalf("candidate replacement exceeded active+prepared retention bound: %d", count)
+	}
+}
+
+func TestBRBThemeCopiesLargeNormalizedImagesAndRejectsOversizedSources(t *testing.T) {
+	s := libraryServer(t)
+	if w := assetRequest(t, s, nil, "custom.png", assetPNG(t, color.NRGBA{R: 70, G: 80, B: 90, A: 128})); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	current := brbHTTPSettings(t, s)
+	// A valid externally retained PNG fixture larger than the old silent33MiB
+	// copy limit, without a costly noisy20MP JPEG/PNG encode. The documented20MP
+	// normalized-image contract permits this pixel count and RGBA encoding.
+	raster := image.NewNRGBA(image.Rect(0, 0, 3200, 2800))
+	for i := 0; i < len(raster.Pix); i += 4 {
+		raster.Pix[i] = 70
+		raster.Pix[i+1] = 80
+		raster.Pix[i+2] = 90
+		raster.Pix[i+3] = 128
+	}
+	path := filepath.Join(s.cfg.BRB.Directory, current.Generation, "image.png")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoder := png.Encoder{CompressionLevel: png.NoCompression}
+	if err = encoder.Encode(file, raster); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(original) <= 33<<20 {
+		t.Fatal("fixture does not exercise normalized-image copy boundary")
+	}
+	payload := fmt.Sprintf(`{"theme":{"id":"retro","revision":1},"base_generation":%q}`, current.Generation)
+	w := dashboardRequest(s, "POST", "/api/brb/theme/prepare", payload)
+	if w.Code != 201 {
+		t.Fatalf("large valid image copy failed: %d %s", w.Code, w.Body.String())
+	}
+	var candidate brbThemeCandidate
+	json.Unmarshal(w.Body.Bytes(), &candidate)
+	if w = dashboardRequest(s, "POST", "/api/brb/theme/activate", fmt.Sprintf(`{"id":%q,"base_generation":%q}`, candidate.ID, candidate.Base)); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = assetRequest(t, s, map[string]string{"reset_theme": "true"}, "", nil); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	restored := dashboardRequest(s, "GET", "/api/brb/image", "")
+	if restored.Code != 200 || !bytes.Equal(restored.Body.Bytes(), original) {
+		t.Fatal("large original image was truncated through theme/legacy round-trip")
+	}
+	current = brbHTTPSettings(t, s)
+	path = filepath.Join(s.cfg.BRB.Directory, current.Generation, "image.png")
+	if err = os.Truncate(path, 193<<20); err != nil {
+		t.Fatal(err)
+	}
+	payload = fmt.Sprintf(`{"theme":{"id":"retro","revision":1},"base_generation":%q}`, current.Generation)
+	w = dashboardRequest(s, "POST", "/api/brb/theme/prepare", payload)
+	if w.Code != 422 || !strings.Contains(w.Body.String(), "192 MiB") {
+		t.Fatal("oversized stored source did not fail explicitly", w.Code, w.Body.String())
+	}
+	if brbHTTPSettings(t, s).Generation != current.Generation {
+		t.Fatal("oversized source replaced active media")
+	}
+	if err = os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
 	}
 }

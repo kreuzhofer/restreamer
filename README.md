@@ -564,6 +564,10 @@ including waiting. Retention is bounded to one active generation and one prepare
 candidate, plus one temporary in-flight preparation. Encoded video and audio are
 each bounded to 64 MiB; the remuxed candidate preview is bounded to 128 MiB. Existing
 10 MiB image/20-megapixel and 32 MiB/10-minute music upload limits still apply.
+Copies of normalized stored images/music are bounded to 192 MiB, allowing a
+20-megapixel RGBA64 PNG (160 MB of pixels plus framing). Oversized, growing, or
+shrinking sources fail explicitly and partial copies are removed; they are never
+silently truncated.
 A successful new candidate replaces the previous candidate; cancellation,
 discard, and validated startup remove unused preparation directories. Preview
 requests open their own files, so replacing a candidate does not truncate an
