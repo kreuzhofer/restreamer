@@ -227,6 +227,12 @@ func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "BRB settings changed; reload before preparing a theme", 409)
 		return
 	}
+	// Reject unmeasured profiles before copying inputs or waiting for preparation.
+	if settings.Profile.Width > 1920 || settings.Profile.Height > 1080 || settings.Profile.FPS > 30 {
+		http.Error(w, "Shared BRB themes support up to 1920 × 1080 and 30 fps; legacy BRB is unchanged", 422)
+		return
+	}
+
 	g := s.generator
 	g.mu.Lock()
 	theme, err := g.resolveTheme(input.Theme)

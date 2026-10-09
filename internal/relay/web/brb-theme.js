@@ -13,7 +13,9 @@
     $('brb-theme-settings').hidden = !current?.generation;
     if (!current) return;
     $('brb-theme-current').textContent = current.theme ? `Current BRB: ${current.theme.name} · revision ${current.theme.revision}. Shared edits never update it automatically.` : 'Current BRB: legacy arcade/custom-image styling. Shared themes are opt-in.';
-    $('brb-theme-prepare').disabled = !connected || otherPending || dirty || preparing || operation || !themes.length;
+    const unsupportedProfile = current.profile.width > 1920 || current.profile.height > 1080 || current.profile.fps > 30;
+    $('brb-theme-profile-limit').hidden = !unsupportedProfile;
+    $('brb-theme-prepare').disabled = unsupportedProfile || !connected || otherPending || dirty || preparing || operation || !themes.length;
     $('brb-theme-select').disabled = preparing || operation;
     $('brb-theme-cancel').hidden = !preparing;
     $('brb-theme-candidate').hidden = !candidate;

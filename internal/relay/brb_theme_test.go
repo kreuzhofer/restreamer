@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/kreuzhofer/restreamer/internal/config"
-	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
-	"github.com/kreuzhofer/restreamer/internal/rtmp"
 	"image"
 	"image/color"
 	"image/png"
@@ -19,6 +16,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/kreuzhofer/restreamer/internal/config"
+	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
+	"github.com/kreuzhofer/restreamer/internal/rtmp"
 )
 
 func TestBRBThemePreparationRequiresExplicitActivationAndPinsRevision(t *testing.T) {
@@ -293,6 +294,22 @@ func TestBRBThemeFailedAndCancelledPreparationDoesNotInterruptLocalBroadcast(t *
 	if destination.count() != 1 {
 		t.Fatal("preparation reconnected destination")
 	}
+	prepared := dashboardRequest(s, "POST", "/api/brb/theme/prepare", payload)
+	var readyBRB brbThemeCandidate
+	json.Unmarshal(prepared.Body.Bytes(), &readyBRB)
+	if prepared.Code != 201 || brbHTTPSettings(t, s).Generation != initial.Generation {
+		t.Fatal("successful preparation changed on-air BRB", prepared.Code, prepared.Body.String())
+	}
+	if preview := dashboardRequest(s, "GET", "/api/brb/theme/candidate/preview", ""); preview.Code != 200 {
+		t.Fatal("prepared BRB exact preview unavailable")
+	}
+	if activated := dashboardRequest(s, "POST", "/api/brb/theme/activate", fmt.Sprintf(`{"id":%q,"base_generation":%q}`, readyBRB.ID, readyBRB.Base)); activated.Code != 204 {
+		t.Fatal(activated.Code, activated.Body.String())
+	}
+	if readStage(t, s).Stage != "BRB" || brbHTTPSettings(t, s).Generation != readyBRB.ID || destination.count() != 1 {
+		t.Fatal("reviewed BRB activation changed stage or destination session")
+	}
+
 	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -450,8 +467,8 @@ func TestBRBThemeCopiesLargeNormalizedImagesAndRejectsOversizedSources(t *testin
 		t.Fatal(w.Code, w.Body.String())
 	}
 	current := brbHTTPSettings(t, s)
-	// A valid externally retained PNG fixture larger than the old silent33MiB
-	// copy limit, without a costly noisy20MP JPEG/PNG encode. The documented20MP
+	// A valid externally retained PNG fixture larger than the old silent 33 MiB
+	// copy limit, without a costly noisy 20MP JPEG/PNG encode. The documented 20MP
 	// normalized-image contract permits this pixel count and RGBA encoding.
 	raster := image.NewNRGBA(image.Rect(0, 0, 3200, 2800))
 	for i := 0; i < len(raster.Pix); i += 4 {
@@ -512,5 +529,25 @@ func TestBRBThemeCopiesLargeNormalizedImagesAndRejectsOversizedSources(t *testin
 	}
 	if err = os.WriteFile(path, original, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBRBThemeRejectsUnmeasuredProfileWithoutChangingLegacyBRB(t *testing.T) {
+	s := libraryServer(t)
+	if w := assetRequest(t, s, map[string]string{"fps": "60"}, "", nil); w.Code != 204 {
+		t.Fatal("legacy60fps profile regressed", w.Code, w.Body.String())
+	}
+	current := brbHTTPSettings(t, s)
+	payload := fmt.Sprintf(`{"theme":{"id":"retro","revision":2},"base_generation":%q}`, current.Generation)
+	w := dashboardRequest(s, "POST", "/api/brb/theme/prepare", payload)
+	if w.Code != 422 || !strings.Contains(w.Body.String(), "30 fps") {
+		t.Fatal("named theme did not report its measured profile boundary", w.Code, w.Body.String())
+	}
+	after := brbHTTPSettings(t, s)
+	if after.Generation != current.Generation || after.Profile.FPS != 60 || after.Theme != nil {
+		t.Fatal("unsupported named theme changed legacy profile or media")
+	}
+	if candidate := dashboardRequest(s, "GET", "/api/brb/theme/candidate", ""); strings.TrimSpace(candidate.Body.String()) != "null" {
+		t.Fatal("unsupported profile published a candidate")
 	}
 }
