@@ -83,15 +83,6 @@ func readMediaTrack(path string, typ uint8, step time.Duration) (mediaTrack, err
 }
 
 func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customImage, music bool, volume int, text string) (*brbMedia, error) {
-	run := func(args ...string) error {
-		base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "67108864"}
-		cmd := exec.CommandContext(ctx, "ffmpeg", append(base, args...)...)
-		// Errors are fixed strings: uploaded metadata and filenames never reach logs.
-		if err := cmd.Run(); err != nil {
-			return errors.New("BRB preparation failed; check the file and FFmpeg installation")
-		}
-		return nil
-	}
 	videoPath := filepath.Join(dir, "video.flv")
 	fps := fmt.Sprint(cfg.FPS)
 	vf := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p", cfg.Width, cfg.Height, cfg.Width, cfg.Height)
@@ -126,18 +117,13 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customIma
 	}
 	videoArgs = append(videoArgs, filters...)
 	videoArgs = append(videoArgs, "-t", fmt.Sprint(seconds), "-an", "-c:v", "libx264", "-preset", "veryfast", "-tune", tune, "-profile:v", "high", "-bf", "0", "-g", fmt.Sprint(cfg.FPS*2), "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", videoPath)
-	if err := run(videoArgs...); err != nil {
+	if err := runBRBFFmpeg(ctx, videoArgs...); err != nil {
+		return nil, err
+	}
+	if err := encodeBRBAudio(ctx, cfg, dir, music, volume); err != nil {
 		return nil, err
 	}
 	audioPath := filepath.Join(dir, "audio.flv")
-	audioArgs := []string{"-f", "lavfi", "-i", fmt.Sprintf("anullsrc=r=%d:cl=stereo", cfg.SampleRate), "-t", "2"}
-	if music {
-		audioArgs = []string{"-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,wav", "-i", filepath.Join(dir, "music"), "-t", "601"}
-	}
-	audioArgs = append(audioArgs, "-vn", "-af", fmt.Sprintf("volume=%.2f", float64(volume)/100), "-ac", "2", "-ar", fmt.Sprint(cfg.SampleRate), "-c:a", "aac", "-b:a", "128k", "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", audioPath)
-	if err := run(audioArgs...); err != nil {
-		return nil, err
-	}
 	v, err := readMediaTrack(videoPath, rtmp.Video, time.Second/time.Duration(cfg.FPS))
 	if err != nil {
 		return nil, err
@@ -154,6 +140,23 @@ func encodeBRB(ctx context.Context, cfg config.BRBProfile, dir string, customIma
 		return nil, errors.New("BRB video preparation was incomplete")
 	}
 	return &brbMedia{video: v, audio: a}, nil
+}
+
+func runBRBFFmpeg(ctx context.Context, args ...string) error {
+	base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "67108864"}
+	if exec.CommandContext(ctx, "ffmpeg", append(base, args...)...).Run() != nil {
+		return errors.New("BRB preparation failed; check the file and FFmpeg installation")
+	}
+	return nil
+}
+func encodeBRBAudio(ctx context.Context, cfg config.BRBProfile, dir string, music bool, volume int) error {
+	audioPath := filepath.Join(dir, "audio.flv")
+	audioArgs := []string{"-f", "lavfi", "-i", fmt.Sprintf("anullsrc=r=%d:cl=stereo", cfg.SampleRate), "-t", "2"}
+	if music {
+		audioArgs = []string{"-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,wav", "-i", filepath.Join(dir, "music"), "-t", "601"}
+	}
+	audioArgs = append(audioArgs, "-vn", "-af", fmt.Sprintf("volume=%.2f", float64(volume)/100), "-ac", "2", "-ar", fmt.Sprint(cfg.SampleRate), "-c:a", "aac", "-b:a", "128k", "-threads", "2", "-fs", fmt.Sprint(maxMediaBytes), "-f", "flv", audioPath)
+	return runBRBFFmpeg(ctx, audioArgs...)
 }
 
 func normalizeImage(src io.Reader, path string) error {

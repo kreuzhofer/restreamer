@@ -510,20 +510,23 @@ Expand **BRB screen & music** in the dashboard:
   “BE RIGHT BACK” stays readable in the centre. There are no game sound effects.
   The dashboard shows a labelled still preview of this animation.
 - Upload a PNG/JPEG image up to 10 MiB and 20 megapixels for a static screen,
-  or select **Use the default animated arcade screen** and **Prepare & save BRB**
-  to restore the animation. Images fit inside the output without cropping.
+  or select **Remove the custom image and use the BRB message** and
+  **Prepare & save BRB** to restore the message screen. Select **Restore legacy
+  arcade/custom-image styling** as well to return from a shared theme to the
+  original animation. Images fit inside the output without cropping.
   Existing default-screen installations receive the animation on restart;
   custom images and music are preserved.
   To change sprites, colours or choreography, use the editable Canvas source and
   browser preview described in [the artwork guide](artwork/brb/README.md).
-- Edit **Arcade message**, then click **Prepare & save BRB** to change the text
-  and its still preview. The message stays on one centred line and automatically
+- Edit **BRB message**, then click **Prepare & save BRB** to change the text
+  and its still preview. With legacy styling, the message stays on one centred line and automatically
   shrinks in whole-pixel steps to fit clear of the animation. Up to 40 characters
   are supported: A–Z, 0–9, ÄÖÜß, spaces and `. , ! ? : ' - / ( ) + &`.
   Lowercase letters are displayed in uppercase. Unsupported or empty text is
   rejected without replacing the active BRB. The message persists across
-  restarts and can be changed while forwarding; it applies only to the default
-  animation, with custom image uploads unchanged.
+  restarts and can be changed while forwarding. It appears in legacy animation
+  or the selected shared theme when no custom image is selected. Shared themes
+  validate typography and overflow without shrinking the text.
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
@@ -531,6 +534,55 @@ Expand **BRB screen & music** in the dashboard:
   them. Failed uploads preserve the previous working assets. The saved dashboard
   profile overrides the initial JSON profile on restart. Assets/profile persist;
   deliberate BRB selection does not persist across application restarts.
+
+Expand **Shared style theme** to select an exact built-in or named theme revision
+from the same library used by prestream and ending. Customize named variants in
+**Media generator**, then explicitly refresh the BRB choices. A theme edit never
+changes the current BRB or an already-prepared candidate. Save any message,
+custom-image, or music edits first; theme preparation captures those saved inputs.
+
+**Prepare theme preview** creates a separate candidate. **Preview exact BRB**
+plays its encoded video and audio; **Activate prepared BRB** asks for confirmation
+before replacing the current fallback. If BRB is on air, activation restarts its
+video and music. Candidate activation checks the captured base generation and
+profile. Later BRB settings/profile changes make it stale: preview remains
+available, but a new preparation is required before activation. Cancelling a
+preparation or discarding a candidate leaves the current BRB unchanged. The
+existing `/api/brb/assets` prepare-and-save contract remains available.
+
+Shared-theme BRB uses the same embedded typography, images/logos, palette,
+spacing, borders, and decorative effect renderer as authored scenes. It supports
+up to 1920 × 1080 at 30 fps with a four-second visual loop. The complete uploaded
+music track retains its own independent loop and selected volume; it is never
+trimmed to four seconds. The exact preview shows the first four seconds. Existing
+legacy styling keeps its original profile support and 32-second arcade or
+two-second custom-image loop. Restore legacy styling before choosing a profile
+outside the measured shared-theme limits.
+
+Preparation shares the existing media workload gate and has a two-minute timeout
+including waiting. Retention is bounded to one active generation and one prepared
+candidate, plus one temporary in-flight preparation. Encoded video and audio are
+each bounded to 64 MiB; the remuxed candidate preview is bounded to 128 MiB. Existing
+10 MiB image/20-megapixel and 32 MiB/10-minute music upload limits still apply.
+Copies of normalized stored images/music are bounded to 192 MiB, allowing a
+20-megapixel RGBA64 PNG (160 MB of pixels plus framing). Oversized, growing, or
+shrinking sources fail explicitly and partial copies are removed; they are never
+silently truncated.
+A successful new candidate replaces the previous candidate; cancellation,
+discard, and validated startup remove unused preparation directories. Preview
+requests open their own files, so replacing a candidate does not truncate an
+already-open preview. Generation directories and candidate metadata are owned by
+the server beneath the BRB directory.
+
+Named-theme BRB restarts from its exact retained tracks and captured style before
+the authoring catalog loads; it does not silently re-render or adopt a newer
+theme. Prepared candidates also persist. Legacy startup still refreshes its
+arcade assets, so candidates based on a prior legacy generation become stale.
+Theme image revisions remain protected from deletion, with active/prepared BRB
+uses visible in the asset catalog. Missing or invalid retained media is reported
+explicitly. Authenticated same-origin routes are `/api/brb/theme/prepare`,
+`/api/brb/theme/candidate` (read/discard), `/api/brb/theme/candidate/preview`, and
+`/api/brb/theme/activate`.
 
 The **Shared streaming profile** in the **OBS input** card controls resolution,
 frame rate (including **25 and 30 fps**), and audio sample rate for OBS, BRB,

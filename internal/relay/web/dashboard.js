@@ -148,6 +148,7 @@ async function refresh() {
  render();
 }
 function renderBRB() {
+ window.brbThemes?.update(snapshot, connected, assetsPending, assetsDirty);
  const brb = snapshot.brb || {};
  const active = connected && snapshot.stage?.source === 'brb';
  const deliberate = snapshot.stage?.stage === 'BRB';
@@ -173,7 +174,7 @@ function renderBRB() {
    $('#brb-image').src = `/api/brb/image?v=${encodeURIComponent(assetGeneration)}`;
    $('#brb-image').hidden = false;
   }
-  $('#brb-asset-status').textContent = `${assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
+  $('#brb-asset-status').textContent = `${assets.theme ? `${assets.theme.name} · revision ${assets.theme.revision} · 4-second visual loop` : assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
   if (!assetsDirty && !assetsPending) {
    $('#brb-text').value = assets.text ?? 'BE RIGHT BACK';
    $('#brb-volume').value = assets.volume;
