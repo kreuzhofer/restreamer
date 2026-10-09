@@ -18,26 +18,28 @@ import (
 )
 
 type Server struct {
-	library      *videoLibrary
-	generator    *generatorStore
-	cfg          config.Config
-	log          *slog.Logger
-	active       atomic.Bool
-	forwarding   atomic.Bool
-	previewMu    sync.Mutex
-	previewHub   *hub
-	previewDone  <-chan struct{}
-	previewSlots chan struct{}
-	outputs      []*output
-	inputBytes   atomic.Uint64
-	inputFrames  atomic.Uint64
-	metrics      metrics
-	controlMu    sync.Mutex
-	initOnce     sync.Once
-	initErr      error
-	broadcast    *broadcast
-	mediaMu      sync.Mutex
-	preparation  *preparationGate
+	library        *videoLibrary
+	generator      *generatorStore
+	cfg            config.Config
+	log            *slog.Logger
+	active         atomic.Bool
+	forwarding     atomic.Bool
+	previewMu      sync.Mutex
+	previewHub     *hub
+	previewDone    <-chan struct{}
+	previewSlots   chan struct{}
+	outputs        []*output
+	inputBytes     atomic.Uint64
+	inputFrames    atomic.Uint64
+	metrics        metrics
+	controlMu      sync.Mutex
+	initOnce       sync.Once
+	initErr        error
+	broadcast      *broadcast
+	mediaMu        sync.Mutex
+	brbCandidateMu sync.Mutex
+	brbCandidate   *brbThemeCandidate
+	preparation    *preparationGate
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
