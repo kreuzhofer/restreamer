@@ -22,25 +22,31 @@ type Theme struct {
 
 // Style contains appearance only. Scene overrides remain in the unchanged draft.
 type Style struct {
-	Font               string        `json:"font"`
-	FontSize           float64       `json:"font_size"`
-	BackgroundColor    string        `json:"background_color"`
-	TextColor          string        `json:"text_color"`
-	AccentColor        string        `json:"accent_color"`
-	Background         *AssetRef     `json:"background,omitempty"`
-	Logo               *AssetRef     `json:"logo,omitempty"`
-	LogoPosition       string        `json:"logo_position"`
-	LogoHeightPercent  float64       `json:"logo_height_percent"`
-	ContentRegion      ContentRegion `json:"content_region"`
-	LineSpacingPercent float64       `json:"line_spacing_percent"`
-	ListSpacingPercent float64       `json:"list_spacing_percent"`
-	BorderStyle        string        `json:"border_style"`
-	BorderWidth        float64       `json:"border_width"`
-	Effect             string        `json:"effect"`
-	EffectSpeed        int           `json:"effect_speed"`
+	Artwork               string        `json:"artwork,omitempty"`
+	ContentOffsetYPercent float64       `json:"content_offset_y_percent,omitempty"`
+	Font                  string        `json:"font"`
+	FontSize              float64       `json:"font_size"`
+	BackgroundColor       string        `json:"background_color"`
+	TextColor             string        `json:"text_color"`
+	AccentColor           string        `json:"accent_color"`
+	Background            *AssetRef     `json:"background,omitempty"`
+	Logo                  *AssetRef     `json:"logo,omitempty"`
+	LogoPosition          string        `json:"logo_position"`
+	LogoHeightPercent     float64       `json:"logo_height_percent"`
+	ContentRegion         ContentRegion `json:"content_region"`
+	LineSpacingPercent    float64       `json:"line_spacing_percent"`
+	ListSpacingPercent    float64       `json:"list_spacing_percent"`
+	BorderStyle           string        `json:"border_style"`
+	BorderWidth           float64       `json:"border_width"`
+	Effect                string        `json:"effect"`
+	EffectSpeed           int           `json:"effect_speed"`
 }
 
-type RenderInputs struct{ Image, Background, Logo image.Image }
+type RenderInputs struct {
+	Image, Background, Logo image.Image
+	// TransparentBackdrop omits only the background, preserving borders and content.
+	TransparentBackdrop bool
+}
 
 // Retro revision 1 reproduces the appearance shipped before editable themes.
 func RetroTheme(revision int) Theme {
@@ -53,6 +59,27 @@ func RetroTheme(revision int) Theme {
 		style.Effect = "pixel-trail"
 	}
 	return Theme{ID: "retro", Revision: revision, Name: "Retro", Builtin: true, Style: style}
+}
+
+// ArcadeAfterHoursTheme is independently versioned; Retro revisions stay unchanged.
+func ArcadeAfterHoursTheme() Theme {
+	s := RetroTheme(1).Style
+	s.Font, s.FontSize = "arcade-pixel", 120
+	s.BackgroundColor, s.TextColor, s.AccentColor = "#02102f", "#fff3cf", "#18abef"
+	s.Artwork, s.Effect = "arcade-after-hours", "arcade-palette"
+	s.BorderStyle = "none"
+	s.ContentRegion = ContentRegion{56, 36}
+	s.ContentOffsetYPercent = -15
+	return Theme{ID: "arcade-after-hours", Revision: 1, Name: "Arcade After Hours", Builtin: true, Style: s}
+}
+func BuiltinThemes() []Theme { return []Theme{RetroTheme(1), RetroTheme(2), ArcadeAfterHoursTheme()} }
+func IsBuiltinTheme(id string) bool {
+	for _, t := range BuiltinThemes() {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
 }
 func ThemeAssetRefs(t Theme) []AssetRef {
 	refs := make([]AssetRef, 0, 2)
@@ -80,8 +107,23 @@ func ParseColor(value string) (color.RGBA, error) {
 func ValidateStyle(s Style) []Issue {
 	issues := make([]Issue, 0)
 	add := func(field, message string) { issues = append(issues, Issue{"style." + field, message}) }
-	if s.Font != "go-sans" && s.Font != "go-mono" {
-		add("font", "Choose Go Sans or Go Mono.")
+	if s.Artwork != "" && s.Artwork != "arcade-after-hours" {
+		add("artwork", "Choose an available built-in artwork.")
+	}
+	if s.Artwork != "" && s.Background != nil {
+		add("background", "Choose either built-in artwork or an uploaded background image.")
+	}
+	if s.Effect == "arcade-palette" && s.Artwork != "arcade-after-hours" {
+		add("effect", "Arcade palette animation requires Arcade After Hours artwork.")
+	}
+	if !validRange(s.ContentOffsetYPercent, -20, 20) {
+		add("content_offset_y_percent", "Use a vertical offset from −20 to 20%.")
+	}
+	if s.ContentRegion.HeightPercent/2+math.Abs(s.ContentOffsetYPercent) > 50 {
+		add("content_region", "The content region must remain within the frame.")
+	}
+	if s.Font != "go-sans" && s.Font != "go-mono" && s.Font != "arcade-pixel" {
+		add("font", "Choose Go Sans, Go Mono or Arcade Pixel.")
 	}
 	for field, v := range map[string]string{"background_color": s.BackgroundColor, "text_color": s.TextColor, "accent_color": s.AccentColor} {
 		if _, err := ParseColor(v); err != nil {
@@ -106,8 +148,8 @@ func ValidateStyle(s Style) []Issue {
 	if !validRange(s.BorderWidth, 1, 12) {
 		add("border_width", "Use 1–12 at 1080p.")
 	}
-	if s.Effect != "none" && s.Effect != "pixel-trail" {
-		add("effect", "Choose none or pixel-trail.")
+	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" {
+		add("effect", "Choose none, pixel-trail or arcade-palette.")
 	}
 	if s.EffectSpeed < 1 || s.EffectSpeed > 12 {
 		add("effect_speed", "Use 1–12 pixel steps per second.")
@@ -165,8 +207,10 @@ func ThemeBackdrop(width, height int, s Style, inputs RenderInputs) *image.RGBA 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	bg, _ := ParseColor(s.BackgroundColor)
 	accent, _ := ParseColor(s.AccentColor)
-	draw.Draw(img, img.Bounds(), image.NewUniform(bg), image.Point{}, draw.Src)
-	fitImage(img, img.Bounds(), inputs.Background)
+	if !inputs.TransparentBackdrop {
+		draw.Draw(img, img.Bounds(), image.NewUniform(bg), image.Point{}, draw.Src)
+		fitImage(img, img.Bounds(), inputs.Background)
+	}
 	margin := height / 24
 	thickness := max(2, int(s.BorderWidth*float64(height)/1080))
 	if s.BorderStyle != "none" {

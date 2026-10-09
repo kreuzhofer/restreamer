@@ -682,19 +682,19 @@
 
 
   const themeFields = [
-    ['font', 'Default font', ['go-sans', 'go-mono']], ['font_size', 'Font size at 1080p', 24, 120],
+    ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel']], ['font_size', 'Font size at 1080p', 24, 120],
     ['background_color', 'Background color', 'color'], ['text_color', 'Text color', 'color'], ['accent_color', 'Accent color', 'color'],
-    ['background', 'Background image revision', 'asset'], ['logo', 'Logo image revision', 'asset'],
+    ['artwork', 'Built-in background artwork', ['', 'arcade-after-hours']], ['background', 'Background image revision (clear built-in artwork first)', 'asset'], ['logo', 'Logo image revision', 'asset'],
     ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8],
-    ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 30, 90],
+    ['content_offset_y_percent', 'Content vertical offset (%)', -20, 20], ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 30, 90],
     ['line_spacing_percent', 'Line spacing (%)', 100, 180], ['list_spacing_percent', 'List item spacing (%)', 0, 100],
     ['border_style', 'Border', ['none', 'line', 'pixel']], ['border_width', 'Border width at 1080p', 1, 12],
-    ['effect', 'Decorative effect', ['none', 'pixel-trail']], ['effect_speed', 'Effect steps per second', 1, 12]
+    ['effect', 'Decorative effect', ['none', 'pixel-trail', 'arcade-palette']], ['effect_speed', 'Pixel trail steps per second', 1, 12]
   ];
   for (const [key, title, kind, maximum] of themeFields) {
     const label = document.createElement('label'); label.textContent = title;
     const input = document.createElement(Array.isArray(kind) || kind === 'asset' ? 'select' : 'input'); input.id = `theme-${key}`;
-    if (Array.isArray(kind)) input.replaceChildren(...kind.map(value => new Option(value.replaceAll('-', ' '), value)));
+    if (Array.isArray(kind)) input.replaceChildren(...kind.map(value => new Option(value ? value.replaceAll('-', ' ') : 'None', value)));
     else if (typeof kind === 'number') { input.type = 'number'; input.min = kind; input.max = maximum; input.step = '1'; input.required = true; }
     else if (kind === 'color') input.type = 'color';
     label.append(input); $('theme-fields').append(label);
@@ -720,9 +720,9 @@
     const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
     $('apply-theme-update').hidden = !latest || latest.revision <= draft.theme.revision;
     $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
-    $('preview-time-control').hidden = selected?.style.effect !== 'pixel-trail';
+    $('preview-time-control').hidden = !['pixel-trail', 'arcade-palette'].includes(selected?.style.effect);
     if (selected) {
-      $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
+      $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
       $('scene-size').placeholder = `Theme default · ${selected.style.font_size}`;
       $('region-width').placeholder = `Theme default · ${selected.style.content_region.width_percent}`;
       $('region-height').placeholder = `Theme default · ${selected.style.content_region.height_percent}`;
@@ -735,7 +735,7 @@
     renderThemeAssets();
     for (const [key] of themeFields) {
       const value = ['width_percent','height_percent'].includes(key) ? theme.style.content_region[key] : theme.style[key];
-      $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? '';
+      $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? (key === 'content_offset_y_percent' ? 0 : '');
     }
     $('theme-publish').disabled = theme.builtin;
     $('theme-status').textContent = `${theme.name} · revision ${theme.revision}${theme.builtin ? '. Duplicate to create an editable variant.' : '. Publish changes explicitly; existing designs keep their pinned revision.'}`;

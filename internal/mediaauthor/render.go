@@ -118,7 +118,14 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 		return fail("content_region", "Content width and height must be between 30% and 90% (blank inherits the theme).")
 	}
 	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
-	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2, (width+regionWidth)/2, (height+regionHeight)/2)
+	offset := 0
+	if scene.Layout != "media" {
+		offset = int(float64(height) * style.ContentOffsetYPercent / 100)
+	}
+	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2+offset, (width+regionWidth)/2, (height+regionHeight)/2+offset)
+	if !result.region.In(image.Rect(0, 0, width, height)) {
+		return fail("content_region", "The content region extends beyond the frame. Reduce its height or vertical offset.")
+	}
 	if scene.Layout == "text-image" || scene.Layout == "media" {
 		if scene.IsVideo() {
 			if scene.Video == nil || scene.Video.Asset.ID == "" || scene.Video.Asset.Revision < 1 {
@@ -144,10 +151,11 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	f := sansFont
 	switch scene.Font {
 	case "", "go-sans":
+	case "arcade-pixel":
 	case "go-mono":
 		f = monoFont
 	default:
-		return fail("font", "Choose Go Sans or Go Mono.")
+		return fail("font", "Choose Go Sans, Go Mono or Arcade Pixel.")
 	}
 	size := scene.FontSize
 	if size == 0 {
@@ -156,7 +164,13 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	if math.IsNaN(size) || math.IsInf(size, 0) || size < 24 || size > 120 {
 		return fail("font_size", "Use a font size from 24 to 120 (at 1080p).")
 	}
-	face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: size * float64(height) / 1080, DPI: 72, Hinting: font.HintingNone})
+	var face font.Face
+	var err error
+	if scene.Font == "arcade-pixel" {
+		face = newPixelFace(size * float64(height) / 1080)
+	} else {
+		face, err = opentype.NewFace(f, &opentype.FaceOptions{Size: size * float64(height) / 1080, DPI: 72, Hinting: font.HintingNone})
+	}
 	if err != nil {
 		return fail("font", "Cannot load the selected font.")
 	}
@@ -169,8 +183,8 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 			if r == '\n' {
 				continue
 			}
-			idx, err := f.GlyphIndex(nil, r)
-			if err != nil || idx == 0 || unicode.IsControl(r) {
+			_, supported := face.GlyphAdvance(r)
+			if !supported || unicode.IsControl(r) {
 				return field, fmt.Sprintf("Unsupported character U+%04X. Use a supported glyph; no substitution is applied.", r)
 			}
 		}
@@ -292,7 +306,21 @@ func RenderSceneStyled(scene Scene, width, height int, style Style, inputs Rende
 			drawer.Dot = fixed.Point26_6{X: x - line.indent, Y: baseline + line.y}
 			drawer.DrawString("•")
 		}
-		drawer.Dot = fixed.Point26_6{X: x, Y: baseline + line.y}
+		dot := fixed.Point26_6{X: x, Y: baseline + line.y}
+		if _, pixel := layout.face.(*pixelFace); pixel {
+			step := max(1, height/180)
+			for _, layer := range []struct {
+				offset int
+				color  string
+			}{{3 * step, "#031632"}, {2 * step, style.AccentColor}, {step, "#c3663c"}} {
+				c, _ := ParseColor(layer.color)
+				drawer.Src = image.NewUniform(c)
+				drawer.Dot = dot.Add(fixed.P(step, layer.offset))
+				drawer.DrawString(line.text)
+			}
+		}
+		drawer.Src = image.NewUniform(textColor)
+		drawer.Dot = dot
 		drawer.DrawString(line.text)
 	}
 	if inputs.Logo != nil {

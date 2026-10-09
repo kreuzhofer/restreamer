@@ -39,7 +39,7 @@ func validBRBGeneration(id string) bool {
 }
 
 func loadThemedBRB(root string, settings brbSettings) (*brbMedia, error) {
-	if !validBRBGeneration(settings.Generation) || settings.Theme == nil || len(mediaauthor.ValidateStyle(settings.Theme.Style)) > 0 || settings.Theme.Revision < 1 || (settings.Theme.ID != "retro" && !validDesignID(settings.Theme.ID)) {
+	if !validBRBGeneration(settings.Generation) || settings.Theme == nil || len(mediaauthor.ValidateStyle(settings.Theme.Style)) > 0 || settings.Theme.Revision < 1 || (!mediaauthor.IsBuiltinTheme(settings.Theme.ID) && !validDesignID(settings.Theme.ID)) {
 		return nil, errors.New("invalid captured BRB theme")
 	}
 	if err := settings.Profile.Validate(); err != nil {
@@ -63,7 +63,7 @@ func loadThemedBRB(root string, settings brbSettings) (*brbMedia, error) {
 	if err != nil {
 		return nil, errors.New("cannot read retained themed BRB audio")
 	}
-	if len(v.frames) != 4*settings.Profile.FPS || a.duration > 600*time.Second {
+	if len(v.frames) != themedBRBSeconds(settings.Theme.Style)*settings.Profile.FPS || a.duration > 600*time.Second {
 		return nil, errors.New("retained themed BRB timing is invalid")
 	}
 	for _, m := range []*rtmp.Message{v.header, a.header} {
@@ -77,7 +77,7 @@ func loadThemedBRB(root string, settings brbSettings) (*brbMedia, error) {
 			return nil, errors.New("retained themed BRB does not match its profile")
 		}
 	}
-	v.duration = 4 * time.Second
+	v.duration = time.Duration(themedBRBSeconds(settings.Theme.Style)) * time.Second
 	return &brbMedia{video: v, audio: a, settings: settings}, nil
 }
 
@@ -115,6 +115,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 		scene.Image = &mediaauthor.AssetRef{ID: settings.Generation, Revision: 1}
 		scene.Text = ""
 	}
+	inputs.TransparentBackdrop = animatedArcade(settings.Theme.Style)
 	raster, err := mediaauthor.RenderSceneStyled(scene, p.Width, p.Height, settings.Theme.Style, inputs, -1, p.FPS)
 	if err != nil {
 		return nil, fmt.Errorf("BRB layout: %s", err.Error())
@@ -123,6 +124,13 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	defer os.Remove(filepath.Join(dir, "effect.png"))
 	if err = saveGeneratorRaster(filepath.Join(dir, "base.png"), raster); err != nil {
 		return nil, err
+	}
+	inputs.TransparentBackdrop = false
+	if animatedArcade(settings.Theme.Style) {
+		inputs.Background, err = arcadePreviewFrame(ctx, p, 0)
+		if err != nil {
+			return nil, err
+		}
 	}
 	poster, err := mediaauthor.RenderSceneStyled(scene, p.Width, p.Height, settings.Theme.Style, inputs, 0, p.FPS)
 	if err != nil {
@@ -133,7 +141,14 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	}
 	args := []string{"-filter_threads", "1", "-filter_complex_threads", "1", "-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", filepath.Join(dir, "base.png")}
 	style := settings.Theme.Style
-	if style.Effect == "none" {
+	if animatedArcade(style) {
+		args, err = arcadeOverlayArgs(dir, filepath.Join(dir, "base.png"), p)
+		if err != nil {
+			return nil, err
+		}
+		args = append([]string{"-filter_threads", "1", "-filter_complex_threads", "1"}, args...)
+		defer os.Remove(filepath.Join(dir, "arcade-master.mp4"))
+	} else if style.Effect == "none" {
 		args = append(args, "-map", "0:v:0", "-vf", "setsar=1,format=yuv420p")
 	} else {
 		sprite := filepath.Join(dir, "effect.png")
@@ -144,7 +159,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 		filter := fmt.Sprintf("[0:v][1:v]overlay=x='%d+mod(floor(t*%d),%d)*%d':y=%d:format=auto,setsar=1,format=yuv420p[v]", start, style.EffectSpeed, slots, step, y)
 		args = append(args, "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", sprite, "-filter_complex", filter, "-map", "[v]")
 	}
-	args = append(args, "-an", "-frames:v", strconv.Itoa(4*p.FPS), "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-threads", "2", "-fs", strconv.Itoa(maxMediaBytes), "-f", "flv", filepath.Join(dir, "video.flv"))
+	args = append(args, "-an", "-frames:v", strconv.Itoa(themedBRBSeconds(style)*p.FPS), "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-threads", "2", "-fs", strconv.Itoa(maxMediaBytes), "-f", "flv", filepath.Join(dir, "video.flv"))
 	if err = runBRBFFmpeg(ctx, args...); err != nil {
 		return nil, err
 	}

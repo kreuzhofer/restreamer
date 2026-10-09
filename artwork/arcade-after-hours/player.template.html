@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arcade After Hours — motion study</title>
+<style>
+  :root { color-scheme: dark; font: 15px/1.5 system-ui,sans-serif; background:#070b16; color:#e7ecf7 }
+  * { box-sizing:border-box }
+  body { margin:0; padding:22px 28px }
+  main { max-width:1600px; margin:auto }
+  header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:16px }
+  h1 { font-size:21px; line-height:1.2; margin:0 0 5px; letter-spacing:-.4px }
+  .muted { color:#94a4bf; font-size:13px }
+  .badge { color:#ffd881; border:1px solid #534530; background:#241f18; padding:5px 12px; border-radius:99px; white-space:nowrap; font-size:12px }
+  .stage { max-width:min(100%,calc((100vh - 260px)*16/9)); margin-inline:auto; border:1px solid #283751; border-radius:10px; overflow:hidden; background:#030716; line-height:0 }
+  canvas { display:block; width:100%; aspect-ratio:16/9 }
+  .controls { padding:17px 0; display:flex; flex-wrap:wrap; align-items:center; gap:14px 22px }
+  button, select, a.download { background:#17243a; color:#edf2ff; border:1px solid #344866; padding:9px 15px; border-radius:7px; font:inherit; cursor:pointer; text-decoration:none }
+  button:hover, a.download:hover { background:#213450 }
+  button[aria-pressed=true] { border-color:#ffc867; color:#ffda97 }
+  button:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid #70d9ff; outline-offset:3px }
+  label { display:inline-flex; align-items:center; gap:9px }
+  input { accent-color:#ffcb72 }
+  #intensity { width:130px }
+  .timeline { display:flex; align-items:center; gap:14px; border-top:1px solid #1c2b43; padding-top:15px }
+  #time { flex:1; min-width:80px }
+  output { font-variant-numeric:tabular-nums; color:#b2c6e6; font-size:13px; min-width:84px }
+  .effects { display:flex; gap:18px; flex-wrap:wrap; margin:18px 0; color:#a8b9d3; font-size:13px }
+  footer { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-top:17px; padding-top:17px; border-top:1px solid #1c2b43 }
+  #error { color:#ff9393; white-space:pre-wrap }
+  @media(max-width:600px) { body {padding:16px 12px} header{align-items:flex-start} h1{font-size:18px} .badge{font-size:11px;padding:4px 8px} .controls{gap:12px} button,a.download{font-size:13px;padding:8px 10px} }
+</style>
+<main>
+  <header><div><h1>Arcade After Hours</h1><div class="muted">Background motion study · steady composition, living light</div></div><span class="badge">16-second loop</span></header>
+  <div class="stage"><canvas id="scene" width="1920" height="1080" aria-label="Animated arcade scene"></canvas></div>
+  <div id="error" role="alert"></div>
+  <div class="controls">
+    <button id="play">Pause</button>
+    <button id="compare" aria-pressed="false">Show original still</button>
+    <label>Animation contrast <select id="contrast"><option value="1">Vivid</option><option value="0">Subtle · original</option></select></label>
+    <label>Motion intensity <input id="intensity" type="range" min="0" max="100" value="100"><output id="amount">100%</output></label>
+  </div>
+  <div class="timeline"><span class="muted">Loop position</span><input id="time" aria-label="Loop position" type="range" min="0" max="15.999" step=".001" value="0"><output id="clock">0.0 / 16.0 s</output></div>
+  <div class="effects">
+    <label><input type="checkbox" id="water" checked>Flowing reflections</label>
+    <label><input type="checkbox" id="screens" checked>Cabinet screens</label>
+    <label><input type="checkbox" id="lights" checked>Chasing lights</label>
+    <label><input type="checkbox" id="stars" checked>Star shimmer</label>
+  </div>
+  <footer><span class="muted">Local visual prototype · silent · title and geometry stay fixed</span><a id="download" class="download" href="arcade-after-hours-vivid-1080p.mp4" download>Download Vivid MP4</a></footer>
+</main>
+<script id="vertex" type="x-shader/x-vertex">#version 300 es
+in vec2 pos;
+out vec2 uv;
+void main() {
+  gl_Position = vec4(pos,0.,1.);
+  uv = vec2(pos.x*.5+.5,.5-pos.y*.5);
+}
+</script>
+<script id="fragment" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+uniform sampler2D art;
+uniform sampler2D masks;
+uniform vec2 size;
+uniform float phase;
+uniform float strength;
+uniform float contrast;
+uniform vec4 enabled;
+in vec2 uv;
+out vec4 pixel;
+const float TAU=6.283185307179586;
+float luma(vec3 c) { return dot(c,vec3(.2126,.7152,.0722)); }
+float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+vec3 ramp(float n,vec3 low,vec3 mid,vec3 high) {
+  return n<.5 ? mix(low,mid,n*2.) : mix(mid,high,(n-.5)*2.);
+}
+void main() {
+  vec2 p=floor(uv*size)+.5;
+  vec2 st=p/size;
+  vec3 original=texture(art,st).rgb;
+  vec4 m=texture(masks,st)*enabled;
+  vec3 c=original;
+  float t=phase*TAU;
+  // Independent local ramps animate existing light; the global palette is fixed.
+  if (m.r>.0) {
+    float row=floor(p.y/2.);
+    float flow=sin(row*.36-t*4.+sin(p.x*.013+t)*.7);
+    float shimmer=sin(row*.77+t*8.+p.x*.022);
+    float luminance=luma(original);
+    float energy=clamp(luminance+mix(.13,.24,contrast)*flow+mix(.045,.07,contrast)*shimmer,0.,1.);
+    vec3 cycled;
+    if (original.r>original.b*.95 && original.r>original.g*.78) {
+      if (original.b>original.g*1.15) {
+        cycled=ramp(energy,vec3(.025,.025,.14),vec3(.46,.13,.65),vec3(1.,.64,.85));
+      } else {
+        cycled=ramp(energy,vec3(.09,.07,.09),vec3(.85,.40,.12),vec3(1.,.91,.48));
+      }
+    } else {
+      cycled=ramp(energy,vec3(.006,.025,.16),vec3(.018,.27,.73),vec3(.35,.88,1.));
+    }
+    // Deliberate horizontal pixel bands create flowing reflection without warping.
+    vec3 waterColor=mix(original,cycled,mix(.42,.56,contrast));
+    waterColor*=mix(.94,.91,contrast)+mix(.23,.43,contrast)*flow+mix(.065,.09,contrast)*shimmer;
+    c=mix(c,waterColor,m.r*strength);
+  }
+  if (m.g>.0) {
+    float light=pow(.5+.5*sin(p.y*.027-t*4.+p.x*.004),9.);
+    float breathe=sin(t*2.+floor(p.x/150.)*1.8);
+    float emission=smoothstep(.055,.43,max(original.r,max(original.g,original.b)));
+    vec3 screenColor=original*(mix(.94,.90,contrast)+mix(.10,.12,contrast)*breathe+mix(.32,.49,contrast)*light);
+    screenColor+=vec3(.025,.055,.09)*light*emission*mix(1.,1.2,contrast);
+    c=mix(c,screenColor,m.g*strength);
+  }
+  if (m.b>.0) {
+    float chase=.5+.5*sin(p.x*.053-t*8.+floor(p.y/80.)*.85);
+    float pulse=pow(chase,3.);
+    vec3 lit=original*(mix(.69,.40,contrast)+mix(.85,1.52,contrast)*pulse);
+    lit+=vec3(.045,.025,.006)*pulse;
+    c=mix(c,lit,m.b*strength);
+  }
+  if (m.a>.0) {
+    float group=hash(floor(p/6.));
+    float rate=1.+floor(group*3.);
+    float star=.5+.5*sin(t*rate+group*TAU);
+    float sparkle=mix(.65+.65*star,.10+2.30*pow(star,2.),contrast);
+    vec3 glimmer=original*sparkle;
+    c=mix(c,glimmer,m.a*strength);
+  }
+  pixel=vec4(clamp(c,0.,1.),1.);
+}
+</script>
+<script>
+'use strict';
+const canvas=document.getElementById('scene');
+const gl=canvas.getContext('webgl2',{alpha:false,antialias:false,preserveDrawingBuffer:true});
+const source=new Image();
+let start=performance.now(), position=0, playing=true, compare=false, frameRequest=0;
+let intensity=1, contrast=1, renderReady=false, program;
+const effectNames=['water','screens','lights','stars'];
+function compile(type,id) {
+  const shader=gl.createShader(type);
+  gl.shaderSource(shader,document.getElementById(id).textContent);
+  gl.compileShader(shader);
+  if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader));
+  return shader;
+}
+function polygonMask(w,h,polygons) {
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.fillStyle='white';
+  for(const points of polygons) {
+    ctx.beginPath();
+    points.forEach((p,i)=>ctx[i?'lineTo':'moveTo'](p[0]*w/1672,p[1]*h/941));
+    ctx.closePath();ctx.fill();
+  }
+  return ctx.getImageData(0,0,w,h).data;
+}
+function maskPixels(w,h) {
+  const water=polygonMask(w,h,[
+    [[735,750],[1001,750],[1001,768],[1033,768],[1033,795],[1070,795],[1070,820],[1125,820],[1125,873],[1188,873],[1188,911],[1222,931],[1222,941],[544,941],[544,895],[520,878],[481,854],[481,836],[514,820],[568,820],[568,797],[615,797],[615,770],[735,770]]
+  ]);
+  const screens=polygonMask(w,h,[
+    [[65,253],[179,283],[198,467],[80,440]],
+    [[1502,253],[1639,216],[1664,471],[1508,493]],
+    [[106,173],[220,211],[209,248],[99,211]],
+    [[1469,187],[1611,136],[1618,153],[1473,205]],
+    [[478,534],[534,543],[533,585],[480,579]],
+    [[375,396],[411,385],[427,449],[393,465]]
+  ]);
+  const lights=polygonMask(w,h,[
+    [[285,615],[473,615],[473,647],[285,647]],
+    [[341,734],[526,734],[526,768],[341,768]],
+    [[537,704],[636,704],[636,726],[537,726]],
+    [[1115,688],[1156,688],[1156,715],[1115,715]],
+    [[1336,557],[1596,487],[1596,521],[1336,591]],
+    [[1443,555],[1565,531],[1622,593],[1444,639]],
+    [[1354,845],[1455,891],[1456,938],[1346,891]],
+    [[1460,280],[1471,654],[1453,651],[1442,288]]
+  ]);
+  const starAreas=polygonMask(w,h,[
+    [[316,3],[1163,3],[1163,148],[1010,160],[506,151],[494,181],[425,177],[315,135]],
+    [[1294,10],[1432,10],[1390,156],[1354,184],[1308,128]],
+    [[565,477],[1064,477],[1052,620],[700,620],[652,540]]
+  ]);
+  const helper=document.createElement('canvas');helper.width=w;helper.height=h;
+  const ctx=helper.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(source,0,0);
+  const data=ctx.getImageData(0,0,w,h).data;
+  const masks=new Uint8Array(w*h*4);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++) {
+    const i=(y*w+x)*4,r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
+    const bright=Math.max(r,g,b),dark=Math.min(r,g,b),sat=bright-dark;
+    const sx=x*1672/w,sy=y*941/h;
+    if(sx>479&&sx<1193&&sy>167&&sy<472) continue;
+    masks[i]=water[i+3];
+    masks[i+1]=screens[i+3];
+    // Only actual luminous pixels in the architectural light regions respond.
+    const warm=Math.max(0,Math.min(1,(r-.32)*3))*Math.max(0,Math.min(1,(g-.20)*4));
+    masks[i+2]=Math.round(lights[i+3]*warm);
+    const smallStar=Math.max(0,Math.min(1,(bright-.43)*3))*(sat>.10?1:0);
+    // Foreground spacecraft and the moon are not part of the star field.
+    const solidSkyObject=(sx>315&&sx<414&&sy>32&&sy<105)||
+      (sx>1085&&sx<1189&&sy>72&&sy<149)||
+      (sx>1193&&sx<1320&&sy>39&&sy<171);
+    masks[i+3]=solidSkyObject?0:Math.round(starAreas[i+3]*smallStar);
+  }
+  return masks;
+}
+function texture(unit,data,w,h) {
+  gl.activeTexture(gl.TEXTURE0+unit);
+  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  if(data instanceof Uint8Array) gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+  else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,data);
+}
+function draw(seconds,amount=intensity,effects=[1,1,1,1]) {
+  if(!renderReady)return;
+  const phase=((seconds%16)+16)%16/16;
+  gl.uniform1f(gl.getUniformLocation(program,'phase'),phase);
+  gl.uniform1f(gl.getUniformLocation(program,'strength'),amount);
+  gl.uniform1f(gl.getUniformLocation(program,'contrast'),contrast);
+  gl.uniform4fv(gl.getUniformLocation(program,'enabled'),effects);
+  gl.drawArrays(gl.TRIANGLES,0,6);
+}
+function uiFrame(now) {
+  if(playing) position=((now-start)/1000)%16;
+  draw(position,compare?0:intensity,effectNames.map(id=>document.getElementById(id).checked?1:0));
+  document.getElementById('time').value=position;
+  document.getElementById('clock').textContent=position.toFixed(1)+' / 16.0 s';
+  frameRequest=requestAnimationFrame(uiFrame);
+}
+window.study={
+  ready:false,
+  contrast(value){contrast=value},
+  freeze(){playing=false;cancelAnimationFrame(frameRequest)},
+  render(seconds,amount=1,effects=[1,1,1,1]){this.freeze();draw(seconds,amount,effects);gl.finish()},
+  png(){return canvas.toDataURL('image/png').split(',')[1]},
+  pixels(){const p=new Uint8Array(canvas.width*canvas.height*4);gl.readPixels(0,0,canvas.width,canvas.height,gl.RGBA,gl.UNSIGNED_BYTE,p);return p},
+  resize(w,h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h)}
+};
+source.onload=()=>{
+  try {
+    if(!gl)throw Error('WebGL2 is unavailable in this browser. Open the MP4 alongside this file.');
+    program=gl.createProgram();
+    gl.attachShader(program,compile(gl.VERTEX_SHADER,'vertex'));
+    gl.attachShader(program,compile(gl.FRAGMENT_SHADER,'fragment'));
+    gl.linkProgram(program);
+    if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));
+    gl.useProgram(program);
+    const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    const pos=gl.getAttribLocation(program,'pos');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
+    texture(0,source);texture(1,maskPixels(source.width,source.height),source.width,source.height);
+    gl.uniform1i(gl.getUniformLocation(program,'art'),0);
+    gl.uniform1i(gl.getUniformLocation(program,'masks'),1);
+    gl.uniform2f(gl.getUniformLocation(program,'size'),source.width,source.height);
+    gl.viewport(0,0,canvas.width,canvas.height);
+    renderReady=true;window.study.ready=true;start=performance.now();
+    if(new URLSearchParams(location.search).has('export')){playing=false;draw(0)}
+    else frameRequest=requestAnimationFrame(uiFrame);
+  } catch(e){document.getElementById('error').textContent=e.message;window.study.error=e.message}
+};
+source.onerror=()=>{window.study.error='Cannot load embedded concept artwork'};
+source.src='__ARTWORK_DATA__';
+document.getElementById('play').onclick=()=>{
+  playing=!playing;if(playing)start=performance.now()-position*1000;
+  document.getElementById('play').textContent=playing?'Pause':'Play';
+};
+document.getElementById('compare').onclick=()=>{
+  compare=!compare;
+  document.getElementById('compare').setAttribute('aria-pressed',String(compare));
+  document.getElementById('compare').textContent=compare?'Return to animation':'Show original still';
+};
+document.getElementById('intensity').oninput=e=>{
+  intensity=Number(e.target.value)/100;document.getElementById('amount').textContent=e.target.value+'%';
+};
+document.getElementById('contrast').onchange=e=>{
+  contrast=Number(e.target.value);
+  const download=document.getElementById('download');
+  download.href=contrast?'arcade-after-hours-vivid-1080p.mp4':'arcade-after-hours-1080p.mp4';
+  download.textContent=contrast?'Download Vivid MP4':'Download Subtle MP4';
+};
+document.getElementById('time').oninput=e=>{
+  position=Number(e.target.value);start=performance.now()-position*1000;
+};
+</script>
+</html>

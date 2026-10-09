@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -270,7 +271,7 @@ func (s *Server) buildBRBCandidate(ctx context.Context, p *brbThemePreparation, 
 	if err != nil {
 		return nil, err
 	}
-	args := []string{"-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "video.flv"), "-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "audio.flv"), "-map", "0:v:0", "-map", "1:a:0", "-t", "4", "-c", "copy", "-movflags", "+faststart", "-fs", "134217728", filepath.Join(dir, "preview.mp4")}
+	args := []string{"-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "video.flv"), "-protocol_whitelist", "file,pipe", "-stream_loop", "-1", "-i", filepath.Join(dir, "audio.flv"), "-map", "0:v:0", "-map", "1:a:0", "-t", fmt.Sprint(themedBRBSeconds(settings.Theme.Style)), "-c", "copy", "-movflags", "+faststart", "-fs", "134217728", filepath.Join(dir, "preview.mp4")}
 	if err = runBRBFFmpeg(ctx, args...); err != nil {
 		return nil, errors.New("Cannot prepare exact BRB preview")
 	}

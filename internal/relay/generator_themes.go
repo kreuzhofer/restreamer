@@ -1,10 +1,12 @@
 package relay
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
 	"image/draw"
+	"image/png"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,9 +23,8 @@ const maxThemeRevisions = 200
 
 func (g *generatorStore) loadThemes() error {
 	g.themes = map[mediaauthor.ThemeRef]mediaauthor.Theme{}
-	for _, n := range []int{1, 2} {
-		t := mediaauthor.RetroTheme(n)
-		g.themes[mediaauthor.ThemeRef{ID: t.ID, Revision: n}] = t
+	for _, t := range mediaauthor.BuiltinThemes() {
+		g.themes[mediaauthor.ThemeRef{ID: t.ID, Revision: t.Revision}] = t
 	}
 	files, err := os.ReadDir(g.themesRoot)
 	if err != nil {
@@ -37,7 +38,7 @@ func (g *generatorStore) loadThemes() error {
 		if readMediaJSON(filepath.Join(g.themesRoot, f.Name()), &t) != nil || !validDesignID(t.ID) || t.Revision < 1 || t.Builtin || !validThemeName(t.Name) || len(mediaauthor.ValidateStyle(t.Style)) > 0 || f.Name() != fmt.Sprintf("%s-%d.json", t.ID, t.Revision) {
 			return errors.New("invalid saved theme revision")
 		}
-		if len(g.themes) >= maxThemeRevisions+2 {
+		if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes()) {
 			return errors.New("theme revision limit exceeded")
 		}
 		g.themes[mediaauthor.ThemeRef{ID: t.ID, Revision: t.Revision}] = t
@@ -149,7 +150,7 @@ func (s *Server) generatorThemesHTTP(w http.ResponseWriter, r *http.Request) {
 	s.saveThemeHTTP(w, g, base, 201)
 }
 func (s *Server) saveThemeHTTP(w http.ResponseWriter, g *generatorStore, t mediaauthor.Theme, status int) {
-	if len(g.themes) >= maxThemeRevisions+2 {
+	if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes()) {
 		http.Error(w, "Theme history limit reached (200 custom revisions)", 409)
 		return
 	}
@@ -186,7 +187,7 @@ func (s *Server) generatorThemeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if id == "retro" {
+	if mediaauthor.IsBuiltinTheme(id) {
 		http.Error(w, "Built-in themes are immutable. Duplicate one to edit it.", 409)
 		return
 	}
@@ -222,6 +223,12 @@ func (s *Server) generatorThemeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int) (mediaauthor.RenderInputs, error) {
 	inputs := mediaauthor.RenderInputs{}
 	var err error
+	if theme.Style.Artwork == "arcade-after-hours" {
+		inputs.Background, err = png.Decode(bytes.NewReader(afterHoursPoster))
+		if err != nil {
+			return inputs, errors.New("Cannot decode Arcade After Hours artwork.")
+		}
+	}
 	if theme.Style.Background != nil {
 		inputs.Background, err = s.loadAssetImage(*theme.Style.Background)
 		if err != nil {

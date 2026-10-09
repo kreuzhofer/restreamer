@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: make check-brb-artwork
+      - run: make check-brb-artwork check-arcade-artwork
       - run: make check-web
       - uses: actions/setup-go@v5
         with:

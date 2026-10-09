@@ -244,6 +244,13 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if animatedArcade(theme.Style) {
+		inputs.Background, err = arcadePreviewFrame(r.Context(), profile, frame)
+		if err != nil {
+			http.Error(w, err.Error(), 422)
+			return
+		}
+	}
 	img, err := mediaauthor.RenderSceneStyled(draft.Scenes[sceneIndex], profile.Width, profile.Height, theme.Style, inputs, frame, profile.FPS)
 	if err != nil {
 		http.Error(w, "Cannot render scene preview", 422)

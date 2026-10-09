@@ -7,7 +7,7 @@ type ThemeRef struct {
 	Revision int    `json:"revision"`
 }
 
-// ContentRegion remains centered; percentages adjust its size without pixel positioning.
+// ContentRegion is centered horizontally and follows the theme vertical offset.
 // Zero values inherit the theme default.
 type ContentRegion struct {
 	WidthPercent  float64 `json:"width_percent,omitempty"`

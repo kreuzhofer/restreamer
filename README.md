@@ -809,10 +809,13 @@ Built-in starters are immutable sources; their copied scenes are fully editable.
 ### Versioned style themes
 
 The generator's **Style theme library** offers Retro revision 1 (the original
-static appearance) and Retro revision 2 (pixel corners and an animated pixel
-trail). Duplicate either into a named theme. Supported settings include Go Sans
-or Go Mono, 24–120 point type at 1080p, three palette colors, exact background
-and logo image revisions, logo corner and size, content dimensions, line/list
+static appearance), Retro revision 2 (pixel corners and an animated pixel
+trail), and **Arcade After Hours · revision 1** (the illustrated arcade city,
+vivid stars, chasing lights, cabinet highlights and animated canal reflections).
+Duplicate any built-in into a named theme. Supported settings include Go Sans,
+Go Mono or the embedded uppercase Arcade Pixel alphabet, 24–120 point type at 1080p, three palette colors, exact background
+and logo image revisions, logo corner and size, content dimensions and vertical
+offset, line/list
 spacing, borders, and a deterministic four-square decorative trail. Logo boxes
 must not overlap text regions; validation reports collisions and typography
 that no longer fits. Images keep their proportions and transparency.
@@ -830,8 +833,26 @@ limit of 200 custom revisions. Referenced image revisions remain protected from
 deletion and appear in asset uses. Jobs capture the full resolved theme alongside
 the pinned design and streaming profile. Theme images are verified and decoded
 sequentially, then bounded to the output dimensions (logos to 20% width and 10%
-height); animation uses one small sprite input, never a frame cache or a separate
-browser/Node runtime. Generation remains sequential with bounded scene files.
+height). Retro animation uses a small sprite; Arcade After Hours decodes an
+embedded background master. Neither needs a frame cache or browser/Node runtime. Generation remains sequential with bounded scene files.
+
+Arcade After Hours keeps all text editable. Its default large headline uses a
+quiet upper-center region; use explicit line breaks for a two-line title and a
+smaller scene font size for lists or longer copy. The pixel alphabet intentionally
+renders lowercase as uppercase and supports A–Z, digits, German umlauts, ß and
+basic punctuation. Other glyphs produce a field error; choose a Go font for
+broader language coverage. Text color, accent/shadow color, font, logo and spacing
+remain editable in a duplicated theme. The illustration has its own fixed colors;
+background color does not recolor it. Clear built-in artwork before choosing an
+uploaded background, and select **none** to freeze decorative animation.
+
+The palette-style background repeats every **16 seconds** and restarts per scene.
+For a seamless prestream use scene durations in multiples of 16 seconds, or scene
+and end-to-start crossfades. BRB prepares the full 16-second loop and retains its
+independent music duration. Select Arcade After Hours in **BRB → Shared theme**,
+prepare, preview, then explicitly activate it. Existing designs, prepared media
+and Retro revisions do not change automatically. The source, production edit
+prompt and rebuild instructions are in [artwork/arcade-after-hours](artwork/arcade-after-hours/README.md).
 
 ### Media generator drafts
 
@@ -845,13 +866,14 @@ A failed save retains local edits and offers Retry; a concurrent-tab conflict
 requires Reload saved draft or Save local work as a copy. Neither draft saves nor
 quick previews change broadcast media.
 
-Quick previews use embedded Go Sans and Go Mono scalable fonts, with no system
-fonts or new runtime executables. The same Go raster renderer and glyph metrics
+Quick previews use embedded Go Sans/Go Mono scalable fonts or Arcade Pixel
+bitmap glyphs, with no system font downloads. Animated artwork previews use the
+already-required FFmpeg executable. The same Go raster renderer and glyph metrics
 are available to prepared-media generation. Font size is specified at 1080p and
 scales with the active streaming profile. Latin text including European accents,
 Greek and Cyrillic are supported; missing glyphs (including unsupported emoji)
 and text overflow produce field errors. Text wraps at spaces and explicit line
-breaks, preserves mixed case, and is never automatically shrunk or truncated.
+breaks, preserves mixed case with Go fonts, and is never automatically shrunk or truncated.
 Clear the font-size field to inherit the selected theme's default.
 
 Draft input is limited to 64 KiB per request, 4096 UTF-8 bytes of combined title
