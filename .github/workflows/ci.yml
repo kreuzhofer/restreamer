@@ -113,7 +113,10 @@ jobs:
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
           ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf scale=16:16 -vsync 0 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
           ffmpeg -v error -i /tmp/generated-smoke-ending.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-ending.pcm
-          python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
+          if ! python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending; then
+            python3 tests/diagnose-ending.py /tmp/generated-smoke-ending.mp4 /tmp/generator-ending-diagnostics restreamer-smoke || true
+            exit 1
+          fi
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -185,6 +188,15 @@ jobs:
             -X POST http://127.0.0.1:18080/api/stage/commands -H 'Content-Type: application/json' \
             -H 'X-Restreamer-Control: 1' --data-binary @/tmp/before-restart-command.json)" = 409
           jq -e '.state == "rejected"' /tmp/restarted-command-result.json
+
+      - name: Retain failed synthetic ending media
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ending-media-diagnostic
+          path: /tmp/generator-ending-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 3
 
   generator-arm64:
     runs-on: ubuntu-24.04-arm
