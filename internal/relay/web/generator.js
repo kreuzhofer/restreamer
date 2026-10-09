@@ -436,6 +436,8 @@
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
     const active = jobs.find(job => ['running', 'cancelling'].includes(job.state));
     $('generation-status').textContent = `${outstanding.length}/8 outstanding · ${active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available'} · one render at a time`;
+    const stagePhase = stageStatus.stage === 'ENDING' && stageStatus.ending?.draining ? 'ENDING · finishing destination writes' : stageStatus.stage === 'OFF' && stageStatus.ending?.completed ? 'Ending completed · destination results are in live control' : stageStatus.stage || 'Status unavailable';
+    $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
     const relevant = jobs;
     $('generation-jobs').replaceChildren();
     for (const job of relevant) {
@@ -468,17 +470,18 @@
         const newer = job.design_snapshot.id === draft.id && job.design_snapshot.version < draft.version;
         detail.textContent = `Media ${job.media_revision} · ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
         const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
-        if (media?.state === 'ready' && job.design_snapshot.stage === 'prestream') {
+        const kind = job.design_snapshot.stage, stageName = kind.toUpperCase();
+        if (media?.state === 'ready' && ['prestream', 'ending'].includes(kind)) {
           const actions = document.createElement('div'); actions.className = 'generator-actions';
           const addLink = (action, text) => {
             const link = document.createElement('a'); link.className = 'preview-button'; link.target = '_blank'; link.rel = 'noopener'; link.textContent = text;
-            const params = {media_revision: job.media_revision, media_stage: 'prestream', media_action: action};
+            const params = {media_revision: job.media_revision, media_stage: kind, media_action: action};
             if (action !== 'select_next') Object.assign(params, {server_id: stageStatus.server_id, context: stageStatus.context});
             link.href = `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
           };
-          addLink('select_next', 'Select for next PRESTREAM');
-          if (stageStatus.stage === 'PRESTREAM' && stageStatus.media?.revision && stageStatus.media.revision !== job.media_revision) addLink('replace_now', 'Review Replace PRESTREAM now');
-          if (stageStatus.return_stage === 'PRESTREAM' && stageStatus.return_media?.revision && stageStatus.return_media.revision !== job.media_revision) addLink('replace_on_return', 'Review Replace PRESTREAM on return');
+          addLink('select_next', `Select for next ${stageName}`);
+          if (stageStatus.stage === stageName && stageStatus.media?.revision && stageStatus.media.revision !== job.media_revision && (kind !== 'ending' || (!stageStatus.ending?.draining && !stageStatus.ending?.completed))) addLink('replace_now', `Review Replace ${stageName} now`);
+          if (kind === 'prestream' && stageStatus.return_stage === 'PRESTREAM' && stageStatus.return_media?.revision && stageStatus.return_media.revision !== job.media_revision) addLink('replace_on_return', 'Review Replace PRESTREAM on return');
           row.append(actions);
         }
       }

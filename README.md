@@ -946,6 +946,14 @@ stage. Generated results are also listed under **All prepared revisions** in
 the video library. The generator shows saved selections, actual on-air/rehearsal
 media, and suspended return revisions separately from captured jobs and drafts.
 
+ENDING results use the same **Select for next ENDING** and **Review Replace
+ENDING now** path. A running ending continues throughout authoring, generation
+and next-selection saves. Confirmed replacement starts the reviewed revision
+from the beginning and postpones shutdown. Once final destination writes start
+or the ending completes, replacement is unavailable; the prepared result stays
+available for a later explicit selection. Generation never restarts a completed
+broadcast or changes rehearsal/delivery mode.
+
 Job snapshots and outcomes persist beneath `<library_directory>/generator/jobs`;
 a restart marks unfinished jobs interrupted and removes incomplete workspace
 files. **Retry captured revision** explicitly creates a new job at the back of

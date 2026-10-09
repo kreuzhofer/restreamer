@@ -13,16 +13,26 @@
   const intentFields = ['media_revision', 'media_stage', 'media_action', 'server_id', 'context'];
   let intent = intentFields.some(key => parameters.has(key)) ? Object.fromEntries(intentFields.map(key => [key, parameters.get(key) || ''])) : null;
   let intentError = '';
-  if (intent && (intentFields.some(key => parameters.getAll(key).length > 1) || !/^[a-f0-9]{64}$/.test(intent.media_revision) || intent.media_stage !== 'prestream' || !['select_next', 'replace_now', 'replace_on_return'].includes(intent.media_action) || (intent.media_action === 'select_next' ? intent.server_id || intent.context : !/^[^\s]{1,256}$/.test(intent.server_id) || !/^[^\s]{1,256}$/.test(intent.context)))) intentError = 'Invalid generated-result request. No selection or playback change was made.';
-  const intentLabel = () => intent?.media_action === 'select_next' ? 'Select for next PRESTREAM' : intent?.media_action === 'replace_on_return' ? 'Replace PRESTREAM on return' : 'Replace PRESTREAM now';
+  if (intent && (
+    intentFields.some(key => parameters.getAll(key).length > 1) ||
+    !/^[a-f0-9]{64}$/.test(intent.media_revision) ||
+    !['prestream', 'ending'].includes(intent.media_stage) ||
+    !['select_next', 'replace_now', 'replace_on_return'].includes(intent.media_action) ||
+    (intent.media_stage === 'ending' && intent.media_action === 'replace_on_return') ||
+    (intent.media_action === 'select_next' ? intent.server_id || intent.context :
+      !/^[^\s]{1,256}$/.test(intent.server_id) || !/^[^\s]{1,256}$/.test(intent.context))
+  )) intentError = 'Invalid generated-result request. No selection or playback change was made.';
+  const intentKind = () => intent?.media_stage === 'ending' ? 'ENDING' : 'PRESTREAM';
+  const intentLabel = () => intent?.media_action === 'select_next' ? `Select for next ${intentKind()}` : intent?.media_action === 'replace_on_return' ? 'Replace PRESTREAM on return' : `Replace ${intentKind()} now`;
   function intentProblem() {
     if (intentError) return intentError;
     const candidate = revision(), stage = snapshot?.stage;
     if (!ready(candidate) || candidate.id !== intent.media_revision) return `This exact revision is ${candidate?.state || 'unavailable'}. No other revision was substituted.`;
     if (intent.media_action === 'select_next') return '';
+    if (intent.media_stage === 'ending' && ['ENDING', 'OFF'].includes(stage?.stage) && (stage?.ending?.draining || stage?.ending?.completed)) return `The ending ${stage.ending.draining ? 'is finishing destination writes' : 'has completed'}. This prepared result remains available for later use; replacement cannot restart the broadcast.`;
     if (!stage || stage.server_id !== intent.server_id || stage.context !== intent.context) return 'The broadcast or saved selection changed since this request. The exact candidate is retained. Dismiss this request to choose a fresh action.';
     const returning = intent.media_action === 'replace_on_return';
-    if ((returning ? stage.return_stage : stage.stage) !== 'PRESTREAM' || !(returning ? stage.return_media?.revision : stage.media?.revision)) return 'This request no longer applies to PRESTREAM. It cannot replace another stage or return destination. Dismiss it to choose a fresh action.';
+    if ((returning ? stage.return_stage : stage.stage) !== intentKind() || !(returning ? stage.return_media?.revision : stage.media?.revision)) return `This request no longer applies to ${intentKind()}. It cannot replace another stage or return destination. Dismiss it to choose a fresh action.`;
     if ((returning ? stage.return_media.revision : stage.media.revision) === intent.media_revision) return 'This exact revision is already selected for that playback. No replacement is needed.';
     return '';
   }
@@ -30,10 +40,10 @@
     el('media-intent').hidden = !intent;
     if (!intent) return;
     const candidate = revision(), problem = intentProblem(), selecting = intent.media_action === 'select_next';
-    el('media-intent-title').textContent = intentLabel();
+    el('media-intent-title').textContent = intentError ? 'Generated result request' : intentLabel();
     el('media-intent-detail').textContent = `Exact candidate: ${candidate?.name || 'Unavailable result'} · ${intent.media_revision}`;
-    el('media-intent-status').textContent = problem || (selecting ? 'Opening this result changes no saved selection or playback. Add it to the settings below, then explicitly Save selections.' : `Preview this exact revision, then review ${intentLabel()}. Current playback continues until confirmation. ${snapshot.stage.mode === 'preview_only' ? 'PREVIEW ONLY — NOT BROADCASTING.' : 'Real broadcast session.'}`);
-    el('media-intent-review').textContent = selecting ? 'Use for next PRESTREAM' : `Review ${intentLabel()}`;
+    el('media-intent-status').textContent = problem || (selecting ? 'Opening this result changes no saved selection or playback. Add it to the settings below, then explicitly Save selections.' : `Preview this exact revision, then review ${intentLabel()}. Current playback continues until confirmation.${intent.media_stage === 'ending' ? ' Replacing the ending restarts it from the beginning and postpones shutdown.' : ''} ${snapshot.stage.mode === 'preview_only' ? 'PREVIEW ONLY — NOT BROADCASTING.' : 'Real broadcast session.'}`);
+    el('media-intent-review').textContent = selecting ? `Use for next ${intentKind()}` : `Review ${intentLabel()}`;
     el('media-intent-review').disabled = !usable || saving || !!problem || (!selecting && previewRevision !== intent.media_revision);
     el('library-select').disabled = el('library-revision').disabled = true;
     el('library-once').disabled = el('library-loop').disabled = true;
@@ -151,10 +161,10 @@
   el('media-intent-review').addEventListener('click', () => {
     if (!intent || intentProblem() || !connected || saving || window.broadcastStages?.busy()) return;
     if (intent.media_action === 'select_next') {
-      draft ||= copy(saved); draft.prestream = intent.media_revision;
+      draft ||= copy(saved); draft[intent.media_stage] = intent.media_revision;
       renderSelections(); render();
       el('stage-selections-form').closest('details').open = true;
-      el('selection-prestream').focus(); el('selection-prestream').scrollIntoView({block: 'center'});
+      el(`selection-${intent.media_stage}`).focus(); el(`selection-${intent.media_stage}`).scrollIntoView({block: 'center'});
     } else if (previewRevision === intent.media_revision) {
       window.broadcastStages?.request({action: intent.media_action, revision: intent.media_revision}, true, {server_id: intent.server_id, context: intent.context});
     }

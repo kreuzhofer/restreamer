@@ -134,6 +134,69 @@ try {
       await control.locator('#stage-dialog-confirm').click();await eventually(async()=> (await stage()).media.revision===a.revision);
     }
   }
+  await command('stop_now');
+  const endingA=await generate('Ending original','ending',8), endingB=await generate('Ending correction','ending',4);
+  const endingEditor=await context.newPage();await endingEditor.goto(base+'/generator?id='+endingB.design.id);
+  const endingRow=endingEditor.locator(`[data-job-id="${endingB.job.id}"]`);
+  const endingSelection=endingRow.getByRole('link',{name:'Select for next ENDING'});
+  await endingSelection.waitFor(); // Red before #32: ENDING has no bridge action.
+  for(const [width,height,label] of [[1440,1050,'desktop'],[390,844,'mobile']]) {
+    await command('stop_now');await api('/api/stage-media','PUT',{...initial,ending:endingA.revision});
+    await command('prestream',{mode:'preview_only'});await command('end_stream');
+    await control.setViewportSize({width,height});await endingEditor.setViewportSize({width,height});
+    await control.goto(base+await endingSelection.getAttribute('href'));
+    await control.locator('#media-intent').waitFor({state:'visible'});
+    assert.equal((await stage()).media.revision,endingA.revision);
+    await control.locator('#media-intent-review').click();
+    assert.equal(await control.locator('#selection-ending').inputValue(),endingB.revision);
+    await control.locator('#selection-save').click();
+    await eventually(async()=> (await api('/api/stage-media')).ending===endingB.revision);
+    assert.equal((await stage()).media.revision,endingA.revision,'Next selection replaced the running ending');
+    const observed=await stage(), replaceEnding=endingRow.getByRole('link',{name:'Review Replace ENDING now'});
+    const href=await eventually(async()=>{const href=await replaceEnding.getAttribute('href').catch(()=>null);return href&&new URL(href,base).searchParams.get('context')===observed.context&&href;});
+    await control.goto(base+href);await control.locator('#library-preview').click();
+    await control.waitForFunction(()=>document.querySelector('#candidate-video').readyState>=2);
+    await control.locator('#media-intent-review').click();
+    assert((await control.locator('#stage-dialog-effect').textContent()).includes('postpones shutdown'));
+    assert((await control.locator('#stage-dialog-context').textContent()).includes(endingB.revision));
+    await control.locator('#stage-dialog').screenshot({path:output+'/'+label+'-ending-review.png'});
+    if(label==='desktop') await eventually(async()=> (await stage()).playback.position>5.8);
+    await control.locator('#stage-dialog-confirm').click();await eventually(async()=> (await stage()).media.revision===endingB.revision);
+    assert.equal((await stage()).playback.loop,false);assert.equal((await stage()).mode,'preview_only');
+    if(label==='desktop') {
+      await eventually(async()=> (await stage()).playback.position>2.4);
+      assert.equal((await stage()).stage,'ENDING','Original EOF stopped the replacement');
+    }
+    await eventually(async()=> (await stage()).stage==='OFF');assert.equal((await stage()).ending.completed,true);
+    await control.goto(base+href);await control.locator('#media-intent').waitFor({state:'visible'});
+    assert.equal(await control.locator('#media-intent-review').isDisabled(),true);
+    assert.equal(await control.locator('#library-revision').inputValue(),endingB.revision);
+    await eventually(async()=> (await control.locator('#media-intent-status').textContent()).includes('ending'));
+    assert.equal(await control.locator('#library-replace-now').isDisabled(),true);
+    assert(await control.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await control.screenshot({path:output+'/'+label+'-completed-ending.png',fullPage:true});
+  }
+  // Completion while a confirmation is open disables it and keeps the candidate.
+  await api('/api/stage-media','PUT',{...initial,ending:endingB.revision});
+  await command('prestream',{mode:'preview_only'});await command('end_stream');
+  const endingARow=endingEditor.locator(`[data-job-id="${endingA.job.id}"]`), endingALink=endingARow.getByRole('link',{name:'Review Replace ENDING now'});
+  const endingState=await stage();
+  const heldURL=await eventually(async()=>{const href=await endingALink.getAttribute('href').catch(()=>null);return href&&new URL(href,base).searchParams.get('context')===endingState.context&&href;});
+  await control.goto(base+heldURL);await control.locator('#library-preview').click();await control.locator('#media-intent-review').click();
+  await eventually(async()=> (await stage()).stage==='OFF');
+  await eventually(async()=> await control.locator('#stage-dialog-confirm').isDisabled());
+  await control.locator('#stage-dialog-cancel').click();
+  assert.equal(await control.locator('#library-revision').inputValue(),endingA.revision);
+  // A forged ENDING-on-return request is unsupported, even with a ready revision.
+  await control.goto(base+'/?'+new URLSearchParams({media_revision:endingA.revision,media_stage:'ending',media_action:'replace_on_return',server_id:endingState.server_id,context:endingState.context}));
+  await control.locator('#media-intent').waitFor({state:'visible'});
+  assert.equal(await control.locator('#media-intent-review').isDisabled(),true);
+  // Completed ending results remain observable during a later session. They
+  // must not hide PRESTREAM controls or mislabel its current stage.
+  await command('prestream',{mode:'preview_only'});
+  const nextSession=await stage();
+  await eventually(async()=>{const href=await replace.getAttribute('href').catch(()=>null);return href&&new URL(href,base).searchParams.get('context')===nextSession.context;});
+  assert((await editor.locator('#generation-stage-status').textContent()).startsWith('PRESTREAM'));
   assert.deepEqual(errors,[]);
-  console.log('PASS passive exact discovery/selection, reviewed PRESTREAM replacement/return, stale and invalid links, rehearsal, desktop/mobile, editor preserved');
+  console.log('PASS passive exact selection, PRESTREAM replacement/return, ENDING postponement/completion races, stale/invalid links, rehearsal, desktop/mobile, editor preserved');
 } finally {await command('stop_now').catch(()=>{});await browser.close();}
