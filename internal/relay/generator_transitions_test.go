@@ -41,6 +41,7 @@ func TestGeneratorCrossfadeBlendsActualVideoAndSourceAudio(t *testing.T) {
 	s := libraryServer(t)
 	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "split.mp4", generatorSplitVideo(t)))
 	d := videoDesign(t, s, a.ID, 1, 0, 1, 100, false, true)
+	d.Theme.Revision = 2 // Exercise themed animated video normalization before overlap composition.
 	d.Scenes[0].Transition = &mediaauthor.Transition{Kind: "crossfade", DurationSeconds: .4}
 	second := d.Scenes[0]
 	second.ID = "second"

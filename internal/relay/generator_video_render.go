@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	"image/png"
 	"io"
 	"math"
 	"os"
@@ -29,7 +27,7 @@ func sampleBoundary(frames, sampleRate, fps int) int64 {
 }
 
 // The caller already holds preparation admission. No helper reacquires it.
-func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64)) error {
+func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
 	source, meta, err := s.openVideoAsset(scene)
 	if err != nil {
 		return err
@@ -49,22 +47,12 @@ func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene
 	scale := math.Min(float64(region.Dx())/float64(meta.Width), float64(region.Dy())/float64(meta.Height))
 	width, height := max(2, int(float64(meta.Width)*scale)/2*2), max(2, int(float64(meta.Height)*scale)/2*2)
 	backdrop := filepath.Join(dir, "video-backdrop.png")
-	img, err := mediaauthor.RenderSceneWithImage(scene, p.Width, p.Height, image.NewRGBA(image.Rect(0, 0, 1, 1)))
-	if err != nil {
+	if err := saveGeneratorRaster(backdrop, mediaauthor.ThemeBackdrop(p.Width, p.Height, style, inputs)); err != nil {
 		return err
-	}
-	f, err := os.Create(backdrop)
-	if err != nil {
-		return errors.New("Cannot create video backdrop.")
-	}
-	err = png.Encode(f, img)
-	closeErr := f.Close()
-	if err != nil || closeErr != nil {
-		return errors.New("Cannot write video backdrop.")
 	}
 	defer os.Remove(backdrop)
 	target := dst
-	if frames > rangeFrames {
+	if frames > rangeFrames || style.Effect != "none" {
 		target = filepath.Join(dir, "video-range.mp4")
 		defer os.Remove(target)
 	}
@@ -74,8 +62,19 @@ func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene
 	args = append(args, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", backdrop)
 	// Allow at most one replicated terminal frame solely for source/output frame
 	// quantization. The selected range is trimmed before padding or repetition.
-	filter := fmt.Sprintf("[0:v]trim=duration=%s,setpts=PTS-STARTPTS,fps=%d,scale=%d:%d,setsar=1,format=yuv420p,tpad=stop_mode=clone:stop_duration=%s,trim=end_frame=%d[content];[1:v][content]overlay=%d:%d:shortest=1:format=auto,format=yuv420p[video]", decimal(end-start), p.FPS, width, height, decimal(1/float64(p.FPS)), normalizedFrames, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
-	args = append(args, "-filter_complex", filter, "-map", "[video]", "-an", "-frames:v", strconv.Itoa(normalizedFrames))
+	filter := fmt.Sprintf("[0:v]trim=duration=%s,setpts=PTS-STARTPTS,fps=%d,scale=%d:%d,setsar=1,format=yuv420p,tpad=stop_mode=clone:stop_duration=%s,trim=end_frame=%d[content];[1:v][content]overlay=%d:%d:shortest=1:format=rgb[video]", decimal(end-start), p.FPS, width, height, decimal(1/float64(p.FPS)), normalizedFrames, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
+	if inputs.Logo != nil {
+		foreground := filepath.Join(dir, "video-foreground.png")
+		if err := saveGeneratorRaster(foreground, mediaauthor.ThemeForeground(p.Width, p.Height, style, inputs)); err != nil {
+			return err
+		}
+		defer os.Remove(foreground)
+		args = append(args, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
+		filter += ";[video][2:v]overlay=0:0:format=rgb,format=yuv420p[branded]"
+	} else {
+		filter += ";[video]format=yuv420p[branded]"
+	}
+	args = append(args, "-filter_complex", filter, "-map", "[branded]", "-an", "-frames:v", strconv.Itoa(normalizedFrames))
 	args = append(args, videoEncodingArgs(p)...)
 	args = append(args, "-fs", strconv.FormatInt(budget, 10), "-progress", "pipe:1", target)
 	if err := runGeneratorFFmpeg(ctx, args, progress); err != nil {
@@ -88,12 +87,25 @@ func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene
 	if err := validateVideoFrameCount(ctx, target, normalizedFrames); err != nil {
 		return err
 	}
-	if frames > rangeFrames {
-		args = generatorBaseArgs()
-		args = append(args, "-stream_loop", "-1", "-i", target, "-map", "0:v:0", "-an", "-frames:v", strconv.Itoa(frames), "-c:v", "copy", "-video_track_timescale", strconv.Itoa(p.FPS*1000), "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)
+	if frames > rangeFrames || style.Effect != "none" {
 		if budget-info.Size() < 1 {
 			return errors.New("Video repetition exceeds the workspace limit.")
 		}
+		args = generatorBaseArgs()
+		if frames > rangeFrames {
+			args = append(args, "-stream_loop", "-1")
+		}
+		args = append(args, "-threads", "2", "-i", target)
+		if style.Effect != "none" {
+			sprite := filepath.Join(dir, "effect.png")
+			start, y, step, slots := mediaauthor.EffectGeometry(p.Width, p.Height)
+			filter := fmt.Sprintf("[0:v][1:v]overlay=x='%d+mod(floor(t*%d),%d)*%d':y=%d:format=yuv420,setsar=1,format=yuv420p[v]", start, style.EffectSpeed, slots, step, y)
+			args = append(args, "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", sprite, "-filter_complex", filter, "-map", "[v]")
+			args = append(args, videoEncodingArgs(p)...)
+		} else {
+			args = append(args, "-map", "0:v:0", "-c:v", "copy", "-video_track_timescale", strconv.Itoa(p.FPS*1000))
+		}
+		args = append(args, "-an", "-frames:v", strconv.Itoa(frames), "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)
 		if err := runGeneratorFFmpeg(ctx, args, progress); err != nil {
 			return err
 		}
@@ -102,6 +114,7 @@ func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene
 			return errors.New("Video repetition reached the workspace limit. Shorten the design.")
 		}
 	}
+
 	return videoSourceUnchanged(source, meta)
 }
 

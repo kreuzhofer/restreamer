@@ -22,6 +22,8 @@ var errDesignTooLarge = errors.New("design exceeds 64 KiB after JSON encoding")
 type generatorStore struct {
 	mu                 sync.Mutex
 	assetUploadMu      sync.Mutex
+	themesRoot         string
+	themes             map[mediaauthor.ThemeRef]mediaauthor.Theme
 	assetsRoot         string
 	assets             map[string]GeneratorAsset
 	previewMu          sync.Mutex
@@ -44,10 +46,11 @@ func (s *Server) initializeGenerator() error {
 		return errors.New("cannot create generator draft storage")
 	}
 	g := &generatorStore{root: root, jobsRoot: filepath.Join(filepath.Dir(root), "jobs"), workRoot: filepath.Join(filepath.Dir(root), "work"), jobs: make(map[string]*GenerationJob), wake: make(chan struct{}, 1)}
+	g.themesRoot = filepath.Join(filepath.Dir(root), "themes")
 	g.assetsRoot = filepath.Join(filepath.Dir(root), "assets")
 	g.assets = make(map[string]GeneratorAsset)
 	g.templateRoot = filepath.Join(filepath.Dir(root), "templates")
-	for _, dir := range []string{g.jobsRoot, g.workRoot, g.assetsRoot, g.templateRoot} {
+	for _, dir := range []string{g.jobsRoot, g.workRoot, g.assetsRoot, g.templateRoot, g.themesRoot} {
 		if os.MkdirAll(dir, 0700) != nil {
 			return errors.New("cannot create generator job storage")
 		}
@@ -56,6 +59,9 @@ func (s *Server) initializeGenerator() error {
 		return err
 	}
 	if err := g.loadAssets(); err != nil {
+		return err
+	}
+	if err := g.loadThemes(); err != nil {
 		return err
 	}
 	s.generator = g

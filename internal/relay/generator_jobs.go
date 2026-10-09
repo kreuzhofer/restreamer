@@ -18,7 +18,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
-const generatorRenderer = "go-png-ffmpeg-v2"
+const generatorRenderer = "go-png-ffmpeg-v3"
 const maxGeneratorJobs = 200
 const maxGeneratorOutstanding = 8
 const maxGeneratorSeconds = 600
@@ -39,6 +39,7 @@ type GenerationJob struct {
 	Error          string             `json:"error,omitempty"`
 	DesignRevision string             `json:"design_revision"`
 	Design         mediaauthor.Design `json:"design_snapshot"`
+	ThemeSnapshot  *mediaauthor.Theme `json:"theme_snapshot,omitempty"`
 	Profile        config.BRBProfile  `json:"profile"`
 	Renderer       string             `json:"renderer"`
 	Duration       float64            `json:"duration"`
@@ -132,8 +133,12 @@ func (g *generatorStore) jobList() []GenerationJob {
 	}
 	return out
 }
-func generationIssues(d mediaauthor.Design, p config.BRBProfile) []mediaauthor.Issue {
-	issues := mediaauthor.Validate(d, p.Width, p.Height)
+func generationIssues(d mediaauthor.Design, p config.BRBProfile, themes ...mediaauthor.Theme) []mediaauthor.Issue {
+	theme := mediaauthor.RetroTheme(1)
+	if len(themes) > 0 {
+		theme = themes[0]
+	}
+	issues := mediaauthor.ValidateWithTheme(d, theme, p.Width, p.Height)
 	if p.Validate() != nil || p.Width > 1920 || p.Height > 1080 || p.FPS > 30 {
 		issues = append(issues, mediaauthor.Issue{Field: "profile", Message: "Generation supports active profiles up to 1920 × 1080 at 24, 25 or 30 fps. Change the profile explicitly before generating."})
 	}
@@ -224,18 +229,24 @@ func (s *Server) runGenerator(ctx context.Context) {
 		g.jobsMu.Unlock()
 	}
 }
-func newGenerationJob(d mediaauthor.Design, p config.BRBProfile) (GenerationJob, error) {
+func newGenerationJob(d mediaauthor.Design, p config.BRBProfile, themes ...mediaauthor.Theme) (GenerationJob, error) {
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return GenerationJob{}, err
 	}
 	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: generatorRenderer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	theme := mediaauthor.RetroTheme(1)
+	if len(themes) > 0 {
+		theme = themes[0]
+	}
+	j.ThemeSnapshot = &theme
 	j.Duration = mediaauthor.SequenceDuration(d, p.FPS)
 	encoded, _ := json.Marshal(struct {
 		Design   mediaauthor.Design
 		Profile  config.BRBProfile
 		Renderer string
-	}{d, p, j.Renderer})
+		Theme    mediaauthor.Theme
+	}{d, p, j.Renderer, theme})
 	hash := sha256.Sum256(encoded)
 	j.DesignRevision = hex.EncodeToString(hash[:])
 	return j, nil

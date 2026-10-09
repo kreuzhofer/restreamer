@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"image/png"
 	"math"
 	"os"
@@ -24,6 +25,20 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	}
 	defer os.RemoveAll(dir)
 	p := j.Profile
+	theme := mediaauthor.RetroTheme(1)
+	if j.ThemeSnapshot != nil {
+		theme = *j.ThemeSnapshot
+	}
+	inputs, err := s.loadThemeInputs(theme, p.Width, p.Height)
+	if err != nil {
+		return "", err
+	}
+	sprite := filepath.Join(dir, "effect.png")
+	if theme.Style.Effect != "none" {
+		if err := saveGeneratorRaster(sprite, mediaauthor.EffectSprite(p.Height, theme.Style)); err != nil {
+			return "", err
+		}
+	}
 	output := filepath.Join(dir, "prepared.flv")
 	// Normalize one scene at a time. The concat demuxer opens only the
 	// current segment; a large design never creates a many-input filter graph.
@@ -81,17 +96,25 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 			progress(int(min(60, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*60))))
 		}
 		if scene.IsVideo() {
-			if err := s.renderVideoSegment(ctx, scene, p, segment, dir, maxGeneratorOutputBytes-segmentBytes, sceneProgress); err != nil {
+			if err := s.renderVideoSegment(ctx, scene, p, segment, dir, maxGeneratorOutputBytes-segmentBytes, sceneProgress, theme.Style, inputs); err != nil {
 				return "", err
 			}
 		} else {
-			if err := s.writeSceneRaster(scene, p.Width, p.Height, still); err != nil {
+			if err := s.writeSceneRaster(scene, p.Width, p.Height, still, theme.Style, inputs); err != nil {
 				return "", err
 			}
 			args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
 				"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
-				"-map", "0:v:0", "-an", "-frames:v", strconv.Itoa(frames), "-vf", "setsar=1,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-keyint_min", strconv.Itoa(p.FPS), "-sc_threshold", "0", "-threads", "2",
-				"-video_track_timescale", strconv.Itoa(p.FPS * 1000), "-fs", strconv.FormatInt(maxGeneratorOutputBytes-segmentBytes, 10), "-progress", "pipe:1", segment}
+			}
+			if theme.Style.Effect == "none" {
+				args = append(args, "-map", "0:v:0", "-vf", "setsar=1,format=yuv420p")
+			} else {
+				start, y, step, slots := mediaauthor.EffectGeometry(p.Width, p.Height)
+				filter := fmt.Sprintf("[0:v][1:v]overlay=x='%d+mod(floor(t*%d),%d)*%d':y=%d:format=auto,setsar=1,format=yuv420p[v]", start, theme.Style.EffectSpeed, slots, step, y)
+				args = append(args, "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", sprite, "-filter_complex", filter, "-map", "[v]")
+			}
+			args = append(args, "-an", "-frames:v", strconv.Itoa(frames), "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-profile:v", "high", "-bf", "0", "-g", strconv.Itoa(p.FPS), "-keyint_min", strconv.Itoa(p.FPS), "-sc_threshold", "0", "-threads", "2",
+				"-video_track_timescale", strconv.Itoa(p.FPS*1000), "-fs", strconv.FormatInt(maxGeneratorOutputBytes-segmentBytes, 10), "-progress", "pipe:1", segment)
 			if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) {
 				progress(int(min(60, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*60))))
 			}); err != nil {
@@ -192,15 +215,19 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	return revision.ID, nil
 }
 
-func (s *Server) writeSceneRaster(scene mediaauthor.Scene, width, height int, path string) error {
+func (s *Server) writeSceneRaster(scene mediaauthor.Scene, width, height int, path string, style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
 	asset, err := s.loadSceneImage(scene)
 	if err != nil {
 		return err
 	}
-	img, err := mediaauthor.RenderSceneWithImage(scene, width, height, asset)
+	inputs.Image = asset
+	img, err := mediaauthor.RenderSceneStyled(scene, width, height, style, inputs, -1, 0)
 	if err != nil {
 		return errors.New("A captured scene cannot be rendered; check its typography and layout.")
 	}
+	return saveGeneratorRaster(path, img)
+}
+func saveGeneratorRaster(path string, img image.Image) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return errors.New("Cannot save scene raster; check storage.")

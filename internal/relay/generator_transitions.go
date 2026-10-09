@@ -21,7 +21,7 @@ import (
 func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.SequenceTiming, p config.BRBProfile, dir string, used int64, progress func(int)) (string, int64, error) {
 	pcm, err := os.Create(filepath.Join(dir, "sequence.pcm"))
 	if err != nil {
-		return "", used, err
+		return "", used, errors.New("Cannot create transition audio workspace; check storage.")
 	}
 	defer pcm.Close()
 	var manifest strings.Builder
@@ -32,7 +32,7 @@ func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.Seque
 		source := filepath.Join(dir, fmt.Sprintf("scene-%03d.mp4", i))
 		audio, err := os.Open(filepath.Join(dir, fmt.Sprintf("scene-%03d.pcm", i)))
 		if err != nil {
-			return "", used, err
+			return "", used, errors.New("Cannot open normalized transition audio; check storage.")
 		}
 		render := func(name string, args []string, frames int) error {
 			budget := int64(maxGeneratorOutputBytes) - used
@@ -79,7 +79,7 @@ func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.Seque
 			if err == nil {
 				incoming, openErr := os.Open(filepath.Join(dir, fmt.Sprintf("scene-%03d.pcm", i+1)))
 				if openErr != nil {
-					err = openErr
+					err = errors.New("Cannot open incoming transition audio; check storage.")
 				} else {
 					start := sampleBoundary(timing.Start+timing.Frames-timing.Outgoing, p.SampleRate, p.FPS)
 					end := sampleBoundary(timing.Start+timing.Frames, p.SampleRate, p.FPS)
@@ -96,17 +96,17 @@ func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.Seque
 		for _, path := range []string{source, audio.Name()} {
 			info, err := os.Stat(path)
 			if err != nil {
-				return "", used, err
+				return "", used, errors.New("Cannot inspect transition workspace; check storage.")
 			}
 			if err = os.Remove(path); err != nil {
-				return "", used, err
+				return "", used, errors.New("Cannot remove completed transition intermediates; check storage.")
 			}
 			used -= info.Size()
 		}
 		progress(60 + (i+1)*28/len(plan.Scenes))
 	}
 	if err := pcm.Close(); err != nil {
-		return "", used, err
+		return "", used, errors.New("Cannot save transition audio; check storage.")
 	}
 	info, err := os.Stat(pcm.Name())
 	if err != nil || info.Size() != sampleBoundary(plan.Frames, p.SampleRate, p.FPS)*4 {
@@ -123,10 +123,10 @@ func copyTransitionPCM(ctx context.Context, out io.Writer, in io.Reader, n int64
 		}
 		size := int(min(n, int64(len(buffer))))
 		if _, err := io.ReadFull(in, buffer[:size]); err != nil {
-			return err
+			return errors.New("Cannot read transition audio; check storage.")
 		}
 		if _, err := out.Write(buffer[:size]); err != nil {
-			return err
+			return errors.New("Cannot save transition audio; check storage.")
 		}
 		n -= int64(size)
 	}
@@ -144,10 +144,10 @@ func mixTransitionPCM(ctx context.Context, out io.Writer, a, b io.Reader, sample
 		count := min(samples-done, int64(len(left)/4))
 		size := int(count * 4)
 		if _, err := io.ReadFull(a, left[:size]); err != nil {
-			return err
+			return errors.New("Cannot read outgoing transition audio; check storage.")
 		}
 		if _, err := io.ReadFull(b, right[:size]); err != nil {
-			return err
+			return errors.New("Cannot read incoming transition audio; check storage.")
 		}
 		for j := int64(0); j < count; j++ {
 			weight := float64(done+j) / float64(samples)
@@ -160,7 +160,7 @@ func mixTransitionPCM(ctx context.Context, out io.Writer, a, b io.Reader, sample
 			}
 		}
 		if _, err := out.Write(left[:size]); err != nil {
-			return err
+			return errors.New("Cannot save mixed transition audio; check storage.")
 		}
 		done += count
 	}

@@ -1,12 +1,17 @@
 """Exercise generated media in the packaged server using local dummy credentials."""
 import base64
+import array
+import io
 import json
+import math
 import os
+import struct
 import sys
 from pathlib import Path
 import time
 import urllib.request
 import uuid
+import wave
 
 base = os.environ.get('GENERATOR_URL', 'http://127.0.0.1:18792')
 auth = base64.b64encode((os.environ.get('GENERATOR_USER', 'stage-test') + ':' + os.environ.get('GENERATOR_PASSWORD', 'stage-test')).encode()).decode()
@@ -16,6 +21,11 @@ def request(path, method='GET', body=None, raw=False, content_type='application/
     with urllib.request.urlopen(urllib.request.Request(base + path, data=data, headers=headers, method=method), timeout=30) as response:
         data = response.read()
         return data if raw else (json.loads(data) if data else None)
+
+def upload_asset(kind, name, content_type, data):
+    boundary = 'restreamer-' + uuid.uuid4().hex
+    multipart = ('--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + name + '"\r\nContent-Type: ' + content_type + '\r\n\r\n').encode() + data + ('\r\n--' + boundary + '--\r\n').encode()
+    return request('/api/generator/assets?kind=' + kind, 'POST', multipart, content_type='multipart/form-data; boundary=' + boundary)
 
 def wait_for(path, predicate, timeout=120):
     until = time.monotonic() + timeout
@@ -33,6 +43,20 @@ def stage_command(action, **options):
     assert result['state'] in ('completed', 'pending'), result
     return result
 
+if '--verify-audio' in sys.argv:
+    saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
+    samples = array.array('h', Path(sys.argv[sys.argv.index('--verify-audio') + 1]).read_bytes())
+    rate = saved['sample_rate']
+    window = samples[rate // 3:rate // 3 + rate // 5]
+    assert len(window) == rate // 5, 'Generated audio is too short'
+    for frequency in (440, 880):
+        real = sum(value * math.cos(2 * math.pi * frequency * i / rate) for i, value in enumerate(window))
+        imaginary = sum(value * math.sin(2 * math.pi * frequency * i / rate) for i, value in enumerate(window))
+        amplitude = 2 * math.hypot(real, imaginary) / len(window)
+        assert amplitude > 100, (frequency, amplitude)
+        print('Decoded tone', frequency, 'Hz amplitude:', round(amplitude))
+    sys.exit(0)
+
 if '--verify-restart' in sys.argv:
     saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
     restored = request('/api/generator/jobs/' + saved['job'])
@@ -41,6 +65,7 @@ if '--verify-restart' in sys.argv:
     video = request('/api/generator/jobs/' + saved['video_job'])
     assert video['state'] == 'ready' and video['media_revision'] == saved['video_revision'], video
     assert video['design_snapshot']['scenes'][0]['video']['asset'] == saved['video_asset'], video
+    assert video['design_snapshot']['soundtrack']['asset'] == saved['music_asset'], video
     print('Generated revision and captured inputs survived restart')
     sys.exit(0)
 
@@ -59,17 +84,23 @@ output.write_bytes(request('/api/library/revisions/' + revision + '/preview', ra
 
 # Exercise uploaded H.264/AAC through the packaged trim/repeat and PCM pipeline.
 source = Path(os.environ['GENERATOR_SMOKE_SOURCE']).read_bytes()
-boundary = 'restreamer-' + uuid.uuid4().hex
-multipart = ('--' + boundary + '\r\nContent-Disposition: form-data; name="file"; filename="smoke.mp4"\r\nContent-Type: video/mp4\r\n\r\n').encode() + source + ('\r\n--' + boundary + '--\r\n').encode()
-asset = request('/api/generator/assets?kind=video', 'POST', multipart, content_type='multipart/form-data; boundary=' + boundary)
+asset = upload_asset('video', 'smoke.mp4', 'video/mp4', source)
 assert asset['kind'] == 'video' and asset['revisions'][0]['has_audio'], asset
 asset_ref = {'id': asset['id'], 'revision': asset['revision']}
+music_bytes = io.BytesIO()
+with wave.open(music_bytes, 'wb') as wav:
+    wav.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+    wav.writeframes(b''.join(struct.pack('<h', round(5000 * math.sin(2 * math.pi * 440 * i / 48000))) for i in range(14400)))
+music = upload_asset('audio', 'smoke.wav', 'audio/wav', music_bytes.getvalue())
+music_ref = {'id': music['id'], 'revision': music['revision']}
 video_draft = request('/api/generator/designs', 'POST', {'name': 'Video trim and repeat smoke', 'stage': 'prestream'})
 video_draft['scenes'][0].update(layout='media', media_kind='video', duration_seconds=1.2, video=dict(asset=asset_ref, trim_start_seconds=.2, trim_end_seconds=.8, repeat=True, audio_enabled=True, audio_volume_percent=50))
+video_draft['soundtrack'] = dict(asset=music_ref, mode='repeat', volume_percent=30, fade_in_seconds=.1, fade_out_seconds=.1)
 video_draft = request('/api/generator/designs/' + video_draft['id'], 'PUT', video_draft)
 video_job = request('/api/generator/jobs', 'POST', {'design_id': video_draft['id'], 'version': video_draft['version']})
 video_job = wait_for('/api/generator/jobs/' + video_job['id'], lambda item: item['state'] in ('ready', 'failed', 'cancelled', 'interrupted'))
 assert video_job['state'] == 'ready', video_job
+assert 0 < video_job['mix_gain'] <= 1, video_job
 video_output = output.with_name(output.stem + '-video.mp4')
 video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview', raw=True))
 
@@ -83,7 +114,7 @@ stage_command('end_stream', revision=revision)
 wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
-result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'video_preview': str(video_output)}
+result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_preview': str(video_output)}
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))
 print(json.dumps(result))

@@ -3,6 +3,10 @@
   const $ = id => document.getElementById(id);
   let draft = null;
   let templates = [];
+  let themes = [];
+  let editingTheme = null;
+  let themeDirty = false;
+  let themeSaving = false;
   let templateSaving = false;
   let selectedScene = 0;
   let itemEditors = [];
@@ -92,7 +96,7 @@
     draft = value; dirty = false; conflict = false; editSequence++;
     selectedScene = 0; validationIssues = [];
     $('design-name').value = draft.name;
-    renderScenes(); renderSelectedScene(); renderMusicPicker();
+    renderScenes(); renderSelectedScene(); renderMusicPicker(); renderDesignTheme();
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
     $('design-editor').hidden = false; $('generator-empty').hidden = true;
     notify(''); saveState(`Saved · version ${draft.version}`);
@@ -259,7 +263,7 @@
         $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Draft edits are still saved.';
         return;
       }
-      const response = await request(`/api/generator/preview?scene=${selectedScene}`, 'POST', snapshot, previewAbort.signal);
+      const response = await request(`/api/generator/preview?scene=${selectedScene}&frame=${Math.round(Math.min(600, Math.max(0, Number($('preview-time').value) || 0)) * result.profile.fps)}`, 'POST', snapshot, previewAbort.signal);
       const bitmap = await createImageBitmap(await response.blob());
       if (sequence !== previewSequence) { bitmap.close(); return; }
       const canvas = $('scene-preview');
@@ -300,6 +304,7 @@
   }
   $('scene-form').addEventListener('submit', event => event.preventDefault());
   $('scene-form').addEventListener('input', event => {
+    if (event.target.id === 'design-theme') return;
     captureFields();
     if (event.target.id === 'scene-layout' || event.target.id === 'scene-media-kind') renderSelectedScene();
     if (event.target.id === 'scene-image') renderImagePicker();
@@ -373,6 +378,7 @@
     try {
       const saved = await (await request(update ? `/api/generator/templates/${selected.id}` : '/api/generator/templates', update ? 'PUT' : 'POST', {name, version: update ? selected.version : 0, content: snapshot})).json();
       await loadTemplates();
+      await loadThemes();
       $('update-template').value = saved.id;
       $('template-status').textContent = `Saved ${saved.name} · template v${saved.version}. Existing designs and generated revisions are unchanged.`;
       $('reload-template').hidden = true;
@@ -395,6 +401,7 @@
       const latest = await (await request(`/api/generator/templates/${id}`)).json();
       const created = await (await request(`/api/generator/templates/${id}/designs`, 'POST', {name: latest.name, version: latest.version, theme: structuredClone(draft.theme)})).json();
       await loadTemplates();
+      await loadThemes();
       if (sequence !== editSequence || saving) { notify('Latest template copied to a new design. Your current edits were retained; open the new design from the list.'); await listDesigns(); return; }
       openDraft(created);
       $('template-status').textContent = `Loaded template v${latest.version} into an independent design.`;
@@ -509,7 +516,7 @@
       });
       card.append(summary, img, list, remove); $('asset-list').append(card);
     }
-    renderImagePicker(); renderVideoPicker(); renderMusicPicker();
+    renderImagePicker(); renderVideoPicker(); renderMusicPicker(); renderThemeAssets();
   }
   async function loadAssets() {
     if (assetsFetching) return;
@@ -635,11 +642,124 @@
   $('asset-refresh').addEventListener('click', loadAssets);
   loadAssets();
 
-  window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+
+  const themeFields = [
+    ['font', 'Default font', ['go-sans', 'go-mono']], ['font_size', 'Font size at 1080p', 24, 120],
+    ['background_color', 'Background color', 'color'], ['text_color', 'Text color', 'color'], ['accent_color', 'Accent color', 'color'],
+    ['background', 'Background image revision', 'asset'], ['logo', 'Logo image revision', 'asset'],
+    ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8],
+    ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 30, 90],
+    ['line_spacing_percent', 'Line spacing (%)', 100, 180], ['list_spacing_percent', 'List item spacing (%)', 0, 100],
+    ['border_style', 'Border', ['none', 'line', 'pixel']], ['border_width', 'Border width at 1080p', 1, 12],
+    ['effect', 'Decorative effect', ['none', 'pixel-trail']], ['effect_speed', 'Effect steps per second', 1, 12]
+  ];
+  for (const [key, title, kind, maximum] of themeFields) {
+    const label = document.createElement('label'); label.textContent = title;
+    const input = document.createElement(Array.isArray(kind) || kind === 'asset' ? 'select' : 'input'); input.id = `theme-${key}`;
+    if (Array.isArray(kind)) input.replaceChildren(...kind.map(value => new Option(value.replaceAll('-', ' '), value)));
+    else if (typeof kind === 'number') { input.type = 'number'; input.min = kind; input.max = maximum; input.step = '1'; input.required = true; }
+    else if (kind === 'color') input.type = 'color';
+    label.append(input); $('theme-fields').append(label);
+  }
+  function themeKey(theme) { return `${theme.id}:${theme.revision}`; }
+  function themeRef(value) { const [id, revision] = value.split(':'); return {id, revision: Number(revision)}; }
+  function themeError(message) { $('theme-error').textContent = message; $('theme-error').hidden = !message; }
+  function renderThemeAssets() {
+    for (const key of ['background', 'logo']) {
+      const select = $(`theme-${key}`); const value = select.options.length ? select.value : (editingTheme?.style[key] ? themeKey(editingTheme.style[key]) : '');
+      const options = [new Option('None', '')];
+      for (const asset of assets.filter(asset => asset.kind === 'image')) for (const rev of asset.revisions) options.push(new Option(`${asset.name} · revision ${rev.revision}`, `${asset.id}:${rev.revision}`));
+      if (value && !options.some(option => option.value === value)) options.push(new Option('Unavailable pinned image', value));
+      select.replaceChildren(...options); select.value = value;
+    }
+  }
+  function renderDesignTheme() {
+    const value = draft ? themeKey(draft.theme) : '';
+    $('design-theme').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
+    if (value && !themes.some(theme => themeKey(theme) === value)) $('design-theme').add(new Option('Unavailable pinned theme', value));
+    $('design-theme').value = value;
+    const selected = themes.find(theme => themeKey(theme) === value);
+    const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
+    $('apply-theme-update').hidden = !latest || latest.revision <= draft.theme.revision;
+    $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
+    $('preview-time-control').hidden = selected?.style.effect !== 'pixel-trail';
+    if (selected) {
+      $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
+      $('scene-size').placeholder = `Theme default · ${selected.style.font_size}`;
+      $('region-width').placeholder = `Theme default · ${selected.style.content_region.width_percent}`;
+      $('region-height').placeholder = `Theme default · ${selected.style.content_region.height_percent}`;
+    }
+  }
+  function editTheme(theme) {
+    editingTheme = structuredClone(theme); themeDirty = false; themeError('');
+    $('theme-name').value = theme.name; $('theme-library').value = themeKey(theme);
+    for (const key of ['background', 'logo']) $(`theme-${key}`).replaceChildren();
+    renderThemeAssets();
+    for (const [key] of themeFields) {
+      const value = ['width_percent','height_percent'].includes(key) ? theme.style.content_region[key] : theme.style[key];
+      $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? '';
+    }
+    $('theme-publish').disabled = theme.builtin;
+    $('theme-status').textContent = `${theme.name} · revision ${theme.revision}${theme.builtin ? '. Duplicate to create an editable variant.' : '. Publish changes explicitly; existing designs keep their pinned revision.'}`;
+  }
+  function localTheme() {
+    const theme = structuredClone(editingTheme); theme.name = $('theme-name').value;
+    for (const [key, , kind] of themeFields) {
+      const value = $(`theme-${key}`).value;
+      if (['width_percent','height_percent'].includes(key)) theme.style.content_region[key] = Number(value);
+      else if (kind === 'asset') { if (value) theme.style[key] = themeRef(value); else delete theme.style[key]; }
+      else theme.style[key] = typeof kind === 'number' ? Number(value) : value;
+    }
+    return theme;
+  }
+  async function loadThemes() {
+    themes = await (await request('/api/generator/themes')).json();
+    const selection = $('new-theme').value;
+    $('new-theme').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
+    $('new-theme').value = themes.some(theme => themeKey(theme) === selection) ? selection : 'retro:2';
+    $('theme-library').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
+    if (!editingTheme) editTheme(themes.find(theme => theme.id === 'retro' && theme.revision === 2));
+    else $('theme-library').value = themeKey(editingTheme);
+    renderDesignTheme();
+  }
+  $('theme-library').addEventListener('change', () => {
+    if (themeSaving || (themeDirty && !window.confirm('Discard unpublished theme settings?'))) { $('theme-library').value = themeKey(editingTheme); return; }
+    editTheme(themes.find(theme => themeKey(theme) === $('theme-library').value));
+  });
+  $('theme-form').addEventListener('input', () => { themeDirty = true; $('theme-status').textContent = 'Unpublished theme settings. Save as a new theme or publish a revision.'; });
+  async function publishTheme(duplicate) {
+    if (!editingTheme || themeSaving) return;
+    if (!$('theme-form').reportValidity()) return;
+    const local = localTheme(); themeSaving = true; themeError('');
+    $('theme-form').querySelectorAll('input, select, button').forEach(control => { control.disabled = true; });
+    $('theme-library').disabled = true;
+    try {
+      const body = duplicate ? {name: local.name, base: themeRef(themeKey(local)), style: local.style} : local;
+      const saved = await (await request(duplicate ? '/api/generator/themes' : `/api/generator/themes/${local.id}`, duplicate ? 'POST' : 'PUT', body)).json();
+      editTheme(saved); await loadThemes(); await loadAssets();
+      $('theme-status').textContent = `${saved.name} · revision ${saved.revision} saved. Select it in a design or use Apply updated theme to adopt it.`;
+    } catch (error) { themeError(`${error.message} Your local settings are retained. Reload latest revision to discard them, or save settings as a new theme.`); }
+    finally { themeSaving = false; $('theme-form').querySelectorAll('input, select, button').forEach(control => { control.disabled = false; }); $('theme-library').disabled = false; $('theme-publish').disabled = editingTheme.builtin; }
+  }
+  $('theme-form').addEventListener('submit', event => { event.preventDefault(); publishTheme(false); });
+  $('theme-duplicate').addEventListener('click', () => publishTheme(true));
+  $('theme-refresh').addEventListener('click', async () => {
+    if (themeSaving || (themeDirty && !window.confirm('Discard unpublished settings and reload the latest theme revision?'))) return;
+    try { await loadThemes(); editTheme(themes.filter(theme => theme.id === editingTheme.id).sort((a,b) => b.revision-a.revision)[0]); } catch (error) { themeError(error.message); }
+  });
+  $('design-theme').addEventListener('change', event => { event.stopPropagation(); if (!draft) return; draft.theme = themeRef($('design-theme').value); renderDesignTheme(); changed(); });
+  $('apply-theme-update').addEventListener('click', () => {
+    const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
+    if (!latest) return; draft.theme = themeRef(themeKey(latest)); renderDesignTheme(); changed();
+  });
+  $('preview-time').addEventListener('input', schedulePreview);
+
+  window.addEventListener('beforeunload', event => { if (dirty || saving || themeDirty || themeSaving) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {
     try {
       await listDesigns();
       await loadTemplates();
+      await loadThemes();
       const id = new URLSearchParams(location.search).get('id');
       if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
     } catch (error) { notify(error.message); }
