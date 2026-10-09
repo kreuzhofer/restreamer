@@ -78,14 +78,16 @@ func (m Soundtrack) Volume() float64 {
 }
 
 type Design struct {
-	Soundtrack *Soundtrack `json:"soundtrack,omitempty"`
-	ID         string      `json:"id"`
-	Name       string      `json:"name"`
-	Stage      string      `json:"stage"`
-	Version    int         `json:"version"`
-	Theme      ThemeRef    `json:"theme"`
-	Scenes     []Scene     `json:"scenes"`
-	UpdatedAt  string      `json:"updated_at"`
+	// Nil uses the ENDING default; zero preserves the final image and audio.
+	EndingFadeSeconds *float64    `json:"ending_fade_seconds,omitempty"`
+	Soundtrack        *Soundtrack `json:"soundtrack,omitempty"`
+	ID                string      `json:"id"`
+	Name              string      `json:"name"`
+	Stage             string      `json:"stage"`
+	Version           int         `json:"version"`
+	Theme             ThemeRef    `json:"theme"`
+	Scenes            []Scene     `json:"scenes"`
+	UpdatedAt         string      `json:"updated_at"`
 }
 
 type Issue struct {

@@ -18,7 +18,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
-const generatorRenderer = "go-png-ffmpeg-v3"
+const generatorRenderer = "go-png-ffmpeg-v4"
 const maxGeneratorJobs = 200
 const maxGeneratorOutstanding = 8
 const maxGeneratorSeconds = 600
@@ -233,6 +233,10 @@ func newGenerationJob(d mediaauthor.Design, p config.BRBProfile, themes ...media
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return GenerationJob{}, err
+	}
+	if d.Stage == "ending" && d.EndingFadeSeconds == nil {
+		seconds := 1.0
+		d.EndingFadeSeconds = &seconds
 	}
 	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: generatorRenderer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	theme := mediaauthor.RetroTheme(1)

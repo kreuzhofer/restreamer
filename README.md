@@ -1037,3 +1037,25 @@ The 20-scene run produced 32.4 seconds of output, with one preparation process,
 at most two FFmpeg inputs, sampled peak encoder RSS 178 MiB and workspace 7.9 MiB.
 These synthetic still-scene measurements are not deployment performance guarantees;
 video, themes and longer scenes can use more memory, storage and time.
+
+### Ending finish
+
+ENDING designs default to fading the final second of the complete sequence to
+black and silence. Change **Final fade** to another duration, or set it to zero
+to preserve the final image and audio. The fade covers the assembled picture,
+source-video audio and background music, including any internal crossfades.
+It occupies existing media time: a 2.2-second sequence remains 2.2 seconds.
+
+The fade rounds to the nearest video frame and must contain at least two frames
+when enabled. It may span multiple scenes, but must fit the complete sequence
+after transition overlaps. Shorten or disable the fade, or lengthen a short
+sequence; generation never silently clips it. Drafts retain invalid edits with
+an actionable field error. The setting survives templates, theme changes and
+immutable job snapshots/retries. It is inactive on PRESTREAM designs.
+
+Generate and play **Preview exact revision** to inspect the finite finish. Quick
+scene previews do not show the temporal fade. The final video frame is black;
+the final frame's source audio is silent before the single AAC encode (which can
+have small lossy residuals). No hold frame or second is appended. Destination
+draining remains a later broadcast-controller operation, separate from the media
+duration. Editing, generating and previewing never start or end a broadcast.

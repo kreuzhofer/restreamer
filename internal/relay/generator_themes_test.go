@@ -344,7 +344,7 @@ func TestGeneratorThemeVideoRetainsLogoAndContinuousEffectAcrossRepeats(t *testi
 		t.Fatal(w.Code, w.Body.String())
 	}
 	json.Unmarshal(w.Body.Bytes(), &theme)
-	body := fmt.Sprintf(`{"name":"Themed video","stage":"ending","theme":{"id":%q,"revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","content_region":{"width_percent":60,"height_percent":60},"duration_seconds":2,"video":{"asset":{"id":%q,"revision":1},"trim_end_seconds":1,"repeat":true,"audio_enabled":true}}]}`, theme.ID, video.ID)
+	body := fmt.Sprintf(`{"name":"Themed video","stage":"ending","ending_fade_seconds":0,"theme":{"id":%q,"revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","content_region":{"width_percent":60,"height_percent":60},"duration_seconds":2,"video":{"asset":{"id":%q,"revision":1},"trim_end_seconds":1,"repeat":true,"audio_enabled":true}}]}`, theme.ID, video.ID)
 	w = dashboardRequest(s, "POST", "/api/generator/designs", body)
 	if w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())

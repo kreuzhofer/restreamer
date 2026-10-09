@@ -151,6 +151,10 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 		}
 		j.MixGain = &gain
 	}
+	endingFade, err := applyGeneratorEndingFade(ctx, *j, pcmPath, plan.Frames)
+	if err != nil {
+		return "", err
+	}
 	os.Remove(filepath.Join(dir, "scene.png"))
 	manifest := filepath.Join(dir, "sequence.txt")
 	if os.WriteFile(manifest, []byte(concat.String()), 0600) != nil {
@@ -161,7 +165,14 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	seconds := strconv.FormatFloat(j.Duration, 'f', 9, 64)
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
 		"-protocol_whitelist", "file,pipe", "-f", "concat", "-safe", "1", "-i", manifest, "-f", "s16le", "-ar", strconv.Itoa(p.SampleRate), "-ac", "2", "-i", pcmPath,
-		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds, "-c:v", "copy", "-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-threads", "2", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output}
+		"-map", "0:v:0", "-map", "1:a:0", "-t", seconds}
+	if endingFade > 0 {
+		args = append(args, "-vf", fmt.Sprintf("fade=t=out:start_frame=%d:nb_frames=%d", plan.Frames-endingFade, endingFade-1))
+		args = append(args, videoEncodingArgs(p)...)
+	} else {
+		args = append(args, "-c:v", "copy")
+	}
+	args = append(args, "-c:a", "aac", "-ac", "2", "-ar", strconv.Itoa(p.SampleRate), "-b:a", "128k", "-threads", "2", "-max_muxing_queue_size", "1024", "-fs", strconv.Itoa(maxGeneratorOutputBytes), "-progress", "pipe:1", "-f", "flv", output)
 	if err := runGeneratorFFmpeg(ctx, args, func(seconds float64) { progress(90 + int(min(5, max(0, seconds/j.Duration*5)))) }); err != nil {
 		return "", err
 	}

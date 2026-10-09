@@ -75,4 +75,8 @@ func SequenceDuration(d Design, fps int) float64 {
 	p, _ := PlanTiming(d, fps)
 	return float64(max(0, p.Frames)) / float64(fps)
 }
-func ValidateTiming(d Design, fps int) []Issue { _, issues := PlanTiming(d, fps); return issues }
+func ValidateTiming(d Design, fps int) []Issue {
+	plan, issues := PlanTiming(d, fps)
+	_, finishIssues := EndingFadeFrames(d, fps, plan.Frames)
+	return append(issues, finishIssues...)
+}
