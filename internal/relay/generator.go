@@ -19,6 +19,9 @@ const maxDesigns = 200
 
 type generatorStore struct {
 	mu                 sync.Mutex
+	assetUploadMu      sync.Mutex
+	assetsRoot         string
+	assets             map[string]GeneratorAsset
 	previewMu          sync.Mutex
 	root               string
 	jobsMu             sync.Mutex
@@ -37,12 +40,17 @@ func (s *Server) initializeGenerator() error {
 		return errors.New("cannot create generator draft storage")
 	}
 	g := &generatorStore{root: root, jobsRoot: filepath.Join(filepath.Dir(root), "jobs"), workRoot: filepath.Join(filepath.Dir(root), "work"), jobs: make(map[string]*GenerationJob), wake: make(chan struct{}, 1)}
-	for _, dir := range []string{g.jobsRoot, g.workRoot} {
+	g.assetsRoot = filepath.Join(filepath.Dir(root), "assets")
+	g.assets = make(map[string]GeneratorAsset)
+	for _, dir := range []string{g.jobsRoot, g.workRoot, g.assetsRoot} {
 		if os.MkdirAll(dir, 0700) != nil {
 			return errors.New("cannot create generator job storage")
 		}
 	}
 	if err := g.loadJobs(); err != nil {
+		return err
+	}
+	if err := g.loadAssets(); err != nil {
 		return err
 	}
 	s.generator = g
@@ -54,6 +62,9 @@ func designBounds(d mediaauthor.Design) bool {
 		return false
 	}
 	for _, scene := range d.Scenes {
+		if scene.Image != nil && (!validDesignID(scene.Image.ID) || scene.Image.Revision < 1 || scene.Image.Revision > maxAssetRevisions) {
+			return false
+		}
 		if len(scene.Text) > mediaauthor.MaxSceneTextBytes || !utf8.ValidString(scene.Text) || len(scene.ID) > 80 || len(scene.Layout) > 40 || len(scene.Font) > 40 || len(scene.Alignment) > 20 || len(scene.Items) > mediaauthor.MaxListItems {
 			return false
 		}

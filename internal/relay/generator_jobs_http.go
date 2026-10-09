@@ -24,8 +24,8 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Lock the acknowledged draft only long enough to capture and validate it.
 	g.mu.Lock()
+	defer g.mu.Unlock()
 	draft, err := g.read(input.DesignID)
-	g.mu.Unlock()
 	if errors.Is(err, os.ErrNotExist) {
 		http.Error(w, "Design not found", 404)
 		return
@@ -41,7 +41,7 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.library.mu.Lock()
 	profile := s.library.profile
 	s.library.mu.Unlock()
-	if issues := generationIssues(draft, profile); len(issues) > 0 {
+	if issues := append(generationIssues(draft, profile), g.assetIssues(draft)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"error": "Resolve design validation before generating.", "issues": issues})
 		return
 	}

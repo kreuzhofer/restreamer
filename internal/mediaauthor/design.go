@@ -23,7 +23,13 @@ const MaxScenes = 20
 const MaxListItems = 20
 const MaxSceneTextBytes = 4096
 
+type AssetRef struct {
+	ID       string `json:"id"`
+	Revision int    `json:"revision"`
+}
+
 type Scene struct {
+	Image           *AssetRef     `json:"image,omitempty"`
 	ID              string        `json:"id"`
 	Layout          string        `json:"layout"`
 	Text            string        `json:"text"`
@@ -77,4 +83,17 @@ func ValidateCutTiming(d Design, fps int) []Issue {
 		issues = append(issues, Issue{"scenes", "The complete sequence must be at most 600 seconds after rounding each scene to video frames."})
 	}
 	return issues
+}
+
+// DesignAssetRefs retains references even when a draft temporarily changes layout.
+func DesignAssetRefs(d Design) []AssetRef {
+	refs := make([]AssetRef, 0)
+	seen := make(map[AssetRef]bool)
+	for _, scene := range d.Scenes {
+		if scene.Image != nil && !seen[*scene.Image] {
+			refs = append(refs, *scene.Image)
+			seen[*scene.Image] = true
+		}
+	}
+	return refs
 }

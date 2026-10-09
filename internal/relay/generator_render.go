@@ -36,7 +36,7 @@ func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress 
 			return "", ctx.Err()
 		}
 		still := filepath.Join(dir, "scene.png")
-		if err := writeSceneRaster(scene, p.Width, p.Height, still); err != nil {
+		if err := s.writeSceneRaster(scene, p.Width, p.Height, still); err != nil {
 			return "", err
 		}
 		frames := int(math.Round(scene.DurationSeconds * float64(p.FPS)))
@@ -126,8 +126,12 @@ func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress 
 	return revision.ID, nil
 }
 
-func writeSceneRaster(scene mediaauthor.Scene, width, height int, path string) error {
-	img, err := mediaauthor.RenderScene(scene, width, height)
+func (s *Server) writeSceneRaster(scene mediaauthor.Scene, width, height int, path string) error {
+	asset, err := s.loadSceneImage(scene)
+	if err != nil {
+		return err
+	}
+	img, err := mediaauthor.RenderSceneWithImage(scene, width, height, asset)
 	if err != nil {
 		return errors.New("A captured scene cannot be rendered; check its typography and layout.")
 	}

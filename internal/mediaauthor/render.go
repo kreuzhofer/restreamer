@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
@@ -69,11 +70,12 @@ type sceneLine struct {
 	bullet    bool
 }
 type sceneLayout struct {
-	face      font.Face
-	lines     []sceneLine
-	region    image.Rectangle
-	height    fixed.Int26_6
-	alignment string
+	face        font.Face
+	lines       []sceneLine
+	region      image.Rectangle
+	imageRegion image.Rectangle
+	height      fixed.Int26_6
+	alignment   string
 }
 
 func layoutScene(scene Scene, width, height int) (result sceneLayout, field, message string) {
@@ -81,8 +83,8 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 	if width < 320 || height < 180 || width > 3840 || height > 2160 {
 		return fail("text", "Unsupported streaming profile.")
 	}
-	if scene.Layout != "title" && scene.Layout != "list" {
-		return fail("layout", "Choose a title or list layout.")
+	if scene.Layout != "title" && scene.Layout != "list" && scene.Layout != "text-image" && scene.Layout != "media" {
+		return fail("layout", "Choose a title, list, text-image or media layout.")
 	}
 	if scene.Alignment != "" && scene.Alignment != "left" && scene.Alignment != "center" && scene.Alignment != "right" {
 		return fail("alignment", "Choose left, center or right alignment.")
@@ -106,6 +108,21 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 	}
 	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
 	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2, (width+regionWidth)/2, (height+regionHeight)/2)
+	if scene.Layout == "text-image" || scene.Layout == "media" {
+		if scene.Image == nil || scene.Image.ID == "" || scene.Image.Revision < 1 {
+			return fail("image", "Choose an exact image revision for this layout.")
+		}
+		if scene.Layout == "media" {
+			result.imageRegion = result.region
+			if scene.ContentRegion.WidthPercent == 0 && scene.ContentRegion.HeightPercent == 0 {
+				result.imageRegion = image.Rect(0, 0, width, height)
+			}
+			return result, "", ""
+		}
+		result.imageRegion = image.Rect(result.region.Max.X-regionWidth*47/100, result.region.Min.Y, result.region.Max.X, result.region.Max.Y)
+		regionWidth = regionWidth * 47 / 100
+		result.region.Max.X = result.region.Min.X + regionWidth
+	}
 	f := sansFont
 	switch scene.Font {
 	case "", "go-sans":
@@ -203,6 +220,12 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 // RenderScene creates the same raster for quick previews and prepared output.
 // Font size is defined at 1080p; no system fonts or automatic shrinking are used.
 func RenderScene(scene Scene, width, height int) (*image.RGBA, error) {
+	return RenderSceneWithImage(scene, width, height, nil)
+}
+
+// RenderSceneWithImage composes decoded image data, keeping filesystem access
+// outside the authoring model. Both preview and generation use this raster.
+func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*image.RGBA, error) {
 	layout, _, message := layoutScene(scene, width, height)
 	if layout.face != nil {
 		defer layout.face.Close()
@@ -217,6 +240,20 @@ func RenderScene(scene Scene, width, height int) (*image.RGBA, error) {
 	thickness := max(2, height/180)
 	for _, rect := range []image.Rectangle{image.Rect(margin, margin, width-margin, margin+thickness), image.Rect(margin, height-margin-thickness, width-margin, height-margin), image.Rect(margin, margin, margin+thickness, height-margin), image.Rect(width-margin-thickness, margin, width-margin, height-margin)} {
 		draw.Draw(img, rect, accent, image.Point{}, draw.Src)
+	}
+	if !layout.imageRegion.Empty() {
+		if asset == nil || asset.Bounds().Empty() {
+			return nil, fmt.Errorf("The selected image revision is unavailable.")
+		}
+		bounds := asset.Bounds()
+		region := layout.imageRegion
+		scale := math.Min(float64(region.Dx())/float64(bounds.Dx()), float64(region.Dy())/float64(bounds.Dy()))
+		w, h := max(1, int(float64(bounds.Dx())*scale)), max(1, int(float64(bounds.Dy())*scale))
+		target := image.Rect(region.Min.X+(region.Dx()-w)/2, region.Min.Y+(region.Dy()-h)/2, region.Min.X+(region.Dx()+w)/2, region.Min.Y+(region.Dy()+h)/2)
+		xdraw.ApproxBiLinear.Scale(img, target, asset, bounds, draw.Over, nil)
+	}
+	if layout.face == nil {
+		return img, nil
 	}
 	baseline := fixed.I(layout.region.Min.Y) + (fixed.I(layout.region.Dy())-layout.height)/2 + layout.face.Metrics().Ascent
 	drawer := font.Drawer{Dst: img, Src: image.NewUniform(color.RGBA{238, 232, 255, 255}), Face: layout.face}

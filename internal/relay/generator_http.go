@@ -86,6 +86,10 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot create draft identity", 503)
 		return
 	}
+	if issues := g.assetIssues(draft); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
+		return
+	}
 	draft.ID = hex.EncodeToString(id[:])
 	draft.Version = 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -130,6 +134,10 @@ func (s *Server) generatorDesignHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 409, map[string]any{"error": "A newer draft was saved in another tab. Reload or save your local work as a copy.", "current": current})
 		return
 	}
+	if issues := g.assetIssues(draft); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
+		return
+	}
 	draft.ID = current.ID
 	draft.Version = current.Version + 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -162,6 +170,9 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	s.library.mu.Unlock()
 	issues := mediaauthor.Validate(draft, profile.Width, profile.Height)
 	issues = append(issues, mediaauthor.ValidateCutTiming(draft, profile.FPS)...)
+	s.generator.mu.Lock()
+	issues = append(issues, s.generator.assetIssues(draft)...)
+	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
 		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
 		return
@@ -185,7 +196,12 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": selectedIssues})
 		return
 	}
-	img, err := mediaauthor.RenderScene(draft.Scenes[sceneIndex], profile.Width, profile.Height)
+	asset, err := s.loadSceneImage(draft.Scenes[sceneIndex])
+	if err != nil {
+		generatorJSON(w, 422, map[string]any{"issues": []mediaauthor.Issue{{Field: fmtSceneField(sceneIndex, "image"), Message: err.Error()}}})
+		return
+	}
+	img, err := mediaauthor.RenderSceneWithImage(draft.Scenes[sceneIndex], profile.Width, profile.Height, asset)
 	if err != nil {
 		http.Error(w, "Cannot render scene preview", 422)
 		return
