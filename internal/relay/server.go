@@ -37,10 +37,11 @@ type Server struct {
 	initErr      error
 	broadcast    *broadcast
 	mediaMu      sync.Mutex
+	preparation  *preparationGate
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8)}
+	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{slot: make(chan struct{}, 1)}}
 	for _, target := range cfg.Targets {
 		state := "paused"
 		if !target.IsEnabled() {

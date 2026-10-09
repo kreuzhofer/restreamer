@@ -18,7 +18,9 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
+const generatorRenderer = "go-png-ffmpeg-v2"
 const maxGeneratorJobs = 200
+const maxGeneratorOutstanding = 8
 const maxGeneratorSeconds = 600
 const maxGeneratorOutputBytes = 512 << 20
 const generatorTimeout = 15 * time.Minute
@@ -27,6 +29,10 @@ const generatorTimeout = 15 * time.Minute
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
 	ID             string             `json:"id"`
+	Sequence       uint64             `json:"sequence"`
+	QueuePosition  int                `json:"queue_position,omitempty"`
+	Message        string             `json:"message,omitempty"`
+	RetryOf        string             `json:"retry_of,omitempty"`
 	State          string             `json:"state"`
 	Progress       int                `json:"progress"`
 	Error          string             `json:"error,omitempty"`
@@ -60,7 +66,8 @@ func (g *generatorStore) loadJobs() error {
 		switch j.State {
 		case "queued", "running", "cancelling":
 			j.State = "interrupted"
-			j.Error = "Server stopped during generation. Generate the saved design again when ready."
+			j.Message = ""
+			j.Error = "Server stopped during generation. Retry this captured revision explicitly when ready."
 			if g.saveJob(&j) != nil {
 				return errors.New("cannot record interrupted generation")
 			}
@@ -69,6 +76,28 @@ func (g *generatorStore) loadJobs() error {
 			return errors.New("invalid saved generator state")
 		}
 		g.jobs[j.ID] = &j
+		g.sequence = max(g.sequence, j.Sequence)
+	}
+	// Assign admission numbers to records created before queue support. Sorting
+	// by their original timestamps gives legacy records a stable order.
+	legacy := make([]*GenerationJob, 0)
+	for _, j := range g.jobs {
+		if j.Sequence == 0 {
+			legacy = append(legacy, j)
+		}
+	}
+	sort.Slice(legacy, func(i, j int) bool {
+		if legacy[i].CreatedAt == legacy[j].CreatedAt {
+			return legacy[i].ID < legacy[j].ID
+		}
+		return legacy[i].CreatedAt < legacy[j].CreatedAt
+	})
+	for _, j := range legacy {
+		g.sequence++
+		j.Sequence = g.sequence
+		if g.saveJob(j) != nil {
+			return errors.New("cannot save generation queue order")
+		}
 	}
 	// Only scratch directories are disposable. Captured metadata and retained
 	// revisions survive restart; interrupted output can never become ready.
@@ -92,7 +121,14 @@ func (g *generatorStore) jobList() []GenerationJob {
 	for _, j := range g.jobs {
 		out = append(out, *j)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	sort.Slice(out, func(i, j int) bool { return out[i].Sequence < out[j].Sequence })
+	position := 0
+	for i := range out {
+		if out[i].State == "queued" {
+			position++
+			out[i].QueuePosition = position
+		}
+	}
 	return out
 }
 func generationIssues(d mediaauthor.Design, p config.BRBProfile) []mediaauthor.Issue {
@@ -107,28 +143,32 @@ func fmtSceneField(i int, field string) string { return "scenes." + strconv.Itoa
 func (s *Server) runGenerator(ctx context.Context) {
 	g := s.generator
 	for {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return
-		case <-g.wake:
 		}
 		g.jobsMu.Lock()
 		var job *GenerationJob
 		for _, j := range g.jobs {
-			if j.State == "queued" {
+			if j.State == "queued" && (job == nil || j.Sequence < job.Sequence) {
 				job = j
-				break
 			}
 		}
 		if job == nil {
 			g.jobsMu.Unlock()
+			select {
+			case <-ctx.Done():
+				return
+			case <-g.wake:
+			}
 			continue
 		}
 		jobCtx, cancel := context.WithTimeout(ctx, generatorTimeout)
 		g.cancel = cancel
 		job.State = "running"
+		job.Message = "Waiting for media preparation; live delivery continues."
 		if g.saveJob(job) != nil {
 			job.State = "failed"
+			job.Message = ""
 			job.Error = "Cannot save generation state; check storage."
 			g.cancel = nil
 			cancel()
@@ -137,13 +177,21 @@ func (s *Server) runGenerator(ctx context.Context) {
 		}
 		snapshot := *job
 		g.jobsMu.Unlock()
-		revision, err := s.renderGenerator(jobCtx, snapshot, func(percent int) {
+		var revision string
+		release, err := s.preparation.acquire(jobCtx)
+		if err == nil {
 			g.jobsMu.Lock()
-			defer g.jobsMu.Unlock()
-			if job.State == "running" {
-				job.Progress = percent
-			}
-		})
+			job.Message = "Rendering captured revision."
+			g.jobsMu.Unlock()
+			revision, err = s.renderGenerator(jobCtx, snapshot, func(percent int) {
+				g.jobsMu.Lock()
+				defer g.jobsMu.Unlock()
+				if job.State == "running" {
+					job.Progress = percent
+				}
+			})
+			release()
+		}
 		g.jobsMu.Lock()
 		switch {
 		case job.State == "cancelling":
@@ -151,7 +199,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			job.Error = "Generation cancelled; previous media is unchanged."
 		case ctx.Err() != nil:
 			job.State = "interrupted"
-			job.Error = "Server stopped during generation. Generate again when ready."
+			job.Error = "Server stopped during generation. Retry this captured revision explicitly when ready."
 		case errors.Is(jobCtx.Err(), context.DeadlineExceeded):
 			job.State = "failed"
 			job.Error = "Generation exceeded its 15 minute time limit. Shorten the design or reduce the active profile."
@@ -164,6 +212,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			job.Progress = 100
 			job.MediaRevision = revision
 		}
+		job.Message = ""
 		cancel()
 		g.cancel = nil
 		if g.saveJob(job) != nil {
@@ -178,7 +227,7 @@ func newGenerationJob(d mediaauthor.Design, p config.BRBProfile) (GenerationJob,
 	if _, err := rand.Read(id[:]); err != nil {
 		return GenerationJob{}, err
 	}
-	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: "go-png-ffmpeg-v2", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: generatorRenderer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	j.Duration = mediaauthor.CutDuration(d, p.FPS)
 	encoded, _ := json.Marshal(struct {
 		Design   mediaauthor.Design

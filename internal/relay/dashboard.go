@@ -47,6 +47,7 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("POST /api/generator/jobs", s.generatorJobsHTTP)
 	private.HandleFunc("GET /api/generator/jobs/{id}", s.generatorJobHTTP)
 	private.HandleFunc("POST /api/generator/jobs/{id}/cancel", s.generatorCancelHTTP)
+	private.HandleFunc("POST /api/generator/jobs/{id}/retry", s.generatorRetryHTTP)
 	private.HandleFunc("GET /api/library", s.libraryStatus)
 	private.HandleFunc("GET /api/stage-media", s.stageMediaSettings)
 	private.HandleFunc("PUT /api/stage-media", s.stageMediaSettings)

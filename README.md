@@ -780,16 +780,20 @@ on PATH; Alpine containers already install them. Both Linux architectures use
 the same static Go renderer and packaged FFmpeg. Third-party font and module
 licenses are included in `THIRD_PARTY_NOTICES`.
 
-Generation accepts up to 20 title/list scenes, one active job, and at most 200
-retained job records. Another job is rejected as busy until the active job ends
-or cancellation finishes. Output is limited to 512 MiB per job, with a 15-minute
-render/validation deadline. A scene raster uses at most 1920 × 1080 pixels; the
-temporary workspace holds at most 512 MiB of normalized video-only scene
-segments plus a raster during encoding, then at most 512 MiB of final output
-(under 1 GiB combined). Only one scene is rasterized and encoded at a time; a
-concat demuxer joins cuts without a many-input filter graph. One continuous
-silent AAC track is encoded for the complete sequence, avoiding per-scene audio
-priming gaps. The workspace is removed
+Generation accepts up to 20 title/list scenes and at most eight outstanding jobs
+across prestream and ending, including the running/cancelling job. Jobs run one at
+a time in persisted admission order. A full queue rejects new work explicitly;
+cancel queued work or wait for completion to free a slot. The shared queue shows
+every design's state, queue position, progress and cancellation controls. At most
+200 job records are retained, including retries; reaching that history limit
+rejects further work without removing existing records or media. Output is
+limited to 512 MiB per job, with a 15-minute preparation-wait/render/validation
+deadline. A scene raster uses at most 1920 × 1080 pixels; the temporary workspace
+holds at most 512 MiB of normalized video-only scene segments plus a raster during
+encoding, then at most 512 MiB of final output (under 1 GiB combined). Only one
+scene is rasterized and encoded at a time; a concat demuxer joins cuts without a
+many-input filter graph. One continuous silent AAC track is encoded for the
+complete sequence, avoiding per-scene audio priming gaps. The workspace is removed
 on success, cancellation or failure. Prepared revisions remain retained in the
 existing library. Keep enough persistent disk space for retained revisions;
 200 maximum-size generated outputs can occupy 100 GiB before library media.
@@ -813,14 +817,33 @@ hardware, version and workload. A 20-input simultaneous scene probe used about
 848 MiB even for a short still sequence; the 20-scene admission cap therefore
 uses sequential normalization rather than simultaneous inputs. Encoding uses two threads and filter processing
 one thread. This bounds concurrency inside the process, not system-wide CPU or
-memory use. Ordinary library preparation currently has its own worker; avoid
-starting a large conversion alongside generation on a constrained host.
+memory use. Generator rendering, ordinary library preparation and BRB encoding
+share one cancellable preparation slot. A waiting generator remains running with
+an explicit waiting explanation; the library also displays its wait. Cancelling
+a waiting generator removes its request without interrupting another conversion.
+BRB's existing two-minute preparation deadline and library's twelve-hour deadline
+include waiting. Live delivery never acquires the preparation slot. This limits
+expensive preparation concurrency, not aggregate retained storage or the CPU and
+memory used by live sessions and previews. Native 320 × 180/25 fps regression
+measurements with real generation, concurrent library conversion and a local RTMP
+broadcast observed one FFmpeg process (about 50 MiB peak sampled RSS). A healthy
+destination continued delivery with no new drops or reconnects while another
+destination disconnected. These fixture measurements do not promise production
+throughput or memory limits; deployment and larger-profile loads still vary.
 
 Job snapshots and outcomes persist beneath `<library_directory>/generator/jobs`;
 a restart marks unfinished jobs interrupted and removes incomplete workspace
-files. Generate the saved draft again explicitly to retry. Missing dependencies,
+files. **Retry captured revision** explicitly creates a new job at the back of
+the queue using the interrupted, failed or cancelled job's immutable inputs,
+profile, renderer and duration. It does not use a newer editable draft or alter
+the previous outcome. To use newer edits, choose Generate saved draft instead.
+If a server update removes the captured renderer version, its retry is rejected
+explicitly; generating the current saved draft is a new job and may include newer
+edits, not an equivalent replay of the old result.
+Missing dependencies,
 storage failures, cancellation and profile changes leave prior ready and on-air
 revisions intact. A profile change during generation fails that job rather than
 substituting a different profile. Authenticated APIs expose jobs at
 `/api/generator/jobs`, individual outcomes at `/api/generator/jobs/{id}`, and
-cancellation at `/api/generator/jobs/{id}/cancel`.
+cancellation at `/api/generator/jobs/{id}/cancel`, and explicit captured-input
+retry at `/api/generator/jobs/{id}/retry` (POST with an empty JSON object).

@@ -26,6 +26,7 @@ type LibraryEntry struct {
 	Duration                   float64           `json:"duration"`
 	Bytes                      int64             `json:"bytes"`
 	Error                      string            `json:"error,omitempty"`
+	Message                    string            `json:"message,omitempty"`
 	Profile                    config.BRBProfile `json:"profile"`
 	stamp, key, path, identity string
 	index                      *clipIndex
@@ -50,6 +51,7 @@ type videoLibrary struct {
 	cancel               context.CancelFunc
 	jobID                string
 	lastError            string
+	preparation          *preparationGate
 }
 
 func validClipName(name string) bool {
@@ -88,7 +90,7 @@ func (s *Server) initializeLibrary() error {
 			return errors.New("cannot create persistent video library")
 		}
 	}
-	s.library = &videoLibrary{root: root, limit: int64(limit) << 20, profile: s.broadcast.media.settings.Profile, entries: make(map[string]*LibraryEntry), revisions: make(map[string]*MediaRevision), wake: make(chan struct{}, 1)}
+	s.library = &videoLibrary{preparation: s.preparation, root: root, limit: int64(limit) << 20, profile: s.broadcast.media.settings.Profile, entries: make(map[string]*LibraryEntry), revisions: make(map[string]*MediaRevision), wake: make(chan struct{}, 1)}
 	return s.library.loadRevisions()
 }
 func (l *videoLibrary) notify() {
@@ -121,6 +123,7 @@ func (l *videoLibrary) setProfile(profile config.BRBProfile) {
 	}
 	for _, e := range l.entries {
 		wasDiscovering := e.State == "discovering"
+		e.Message = ""
 		e.State = "queued"
 		e.Progress = 0
 		e.Error = ""
@@ -132,6 +135,7 @@ func (l *videoLibrary) setProfile(profile config.BRBProfile) {
 			e.State = "discovering"
 		}
 		if err := l.validateOriginal(e); err != nil {
+			e.Message = ""
 			e.State = "failed"
 			e.Error = err.Error()
 		}
@@ -183,13 +187,16 @@ func (l *videoLibrary) scan() {
 			e.key = clipCacheKey(id, stamp, l.profile)
 			l.entries[id] = e
 		} else if e.State == "discovering" {
+			e.Message = ""
 			e.State = "queued"
 		}
 		if info.Size() > l.limit || info.Size() == 0 {
+			e.Message = ""
 			e.State = "failed"
 			e.Error = "MP4 is empty or exceeds the configured upload limit"
 		}
 		if digestErr != nil {
+			e.Message = ""
 			e.State = "failed"
 			e.Error = "Cannot read original MP4; check storage"
 		}
@@ -281,6 +288,28 @@ func (l *videoLibrary) validateOriginal(e *LibraryEntry) error {
 	return nil
 }
 func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
+	l.mu.Lock()
+	if e := l.entries[job.ID]; e != nil && e.key == job.key {
+		e.Message = "Waiting for media preparation; live delivery continues."
+	}
+	l.mu.Unlock()
+	release, admissionErr := l.preparation.acquire(ctx)
+	if admissionErr != nil {
+		l.mu.Lock()
+		if e := l.entries[job.ID]; e != nil && e.key == job.key && ctx.Err() == context.DeadlineExceeded {
+			e.Message = ""
+			e.State = "failed"
+			e.Error = "Preparation exceeded the 12-hour deadline while waiting for other media preparation"
+		}
+		l.mu.Unlock()
+		return
+	}
+	defer release()
+	l.mu.Lock()
+	if e := l.entries[job.ID]; e != nil && e.key == job.key {
+		e.Message = "Preparing media."
+	}
+	l.mu.Unlock()
 	path := filepath.Join(l.root, "prepared", job.key+".flv")
 	var idx *clipIndex
 	err := l.validateOriginal(job)
@@ -331,6 +360,7 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 		err = errors.New("Preparation exceeded the 12-hour deadline")
 	}
 	if err != nil || idx == nil {
+		e.Message = ""
 		e.State = "failed"
 		e.Error = "Cannot prepare MP4; check the file, disk space and FFmpeg/FFprobe"
 		if err != nil && strings.HasPrefix(err.Error(), "MP4 duration") {
@@ -339,12 +369,14 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 		return
 	}
 	e.State = "ready"
+	e.Message = ""
 	e.Progress = 100
 	e.Duration = idx.Duration.Seconds()
 	e.path = path
 	e.index = idx
 	e.Error = ""
 	if err := l.retainRevision(e); err != nil {
+		e.Message = ""
 		e.State = "failed"
 		e.Error = "Cannot retain prepared revision; check storage"
 		return
@@ -393,6 +425,7 @@ func (l *videoLibrary) retry(id string) error {
 	if err := os.Remove(filepath.Join(l.root, "prepared", e.key+".flv")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.New("Cannot remove old conversion; check storage")
 	}
+	e.Message = ""
 	e.State = "queued"
 	e.Error = ""
 	e.Progress = 0
