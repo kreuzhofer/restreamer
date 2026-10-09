@@ -8,6 +8,7 @@
  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
  <link rel="stylesheet" href="/dashboard.css">
  <script src="/dashboard.js" defer></script>
+ <script src="/brb-theme.js" defer></script>
  <script src="/profile.js" defer></script>
  <script src="/stages.js" defer></script>
  <script src="/library.js" defer></script>
@@ -90,9 +91,10 @@
      <div class="brb-assets">
       <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
       <div class="brb-fields">
-       <label>Arcade message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Default animation only. One line, automatically sized to fit. Up to 40 characters: A–Z, 0–9, ÄÖÜß, spaces and . , ! ? : ' - / ( ) + &amp;. Displayed in uppercase. Click Prepare &amp; save BRB to apply.</small>
+       <label>BRB message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Shown when no custom image is selected. Legacy arcade text sizes automatically; shared themes validate the chosen font and layout. Up to 40 characters: A–Z, 0–9, ÄÖÜß, spaces and . , ! ? : ' - / ( ) + &amp;. Displayed in uppercase. Click Prepare &amp; save BRB to apply.</small>
        <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels. Fitted without cropping.</small>
-       <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Use the default animated arcade screen</label>
+       <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Remove the custom image and use the BRB message</label>
+       <label class="check-label"><input name="reset_theme" type="checkbox" value="true"> Restore legacy arcade/custom-image styling</label>
        <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes. Loops during BRB.</small>
        <label class="check-label"><input name="remove_music" type="checkbox" value="true"> Remove music and use silent audio</label>
        <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
@@ -101,6 +103,14 @@
      <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Prepare &amp; save BRB</button><span id="brb-save-status" role="status">Your current BRB stays ready while new assets are prepared.</span></div>
     </form>
    </details>
+   <details id="brb-theme-settings"><summary>Shared style theme</summary><div class="brb-fields">
+    <p id="brb-theme-current" class="library-help"></p>
+    <p class="library-help">Choose the same immutable themes as prestream and ending. <a href="/generator">Customize themes in Media generator</a>. Preparing captures the saved BRB message, custom image and music; unsaved form edits must be saved first.</p>
+    <label>Exact theme revision<select id="brb-theme-select"></select></label>
+    <div class="brb-save"><button id="brb-theme-refresh" class="preview-button" type="button">Refresh theme choices</button><button id="brb-theme-prepare" class="preview-button" type="button">Prepare theme preview</button><button id="brb-theme-cancel" class="preview-button" type="button" hidden>Cancel preparation</button></div>
+    <p id="brb-theme-status" class="library-help" role="status" aria-live="polite"></p>
+    <section id="brb-theme-candidate" hidden><h3>Prepared BRB · not active</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button><button id="brb-theme-discard" class="preview-button" type="button">Discard candidate</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview shows four seconds of the exact video and audio. The four-second visual loop and your complete music track loop independently on air. Theme preparation never changes the music volume or duration.</p></section>
+   </div></details>
   </section>
   <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
    <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>

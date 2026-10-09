@@ -213,6 +213,26 @@ func (s *Server) assetUsesLocked(id string) ([]AssetUse, error) {
 	if s.broadcast == nil {
 		return uses, nil
 	}
+	addBRB := func(settings brbSettings, kind string) {
+		if settings.Theme == nil {
+			return
+		}
+		for _, ref := range mediaauthor.ThemeAssetRefs(*settings.Theme) {
+			if id == "" || id == ref.ID {
+				uses = append(uses, AssetUse{AssetID: ref.ID, Kind: kind, ID: settings.Generation, Name: "BRB · " + settings.Theme.Name, Revision: ref.Revision})
+			}
+		}
+	}
+	s.broadcast.mu.Lock()
+	if s.broadcast.media != nil {
+		addBRB(s.broadcast.media.settings, "brb")
+	}
+	s.broadcast.mu.Unlock()
+	s.brbCandidateMu.Lock()
+	if s.brbCandidate != nil {
+		addBRB(s.brbCandidate.Settings, "brb_prepared")
+	}
+	s.brbCandidateMu.Unlock()
 	stage := s.broadcast.stageStatus(time.Now())
 	selected := s.library.selections()
 	for _, u := range append([]AssetUse{}, uses...) {

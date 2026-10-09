@@ -15,15 +15,17 @@ import (
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
+	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
 type brbSettings struct {
-	Text        string            `json:"text"`
-	Profile     config.BRBProfile `json:"profile"`
-	Generation  string            `json:"generation"`
-	CustomImage bool              `json:"custom_image"`
-	Music       bool              `json:"music"`
-	Volume      int               `json:"volume"`
+	Theme       *mediaauthor.Theme `json:"theme,omitempty"`
+	Text        string             `json:"text"`
+	Profile     config.BRBProfile  `json:"profile"`
+	Generation  string             `json:"generation"`
+	CustomImage bool               `json:"custom_image"`
+	Music       bool               `json:"music"`
+	Volume      int                `json:"volume"`
 }
 
 func controlOriginAllowed(r *http.Request) bool {
@@ -50,7 +52,7 @@ func (s *Server) initializeBRB() error {
 	settings := brbSettings{Text: defaultBRBText, Volume: 50, Profile: s.cfg.BRB.BRBProfile}
 	data, err := os.ReadFile(filepath.Join(root, "current.json"))
 	if err == nil {
-		if len(data) > 4096 || json.Unmarshal(data, &settings) != nil || !strings.HasPrefix(settings.Generation, "assets-") || strings.ContainsAny(settings.Generation, "/\\") || settings.Volume < 0 || settings.Volume > 100 {
+		if len(data) > 16<<10 || json.Unmarshal(data, &settings) != nil || !strings.HasPrefix(settings.Generation, "assets-") || strings.ContainsAny(settings.Generation, "/\\") || settings.Volume < 0 || settings.Volume > 100 {
 			return errors.New("invalid BRB settings file")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -63,6 +65,15 @@ func (s *Server) initializeBRB() error {
 	if err := settings.Profile.Validate(); err != nil {
 		return err
 	}
+	if settings.Theme != nil {
+		media, err := loadThemedBRB(root, settings)
+		if err != nil {
+			return err
+		}
+		s.broadcast = newBroadcast(s, media)
+		return s.loadBRBCandidate()
+	}
+
 	dir, err := os.MkdirTemp(root, "assets-")
 	if err != nil {
 		return errors.New("cannot prepare BRB storage")
@@ -93,7 +104,7 @@ func (s *Server) initializeBRB() error {
 	if err != nil {
 		return errors.New("BRB preparation cancelled or timed out while waiting for other media preparation")
 	}
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
+	media, err := s.encodeBRBSettings(ctx, settings, dir)
 	release()
 	if err != nil {
 		return err
@@ -109,7 +120,7 @@ func (s *Server) initializeBRB() error {
 	if old != "" {
 		os.RemoveAll(filepath.Join(root, old))
 	}
-	return nil
+	return s.loadBRBCandidate()
 }
 
 func copyAsset(src, dst string) error {
@@ -197,7 +208,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for key, values := range r.MultipartForm.Value {
-		if (key != "text" && key != "volume" && key != "reset_image" && key != "remove_music" && key != "width" && key != "height" && key != "fps" && key != "sample_rate") || len(values) != 1 {
+		if (key != "text" && key != "volume" && key != "reset_image" && key != "reset_theme" && key != "remove_music" && key != "width" && key != "height" && key != "fps" && key != "sample_rate") || len(values) != 1 {
 			http.Error(w, "Unknown or repeated BRB setting", 400)
 			return
 		}
@@ -205,6 +216,10 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	s.broadcast.mu.Lock()
 	settings := s.broadcast.media.settings
 	s.broadcast.mu.Unlock()
+	sourceImage := brbSourceImage(s.cfg.BRB.Directory, settings)
+	if r.FormValue("reset_theme") == "true" {
+		settings.Theme = nil
+	}
 	if values, ok := r.MultipartForm.Value["text"]; ok {
 		value, err := normalizeBRBText(values[0])
 		if err != nil {
@@ -289,7 +304,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		settings.CustomImage = false
-	} else if err = copyAsset(filepath.Join(root, old, "image.png"), imagePath); err != nil {
+	} else if err = copyAsset(sourceImage, imagePath); err != nil {
 		fail(err)
 		return
 	}
@@ -327,7 +342,7 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		fail(errors.New("BRB preparation cancelled or timed out while waiting for other media preparation; retry when ready"))
 		return
 	}
-	media, err := encodeBRB(ctx, settings.Profile, dir, settings.CustomImage, settings.Music, settings.Volume, settings.Text)
+	media, err := s.encodeBRBSettings(ctx, settings, dir)
 	release()
 	if err != nil {
 		fail(err)
