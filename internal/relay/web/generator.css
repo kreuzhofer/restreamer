@@ -31,3 +31,14 @@
 .generator-job progress { width: 100%; accent-color: #4de0c5; }
 #generated-video { width: 100%; max-height: 65vh; background: #080b12; border-radius: 8px; }
 #generated-identity { overflow-wrap: anywhere; }
+.generator-sequence { margin: 20px 0; border-block: 1px solid #30374b; padding: 12px 0; }
+#scene-list { display: grid; gap: 8px; }
+#scene-list button { padding: 12px; text-align: left; background: #171e2d; color: #e7eafa; border: 1px solid #30374b; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
+#scene-list button[aria-current="true"] { border-color: #4de0c5; }
+#selected-scene-fields { min-width: 0; border: 0; padding: 0; margin: 18px 0 0; }
+#selected-scene-fields legend { font-size: 17px; font-weight: 600; padding: 0; }
+#scene-layout { margin-bottom: 16px; }
+#scene-issues button, #scene-issues p { display: block; width: 100%; border: 0; background: transparent; text-align: left; color: #ff9ba8; font: inherit; font-size: 13px; line-height: 1.5; margin-block: 8px; }
+#scene-issues button { cursor: pointer; text-decoration: underline; }
+.generator-list-item { padding: 12px; margin-bottom: 12px; border: 1px solid #30374b; border-radius: 7px; }
+.generator-list-item button { margin-top: 8px; }

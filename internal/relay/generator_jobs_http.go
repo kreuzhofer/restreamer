@@ -168,6 +168,10 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only failed, interrupted or cancelled jobs can be retried", 409)
 		return
 	}
+	if previous.Renderer != generatorRenderer {
+		http.Error(w, "The captured renderer is unavailable after a server update. This exact retry cannot run. Generate saved draft creates a new job and may include newer edits.", 409)
+		return
+	}
 	identity, err := newGenerationJob(previous.Design, previous.Profile)
 	if err != nil {
 		http.Error(w, "Cannot create retry identity", 503)

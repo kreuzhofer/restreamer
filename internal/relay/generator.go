@@ -51,11 +51,21 @@ func (s *Server) initializeGenerator() error {
 }
 
 func designBounds(d mediaauthor.Design) bool {
-	if !utf8.ValidString(d.Name) || len(d.Name) > 180 || len(d.Scenes) != 1 {
+	if !utf8.ValidString(d.Name) || len(d.Name) > 180 || len(d.Scenes) > mediaauthor.MaxScenes {
 		return false
 	}
 	for _, scene := range d.Scenes {
-		if len(scene.Text) > 4096 || !utf8.ValidString(scene.Text) || len(scene.ID) > 80 || len(scene.Layout) > 40 || len(scene.Font) > 40 {
+		if len(scene.Text) > mediaauthor.MaxSceneTextBytes || !utf8.ValidString(scene.Text) || len(scene.ID) > 80 || len(scene.Layout) > 40 || len(scene.Font) > 40 || len(scene.Alignment) > 20 || len(scene.Items) > mediaauthor.MaxListItems {
+			return false
+		}
+		textBytes := len(scene.Text)
+		for _, item := range scene.Items {
+			textBytes += len(item)
+			if !utf8.ValidString(item) {
+				return false
+			}
+		}
+		if textBytes > mediaauthor.MaxSceneTextBytes {
 			return false
 		}
 	}

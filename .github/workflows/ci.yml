@@ -95,6 +95,12 @@ jobs:
           stage_status
           jq -e '.stage == "OFF" and .mode == "off" and .pending == null' /tmp/stage-status.json
           api http://127.0.0.1:18080/status | jq -e '.forwarding == false and .brb.ready == true'
+          # Exercise the generator with the packaged FFmpeg and embedded fonts,
+          # then play its exact retained revision through isolated rehearsal.
+          export GENERATOR_URL=http://127.0.0.1:18080 GENERATOR_USER=ci GENERATOR_PASSWORD=ci-dashboard-password
+          export GENERATOR_SMOKE_OUTPUT=/tmp/generated-smoke.mp4 GENERATOR_SMOKE_STATE=/tmp/generated-smoke.json
+          python3 tests/generator-smoke.py
+          ffmpeg -v error -xerror -i /tmp/generated-smoke.mp4 -f null -
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -155,6 +161,7 @@ jobs:
           cp /tmp/stage-command.json /tmp/before-restart-command.json
           docker rm -f restreamer-smoke
           start_container
+          python3 tests/generator-smoke.py --verify-restart
           wait_library
           api http://127.0.0.1:18080/api/stage-media > /tmp/restarted-stage-media.json
           jq -e --arg revision "$revision" '.prestream == $revision and .ending == $revision and .shortcuts == [{name:"Smoke clip",revision:$revision}]' /tmp/restarted-stage-media.json

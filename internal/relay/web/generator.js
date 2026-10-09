@@ -2,6 +2,9 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let draft = null;
+  let selectedScene = 0;
+  let itemEditors = [];
+  let validationIssues = [];
   let dirty = false;
   let saving = false;
   let conflict = false;
@@ -17,11 +20,10 @@
   let stageSelections = {};
   let onAirRevision = '';
   const fields = {
-    name: ['design-name', 'name-error'],
-    'scenes.0.text': ['scene-text', 'text-error'],
-    'scenes.0.font': ['scene-font', 'font-error'],
-    'scenes.0.font_size': ['scene-size', 'size-error'],
-    'scenes.0.duration_seconds': ['scene-duration', 'duration-error']
+    name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
+    font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
+    duration_seconds: ['scene-duration', 'duration-error'], content_region: ['region-width', 'region-error'],
+    alignment: ['scene-alignment', 'alignment-error'], items: ['list-content', 'items-error']
   };
   async function request(path, method = 'GET', body, signal) {
     const response = await fetch(new URL(path, location.origin), {method, credentials: 'same-origin', signal,
@@ -77,12 +79,9 @@
   function openDraft(value) {
     clearTimeout(saveTimer);
     draft = value; dirty = false; conflict = false; editSequence++;
-    const scene = draft.scenes[0];
+    selectedScene = 0; validationIssues = [];
     $('design-name').value = draft.name;
-    $('scene-text').value = scene.text;
-    $('scene-font').value = scene.font || '';
-    $('scene-size').value = scene.font_size || ''; 
-    $('scene-duration').value = scene.duration_seconds;
+    renderScenes(); renderSelectedScene();
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
     $('design-editor').hidden = false; $('generator-empty').hidden = true;
     notify(''); saveState(`Saved · version ${draft.version}`);
@@ -91,14 +90,94 @@
     schedulePreview();
     loadJobs();
   }
+  function renderScenes() {
+    $('scene-list').replaceChildren();
+    for (const [index, scene] of draft.scenes.entries()) {
+      const button = document.createElement('button'); button.type = 'button';
+      const invalid = validationIssues.some(issue => issue.field.startsWith(`scenes.${index}.`));
+      button.textContent = `${index + 1}. ${scene.text.split('\n')[0] || (scene.layout === 'list' ? 'List' : 'Untitled')} · ${scene.duration_seconds}s${invalid ? ' · needs attention' : ''}`;
+      button.setAttribute('aria-current', String(index === selectedScene));
+      button.addEventListener('click', () => selectScene(index)); $('scene-list').append(button);
+    }
+    $('add-title-scene').disabled = $('add-list-scene').disabled = draft.scenes.length >= 20;
+    $('duplicate-scene').disabled = draft.scenes.length >= 20;
+    $('move-scene-up').disabled = selectedScene === 0;
+    $('move-scene-down').disabled = selectedScene >= draft.scenes.length - 1;
+  }
+  function renderSelectedScene() {
+    const scene = draft.scenes[selectedScene]; itemEditors = [];
+    $('selected-scene-fields').hidden = !scene;
+    $('editor-heading').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'}`;
+    if (!scene) return;
+    $('selected-scene-heading').textContent = `Scene ${selectedScene + 1} · ${scene.layout}`;
+    $('scene-layout').value = scene.layout;
+    $('scene-text').value = scene.text;
+    $('scene-font').value = scene.font || '';
+    $('scene-size').value = scene.font_size || '';
+    $('scene-duration').value = scene.duration_seconds;
+    $('scene-alignment').value = scene.alignment || '';
+    $('region-width').value = scene.content_region?.width_percent || '';
+    $('region-height').value = scene.content_region?.height_percent || '';
+    $('list-content').hidden = scene.layout !== 'list';
+    $('list-items').replaceChildren();
+    for (const [index, text] of (scene.items || []).entries()) {
+      const row = document.createElement('div'); row.className = 'generator-list-item';
+      const label = document.createElement('label'); label.textContent = `List item ${index + 1}`;
+      const textarea = document.createElement('textarea'); textarea.rows = 2; textarea.maxLength = 4096; textarea.value = text;
+      const error = document.createElement('small'); error.className = 'field-error'; error.id = `item-error-${index}`;
+      textarea.setAttribute('aria-describedby', error.id); label.append(textarea); row.append(label, error);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = `Remove item ${index + 1}`;
+      remove.addEventListener('click', () => { scene.items.splice(index, 1); renderSelectedScene(); changed(); }); row.append(remove);
+      $('list-items').append(row); itemEditors.push({input: textarea, error});
+    }
+    $('add-list-item').disabled = (scene.items || []).length >= 20;
+  }
+  function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); schedulePreview(); }
+  function changed() {
+    dirty = true; editSequence++;
+    if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
+    renderScenes(); schedulePreview();
+  }
   function captureFields() {
     draft.name = $('design-name').value;
-    const scene = draft.scenes[0];
-    scene.text = $('scene-text').value;
-    scene.font = $('scene-font').value;
-    scene.font_size = $('scene-size').value === '' ? 0 : Number($('scene-size').value);
-    scene.duration_seconds = Number($('scene-duration').value);
+    const scene = draft.scenes[selectedScene]; if (!scene) return;
+    scene.layout = $('scene-layout').value;
+    scene.text = $('scene-text').value; scene.font = $('scene-font').value;
+    scene.font_size = Number($('scene-size').value); scene.duration_seconds = Number($('scene-duration').value);
+    scene.alignment = $('scene-alignment').value;
+    scene.content_region = {width_percent: Number($('region-width').value), height_percent: Number($('region-height').value)};
+    if (scene.layout === 'list' || scene.items) scene.items = itemEditors.map(editor => editor.input.value);
   }
+  function addScene(layout) {
+    if (!draft || draft.scenes.length >= 20) return;
+    const scene = {id: crypto.randomUUID(), layout, text: '', duration_seconds: 10};
+    if (layout === 'list') scene.items = ['New list item'];
+    draft.scenes.push(scene); selectedScene = draft.scenes.length - 1;
+    renderSelectedScene(); changed();
+  }
+  $('add-title-scene').addEventListener('click', () => addScene('title'));
+  $('add-list-scene').addEventListener('click', () => addScene('list'));
+  $('duplicate-scene').addEventListener('click', () => {
+    if (draft.scenes.length >= 20) return;
+    const copy = structuredClone(draft.scenes[selectedScene]); copy.id = crypto.randomUUID();
+    draft.scenes.splice(selectedScene + 1, 0, copy); selectedScene++; renderSelectedScene(); changed();
+  });
+  $('remove-scene').addEventListener('click', () => {
+    draft.scenes.splice(selectedScene, 1); selectedScene = Math.max(0, Math.min(selectedScene, draft.scenes.length - 1)); renderSelectedScene(); changed();
+  });
+  function moveScene(delta) {
+    const destination = selectedScene + delta;
+    if (destination < 0 || destination >= draft.scenes.length) return;
+    [draft.scenes[selectedScene], draft.scenes[destination]] = [draft.scenes[destination], draft.scenes[selectedScene]];
+    selectedScene = destination; renderSelectedScene(); changed();
+  }
+  $('move-scene-up').addEventListener('click', () => moveScene(-1));
+  $('move-scene-down').addEventListener('click', () => moveScene(1));
+  $('add-list-item').addEventListener('click', () => {
+    const scene = draft.scenes[selectedScene]; scene.items ||= [];
+    if (scene.items.length >= 20) return;
+    scene.items.push('New list item'); renderSelectedScene(); changed();
+  });
   function schedulePreview() {
     clearTimeout(previewTimer);
     previewSequence++;
@@ -114,25 +193,45 @@
     try {
       const result = await (await request('/api/generator/validate', 'POST', snapshot, previewAbort.signal)).json();
       if (sequence !== previewSequence) return;
+      validationIssues = result.issues;
+      renderScenes();
+      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds with cuts at ${result.profile.fps} fps`;
       for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
+      for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
+      $('scene-issues').replaceChildren();
       for (const issue of result.issues) {
-        const field = fields[issue.field];
-        if (field) { $(field[0]).setAttribute('aria-invalid', 'true'); $(field[1]).textContent = issue.message; }
+        const match = /^scenes\.(\d+)\.(.+)$/.exec(issue.field);
+        const sceneIndex = match ? Number(match[1]) : null;
+        const fieldName = match ? match[2] : issue.field;
+        if (sceneIndex === selectedScene || sceneIndex === null) {
+          if (fieldName.startsWith('items.')) {
+            const editor = itemEditors[Number(fieldName.split('.')[1])];
+            if (editor) { editor.input.setAttribute('aria-invalid', 'true'); editor.error.textContent = issue.message; }
+          } else {
+            const field = fields[fieldName];
+            if (field) { $(field[0]).setAttribute('aria-invalid', 'true'); $(field[1]).textContent = issue.message; }
+          }
+        }
+        const entry = document.createElement(sceneIndex === null ? 'p' : 'button');
+        entry.textContent = `${sceneIndex === null ? 'Composition' : `Scene ${sceneIndex + 1}`} · ${issue.message}`;
+        if (sceneIndex !== null) { entry.type = 'button'; entry.addEventListener('click', () => selectScene(sceneIndex)); }
+        $('scene-issues').append(entry);
       }
       $('preview-profile').textContent = `${result.profile.width} × ${result.profile.height} · ${result.profile.fps} fps`;
-      if (result.issues.length) {
-        $('preview-state').textContent = `Resolve ${result.issues.length} validation issue(s) to preview. Draft edits are still saved.`;
+      const selectedInvalid = result.issues.some(issue => !issue.field.startsWith('scenes.') || issue.field.startsWith(`scenes.${selectedScene}.`));
+      if (!snapshot.scenes[selectedScene] || selectedInvalid) {
+        $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Draft edits are still saved.';
         return;
       }
-      const response = await request('/api/generator/preview', 'POST', snapshot, previewAbort.signal);
+      const response = await request(`/api/generator/preview?scene=${selectedScene}`, 'POST', snapshot, previewAbort.signal);
       const bitmap = await createImageBitmap(await response.blob());
       if (sequence !== previewSequence) { bitmap.close(); return; }
       const canvas = $('scene-preview');
       canvas.width = bitmap.width; canvas.height = bitmap.height;
       canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
       canvas.hidden = false;
-      canvas.setAttribute('aria-label', `Quick preview: ${snapshot.scenes[0].text || 'Blank title scene'}`);
-      $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[0].duration_seconds} seconds · not on air`;
+      canvas.setAttribute('aria-label', `Quick preview: ${snapshot.scenes[selectedScene].text || 'Blank title scene'}`);
+      $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[selectedScene].duration_seconds} seconds · not on air`;
     } catch (error) {
       if (error.name !== 'AbortError' && sequence === previewSequence) $('preview-state').textContent = `Preview unavailable: ${error.message}`;
     }
@@ -163,10 +262,10 @@
     }
   }
   $('scene-form').addEventListener('submit', event => event.preventDefault());
-  $('scene-form').addEventListener('input', () => {
-    captureFields(); dirty = true; editSequence++;
-    if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
-    schedulePreview();
+  $('scene-form').addEventListener('input', event => {
+    captureFields();
+    if (event.target.id === 'scene-layout') renderSelectedScene();
+    changed();
   });
   $('save-retry').addEventListener('click', () => saveDraft());
   $('save-copy').addEventListener('click', () => saveDraft(true));

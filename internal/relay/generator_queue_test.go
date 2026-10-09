@@ -251,3 +251,36 @@ func TestGeneratorFailedRetryRetainsCapture(t *testing.T) {
 		t.Fatal(retry)
 	}
 }
+
+func TestGeneratorRetryRejectsUnavailableCapturedRenderer(t *testing.T) {
+	s := libraryServer(t)
+	d := generatorDraft(t, s, 1)
+	original := submitGenerator(t, s, d)
+	// Emulate metadata retained by an earlier installed renderer. This is an
+	// external persistence fixture; behavior is checked only through HTTP after restart.
+	path := filepath.Join(s.cfg.BRB.Directory, "library", "generator", "jobs", original.ID+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved map[string]any
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	saved["renderer"] = "go-png-ffmpeg-v1"
+	data, err = json.Marshal(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	restarted := New(s.cfg, s.log)
+	w := dashboardRequest(restarted, "POST", "/api/generator/jobs/"+original.ID+"/retry", `{}`)
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "captured renderer is unavailable") {
+		t.Fatal("substituted a different renderer", w.Code, w.Body.String())
+	}
+	if len(generatorQueue(t, restarted)) != 1 {
+		t.Fatal("unsupported retry admitted")
+	}
+}
