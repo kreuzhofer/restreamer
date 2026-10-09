@@ -28,10 +28,14 @@ type clipKey struct {
 	Offset   int64
 }
 type clipIndex struct {
-	Video, Audio   *rtmp.Message
-	Keys           []clipKey
-	Duration, Base time.Duration
-	Size           int64
+	ExactFPS             int
+	Frames               int
+	LastVideo, LastAudio time.Duration
+	Exact                bool
+	Video, Audio         *rtmp.Message
+	Keys                 []clipKey
+	Duration, Base       time.Duration
+	Size                 int64
 }
 type clipReader struct {
 	file   *os.File
@@ -118,6 +122,9 @@ func indexClipContext(ctx context.Context, path string) (*clipIndex, error) {
 					return nil, errors.New("invalid prepared video timing")
 				}
 				last[track] = ts
+				if typ == rtmp.Video {
+					idx.Frames++
+				}
 				if typ == rtmp.Video && prefix[0]>>4 == 1 {
 					if len(idx.Keys) == 0 {
 						idx.Base = ts
@@ -134,6 +141,7 @@ func indexClipContext(ctx context.Context, path string) (*clipIndex, error) {
 	if idx.Video == nil || idx.Audio == nil || len(idx.Keys) == 0 {
 		return nil, errors.New("prepared video needs H.264 video and AAC audio")
 	}
+	idx.LastVideo, idx.LastAudio = last[0]-idx.Base, last[1]-idx.Base
 	idx.Duration = max(last[0], last[1]) - idx.Base + time.Second/25
 	if idx.Duration <= 0 {
 		return nil, errors.New("prepared video is empty")

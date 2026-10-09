@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -106,6 +107,11 @@ func TestGeneratorEndingFinishFadesWholeCompositionWithoutAddingTime(t *testing.
 			size := 320 * 180 * 3
 			if len(rgb) != 55*size {
 				t.Fatal("wrong frame count", len(rgb)/size)
+			}
+			duration, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of", "csv=p=0", path).Output()
+			seconds, parseErr := strconv.ParseFloat(strings.TrimSpace(string(duration)), 64)
+			if err != nil || parseErr != nil || math.Abs(seconds-2.2) > .001 {
+				t.Fatal("prepared preview disagrees with authored duration", string(duration), err, parseErr)
 			}
 			last := rgb[54*size:]
 			maxPixel := byte(0)

@@ -26,6 +26,9 @@ type PlaybackStatus struct {
 }
 
 type clipPlayback struct {
+	loopEpoch                              time.Time
+	loopBase                               time.Duration
+	loopCount                              int64
 	continuation                           bool
 	ID, Name, Revision                     string
 	reader                                 *clipReader
@@ -116,11 +119,20 @@ func (b *broadcast) startClip(now time.Time) error {
 		return err
 	}
 	p.position, p.startPosition = pos, pos
-	p.started = now
+	if p.continuation && p.reader.index.Exact {
+		offset := time.Duration(p.loopCount) * time.Duration(p.reader.index.Frames) * time.Second / time.Duration(p.reader.index.ExactFPS)
+		p.started = p.loopEpoch.Add(offset)
+		p.broadcastBase = p.loopBase + offset
+	} else {
+		p.started = now
+		p.broadcastBase = max(b.last+time.Millisecond, now.Sub(b.started))
+		p.loopEpoch = p.started.Add(-pos)
+		p.loopBase = p.broadcastBase - pos
+		p.loopCount = 0
+	}
 	p.pending = nil
 	p.eof = false
 	p.streaming = true
-	p.broadcastBase = max(b.last+time.Millisecond, now.Sub(b.started))
 	b.live, b.active = false, false
 	b.hub.clearHeaders()
 	if !p.continuation {
@@ -169,6 +181,14 @@ func (b *broadcast) tickClip(now time.Time) bool {
 				p.position = 0
 				p.continuation = true
 				p.streaming = false
+				if p.reader.index.Exact {
+					p.loopCount++
+					if b.startClip(now) != nil {
+						b.failPlayback("Cannot restart generated cycle; check storage and regenerate", now)
+						return false
+					}
+					continue
+				}
 				return true
 			}
 			b.finishPlayback(now)

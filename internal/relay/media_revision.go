@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 // A revision identifies immutable encoded content, independently of its source
 // filename. Original discovery and re-preparation never mutate these files.
 type MediaRevision struct {
+	Timing    *GeneratedTiming  `json:"timing,omitempty"`
 	ID        string            `json:"id"`
 	LibraryID string            `json:"library_id"`
 	Name      string            `json:"name"`
@@ -107,7 +109,7 @@ func (l *videoLibrary) loadRevisions() error {
 			continue
 		}
 		var revision MediaRevision
-		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil {
+		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil || validateGeneratedTiming(revision.Timing, revision.Profile) != nil {
 			return errors.New("invalid retained media revision")
 		}
 		l.revisions[id] = &revision
@@ -141,7 +143,12 @@ func (l *videoLibrary) retainRevision(e *LibraryEntry) error {
 // prepareRetainedRevision performs bounded file IO without accessing the catalog.
 // Callers publish its result under l.mu; generators need not hold that lock while
 // hashing their completed output.
-func (l *videoLibrary) prepareRetainedRevision(e *LibraryEntry) (*MediaRevision, error) {
+func (l *videoLibrary) prepareRetainedRevision(e *LibraryEntry, timing ...GeneratedTiming) (*MediaRevision, error) {
+	var captured *GeneratedTiming
+	if len(timing) > 0 {
+		value := timing[0]
+		captured = &value
+	}
 	id, err := mediaDigest(e.path)
 	if err != nil {
 		return nil, err
@@ -157,7 +164,42 @@ func (l *videoLibrary) prepareRetainedRevision(e *LibraryEntry) (*MediaRevision,
 	if existing, err := mediaDigest(path); err != nil || existing != id {
 		return nil, errors.New("Retained media revision changed")
 	}
-	revision := &MediaRevision{ID: id, LibraryID: e.ID, Name: e.Name, State: "ready", Duration: e.Duration, Bytes: e.index.Size, Profile: e.Profile, index: e.index}
+	if e.index == nil {
+		return nil, errors.New("Prepared media index is unavailable")
+	}
+	index := *e.index // Never retime an index held by an already-open reader.
+	var previous MediaRevision
+	metadataPath := filepath.Join(l.root, "revisions", id+".json")
+	metadataErr := readMediaJSON(metadataPath, &previous)
+	if metadataErr == nil {
+		if previous.ID != id || previous.Profile != e.Profile || previous.Bytes != index.Size || validateGeneratedTiming(previous.Timing, e.Profile) != nil {
+			return nil, errors.New("Retained media metadata conflicts with these bytes; prepare a new revision")
+		}
+		if captured != nil && previous.Timing == nil && !strings.HasPrefix(previous.LibraryID, "generator-") {
+			return nil, errGeneratedTimingCollision
+		}
+		if previous.Timing != nil {
+			if captured != nil && *captured != *previous.Timing {
+				return nil, errors.New("Retained generated frame timing conflicts with these bytes")
+			}
+			value := *previous.Timing
+			captured = &value
+			if err := applyGeneratedTiming(&index, captured, e.Profile); err != nil {
+				return nil, err
+			}
+			previous.index = &index
+			return &previous, nil
+		}
+	} else if !errors.Is(metadataErr, os.ErrNotExist) {
+		return nil, errors.New("Cannot read retained media metadata")
+	}
+	if err := applyGeneratedTiming(&index, captured, e.Profile); err != nil {
+		return nil, err
+	}
+	revision := &MediaRevision{Timing: captured, ID: id, LibraryID: e.ID, Name: e.Name, State: "ready", Duration: e.Duration, Bytes: e.index.Size, Profile: e.Profile, index: &index}
+	if captured != nil {
+		revision.Duration = index.Duration.Seconds()
+	}
 	if err := writeState(filepath.Join(l.root, "revisions", id+".json"), revision); err != nil {
 		return nil, err
 	}
@@ -224,6 +266,9 @@ func (l *videoLibrary) openRevisionLocked(id string) (*clipPlayback, config.BRBP
 		idx, err := indexClip(path)
 		if err != nil {
 			return nil, r.Profile, errors.New("Selected media revision is invalid; prepare the original again")
+		}
+		if err := applyGeneratedTiming(idx, r.Timing, r.Profile); err != nil {
+			return nil, r.Profile, err
 		}
 		r.index = idx
 	}
@@ -376,6 +421,14 @@ func (s *Server) libraryPrepare(w http.ResponseWriter, r *http.Request) {
 // Candidate preview reuses the browser-compatible packet mux. It reads only
 // the selected immutable revision and never touches the broadcast controller.
 func (s *Server) libraryRevisionPreview(w http.ResponseWriter, r *http.Request) {
+	passes := 1
+	if requested := r.URL.Query().Get("passes"); requested != "" && requested != "1" {
+		if requested != "2" {
+			http.Error(w, "Preview supports one or two passes", 400)
+			return
+		}
+		passes = 2
+	}
 	if s.library == nil {
 		http.Error(w, "Prepared media is unavailable", 409)
 		return
@@ -393,6 +446,10 @@ func (s *Server) libraryRevisionPreview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer clip.reader.close()
+	if passes == 2 && !clip.reader.index.Exact {
+		http.Error(w, "Two-pass preview requires a generated frame-timed revision", 409)
+		return
+	}
 	mux := previewMux{}
 	for _, header := range []*rtmp.Message{clip.reader.index.Video, clip.reader.index.Audio} {
 		if _, err := mux.push(header); err != nil {
@@ -401,14 +458,27 @@ func (s *Server) libraryRevisionPreview(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	started := false
+	pass := 0
 	for r.Context().Err() == nil {
 		msg, err := clip.reader.next()
 		finished := errors.Is(err, io.EOF)
+		if finished && pass+1 < passes {
+			if _, err := clip.reader.seek(0); err != nil {
+				return
+			}
+			pass++
+			continue
+		}
+		if msg != nil {
+			copy := *msg
+			copy.Timestamp += time.Duration(pass) * clip.reader.index.Duration
+			msg = &copy
+		}
 		if finished && mux.pending != nil {
 			// The streaming mux keeps one video frame until its duration is
 			// known. At finite EOF the indexed duration supplies that boundary.
 			last := *mux.pending
-			last.Timestamp = clip.reader.index.Duration
+			last.Timestamp = time.Duration(passes) * clip.reader.index.Duration
 			msg, err = &last, nil
 		}
 		if err != nil {
@@ -429,6 +499,7 @@ func (s *Server) libraryRevisionPreview(w http.ResponseWriter, r *http.Request) 
 			w.Header().Set("X-Preview-Codecs", mux.mime)
 			w.Header().Set("X-Preview-Base-Ms", "0")
 			w.Header().Set("X-Media-Revision", clip.Revision)
+			w.Header().Set("X-Preview-Passes", fmt.Sprint(passes))
 			started = true
 		}
 		controller := http.NewResponseController(w)

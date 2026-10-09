@@ -78,6 +78,7 @@ func (m Soundtrack) Volume() float64 {
 }
 
 type Design struct {
+	LoopTransition *Transition `json:"loop_transition,omitempty"`
 	// Nil uses the ENDING default; zero preserves the final image and audio.
 	EndingFadeSeconds *float64    `json:"ending_fade_seconds,omitempty"`
 	Soundtrack        *Soundtrack `json:"soundtrack,omitempty"`
