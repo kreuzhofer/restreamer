@@ -109,7 +109,7 @@ func (l *videoLibrary) loadRevisions() error {
 			continue
 		}
 		var revision MediaRevision
-		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil || validateGeneratedTiming(revision.Timing, revision.Profile) != nil {
+		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil || validateRevisionTiming(revision) != nil {
 			return errors.New("invalid retained media revision")
 		}
 		l.revisions[id] = &revision
@@ -172,7 +172,7 @@ func (l *videoLibrary) prepareRetainedRevision(e *LibraryEntry, timing ...Genera
 	metadataPath := filepath.Join(l.root, "revisions", id+".json")
 	metadataErr := readMediaJSON(metadataPath, &previous)
 	if metadataErr == nil {
-		if previous.ID != id || previous.Profile != e.Profile || previous.Bytes != index.Size || validateGeneratedTiming(previous.Timing, e.Profile) != nil {
+		if previous.ID != id || previous.Profile != e.Profile || previous.Bytes != index.Size || validateRevisionTiming(previous) != nil {
 			return nil, errors.New("Retained media metadata conflicts with these bytes; prepare a new revision")
 		}
 		if captured != nil && previous.Timing == nil && !strings.HasPrefix(previous.LibraryID, "generator-") {

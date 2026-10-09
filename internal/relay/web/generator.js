@@ -34,6 +34,7 @@
     'soundtrack.volume_percent': ['soundtrack-volume', 'soundtrack-volume-error'],
     'soundtrack.fade_in_seconds': ['soundtrack-fade-in', 'soundtrack-fade-in-error'],
     'soundtrack.fade_out_seconds': ['soundtrack-fade-out', 'soundtrack-fade-out-error'],
+    'loop_transition.kind': ['loop-transition', 'loop-kind-error'], 'loop_transition.duration_seconds': ['loop-duration', 'loop-duration-error'],
     name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
     font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
     'transition.kind': ['scene-transition', 'transition-kind-error'], 'transition.duration_seconds': ['transition-duration', 'transition-duration-error'],
@@ -96,6 +97,10 @@
     draft = value; dirty = false; conflict = false; editSequence++;
     selectedScene = 0; validationIssues = [];
     $('design-name').value = draft.name;
+    $('loop-controls').hidden = draft.stage !== 'prestream';
+    $('loop-transition').value = draft.loop_transition?.kind || 'cut';
+    $('loop-duration').value = draft.loop_transition?.duration_seconds || 0.5;
+    $('loop-duration-controls').hidden = $('loop-transition').value !== 'crossfade';
     renderScenes(); renderSelectedScene(); renderMusicPicker(); renderDesignTheme();
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
     $('design-editor').hidden = false; $('generator-empty').hidden = true;
@@ -168,6 +173,10 @@
   }
   function captureFields() {
     draft.name = $('design-name').value;
+    if (draft.stage === 'prestream') {
+      draft.loop_transition = $('loop-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('loop-duration').value)} : {kind: 'cut'};
+      $('loop-duration-controls').hidden = $('loop-transition').value !== 'crossfade';
+    }
     const musicValue = $('soundtrack-asset').value;
     if (musicValue) {
       const [id, revision] = musicValue.split(':');
@@ -235,7 +244,7 @@
       if (sequence !== previewSequence) return;
       validationIssues = result.issues;
       renderScenes();
-      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds after transition overlaps at ${result.profile.fps} fps`;
+      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.stage === 'prestream' ? 'per complete cycle' : 'total'} after transition overlaps at ${result.profile.fps} fps`;
       for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
       for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
       $('scene-issues').replaceChildren();
@@ -466,9 +475,10 @@
   function previewGenerated(job) {
     reviewedRevision = job.media_revision;
     $('generated-preview').hidden = false;
-    $('generated-identity').textContent = `Captured draft v${job.design_snapshot.version} · media revision ${reviewedRevision}. Preview does not change the broadcast.`;
+    const passes = job.design_snapshot.stage === 'prestream' && job.exact_timing ? 2 : 1;
+    $('generated-identity').textContent = `${passes === 2 ? `Two passes · ${job.duration}s per complete cycle. ` : 'One pass. '}Captured draft v${job.design_snapshot.version} · media revision ${reviewedRevision}. Preview does not change the broadcast.`;
     const video = $('generated-video');
-    video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview`;
+    video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview${passes === 2 ? "?passes=2" : ""}`;
     $('generated-playback-status').textContent = 'Loading exact prepared output…';
     video.play().catch(() => { $('generated-playback-status').textContent = 'Press Play to review the exact prepared output.'; });
   }

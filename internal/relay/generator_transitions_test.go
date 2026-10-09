@@ -158,6 +158,7 @@ func TestGeneratorTransitionsKeepTemplatesRetriesAndPinnedAssets(t *testing.T) {
 	d := generatorDraft(t, s, .4)
 	d.Scenes[0].Transition = &mediaauthor.Transition{Kind: "crossfade", DurationSeconds: .2}
 	d.Scenes = append(d.Scenes, mediaauthor.Scene{ID: "image", Layout: "text-image", Text: "Image", Image: &mediaauthor.AssetRef{ID: image.ID, Revision: 1}, DurationSeconds: .4})
+	d.LoopTransition = &mediaauthor.Transition{Kind: "crossfade", DurationSeconds: .12}
 	d = saveMusicDesign(t, s, d)
 	data, _ := json.Marshal(ContentTemplate{Name: "Reusable transition", Content: d})
 	w := dashboardRequest(s, "POST", "/api/generator/templates", string(data))
@@ -172,13 +173,14 @@ func TestGeneratorTransitionsKeepTemplatesRetriesAndPinnedAssets(t *testing.T) {
 	}
 	var copied mediaauthor.Design
 	json.Unmarshal(w.Body.Bytes(), &copied)
-	if copied.Scenes[0].Transition == nil || copied.Scenes[0].Transition.DurationSeconds != .2 {
+	if copied.LoopTransition == nil || copied.LoopTransition.DurationSeconds != .12 || copied.Scenes[0].Transition == nil || copied.Scenes[0].Transition.DurationSeconds != .2 {
 		t.Fatal("template lost transition", copied)
 	}
 	original := submitGenerator(t, s, copied)
 	if w = dashboardRequest(s, "POST", "/api/generator/jobs/"+original.ID+"/cancel", `{}`); w.Code != 202 {
 		t.Fatal(w.Code)
 	}
+	copied.LoopTransition.DurationSeconds = .04
 	copied.Scenes[0].Transition.DurationSeconds = .04
 	copied.Scenes[0], copied.Scenes[1] = copied.Scenes[1], copied.Scenes[0]
 	saveMusicDesign(t, s, copied)
@@ -186,7 +188,7 @@ func TestGeneratorTransitionsKeepTemplatesRetriesAndPinnedAssets(t *testing.T) {
 	w = dashboardRequest(restarted, "GET", "/api/generator/templates/"+template.ID, "")
 	var retained ContentTemplate
 	json.Unmarshal(w.Body.Bytes(), &retained)
-	if retained.Content.Scenes[0].Transition.DurationSeconds != .2 {
+	if retained.Content.LoopTransition.DurationSeconds != .12 || retained.Content.Scenes[0].Transition.DurationSeconds != .2 {
 		t.Fatal("copy edit mutated template")
 	}
 	w = dashboardRequest(restarted, "POST", "/api/generator/jobs/"+original.ID+"/retry", `{}`)
@@ -194,7 +196,7 @@ func TestGeneratorTransitionsKeepTemplatesRetriesAndPinnedAssets(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	retry := generatorJob(t, w)
-	if retry.Design.Scenes[0].Transition.DurationSeconds != .2 || retry.Duration != .6 || retry.DesignRevision != original.DesignRevision {
+	if retry.Design.Scenes[0].Transition.DurationSeconds != .2 || retry.Design.LoopTransition.DurationSeconds != .12 || retry.Duration != .48 || retry.DesignRevision != original.DesignRevision {
 		t.Fatal("retry substituted draft timing", retry)
 	}
 	w = dashboardRequest(restarted, "DELETE", "/api/generator/assets/"+image.ID, `{}`)

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
@@ -18,7 +19,7 @@ func validateGeneratedTiming(timing *GeneratedTiming, p config.BRBProfile) error
 	if timing == nil {
 		return nil
 	}
-	if timing.Version != 1 || p.FPS <= 0 || timing.Frames < 1 || timing.Frames > 600*p.FPS {
+	if timing.Version != 1 || p.FPS <= 0 || p.SampleRate <= 0 || timing.Frames < 1 || timing.Frames > 600*p.FPS {
 		return errors.New("Generated media timing is invalid; generate a new revision.")
 	}
 	return nil
@@ -42,3 +43,13 @@ func applyGeneratedTiming(idx *clipIndex, timing *GeneratedTiming, p config.BRBP
 }
 
 var errGeneratedTimingCollision = errors.New("Identical output already belongs to an ordinary library revision. Change the design or use that existing revision; its legacy timing was preserved.")
+
+func validateRevisionTiming(r MediaRevision) error {
+	if err := validateGeneratedTiming(r.Timing, r.Profile); err != nil {
+		return err
+	}
+	if r.Timing != nil && (math.IsNaN(r.Duration) || math.IsInf(r.Duration, 0) || math.Abs(r.Duration-float64(r.Timing.Frames)/float64(r.Profile.FPS)) > 1e-9) {
+		return errors.New("Saved generated duration conflicts with its frame timing; generate a new revision.")
+	}
+	return nil
+}

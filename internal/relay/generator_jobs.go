@@ -28,6 +28,7 @@ const generatorTimeout = 15 * time.Minute
 // GenerationJob captures immutable inputs. Only state, progress, error and the
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
+	ExactTiming    bool               `json:"exact_timing,omitempty"`
 	MixGain        *float64           `json:"mix_gain,omitempty"`
 	ID             string             `json:"id"`
 	Sequence       uint64             `json:"sequence"`
@@ -216,6 +217,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			job.MediaRevision = revision
 		default:
 			job.State = "ready"
+			job.ExactTiming = true
 			job.Progress = 100
 			job.MediaRevision = revision
 		}
