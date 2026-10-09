@@ -106,6 +106,7 @@ jobs:
           python3 tests/generator-smoke.py
           ffmpeg -v error -xerror -i /tmp/generated-smoke.mp4 -f null -
           ffmpeg -v error -xerror -i /tmp/generated-smoke-video.mp4 -f null -
+          ffmpeg -v error -xerror -i /tmp/generated-smoke-brb.mp4 -f null -
           ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of json /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-video.json
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-audio.pcm
@@ -222,6 +223,7 @@ jobs:
           python3 tests/generator-smoke.py
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke.mp4
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke-video.mp4
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke-brb.mp4
           docker exec -i restreamer-arm64-smoke ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames -of json -i pipe:0 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-video.json
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm

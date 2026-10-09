@@ -79,6 +79,9 @@ if '--verify-restart' in sys.argv:
     assert video['theme_snapshot']['style']['effect'] == 'pixel-trail', video
     assert video['theme_snapshot']['style']['logo'] == saved['logo_asset'], video
     assert video['design_snapshot']['scenes'][0]['transition'] == {'kind': 'crossfade', 'duration_seconds': .2}, video
+    brb = request('/api/dashboard')['brb_assets']
+    assert brb['generation'] == saved['brb_generation'] and brb['theme'] == saved['brb_theme'], brb
+    assert request('/api/brb/theme/candidate') is None
     print('Generated revision and captured inputs survived restart')
     sys.exit(0)
 
@@ -136,6 +139,19 @@ assert math.isclose(video_job['duration'], video_expected_frames / video_job['pr
 video_output = output.with_name(output.stem + '-video.mp4')
 video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview', raw=True))
 
+# BRB preparation retains the current media until explicit activation, and pins
+# the same immutable theme revision even after the shared theme was edited.
+brb_before = request('/api/dashboard')['brb_assets']
+brb_candidate = request('/api/brb/theme/prepare', 'POST', {'theme': theme_ref, 'base_generation': brb_before['generation']})
+assert request('/api/dashboard')['brb_assets'] == brb_before
+assert brb_candidate['settings']['theme'] == video_job['theme_snapshot'], brb_candidate
+brb_output = output.with_name(output.stem + '-brb.mp4')
+brb_output.write_bytes(request('/api/brb/theme/candidate/preview?id=' + brb_candidate['id'], raw=True))
+request('/api/brb/theme/activate', 'POST', {'id': brb_candidate['id'], 'base_generation': brb_before['generation']})
+brb_current = request('/api/dashboard')['brb_assets']
+assert brb_current['generation'] == brb_candidate['id'], brb_current
+assert request('/api/brb/theme/candidate') is None
+
 status = request('/status')
 assert status['stage']['stage'] == 'OFF' and not status['forwarding'], status
 request('/api/stage-media', 'PUT', {'prestream': revision, 'ending': revision, 'shortcuts': []})
@@ -147,6 +163,7 @@ wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
 result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_expected_frames': video_expected_frames, 'video_preview': str(video_output)}
+result.update(brb_generation=brb_current['generation'], brb_theme=brb_current['theme'])
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))
 print(json.dumps(result))
