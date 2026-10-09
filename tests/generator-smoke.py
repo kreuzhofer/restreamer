@@ -44,6 +44,14 @@ def stage_command(action, **options):
     assert result['state'] in ('completed', 'pending'), result
     return result
 
+if '--verify-video' in sys.argv:
+    saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
+    probe = json.loads(Path(sys.argv[sys.argv.index('--verify-video') + 1]).read_text())
+    assert len(probe['streams']) == 1, probe
+    assert int(probe['streams'][0]['nb_read_frames']) == saved['video_expected_frames'], (probe, saved['video_expected_frames'])
+    print('Decoded crossfade frame count:', saved['video_expected_frames'])
+    sys.exit(0)
+
 if '--verify-audio' in sys.argv:
     saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
     samples = array.array('h', Path(sys.argv[sys.argv.index('--verify-audio') + 1]).read_bytes())
@@ -70,6 +78,7 @@ if '--verify-restart' in sys.argv:
     assert video['design_snapshot']['theme'] == saved['theme'], video
     assert video['theme_snapshot']['style']['effect'] == 'pixel-trail', video
     assert video['theme_snapshot']['style']['logo'] == saved['logo_asset'], video
+    assert video['design_snapshot']['scenes'][0]['transition'] == {'kind': 'crossfade', 'duration_seconds': .2}, video
     print('Generated revision and captured inputs survived restart')
     sys.exit(0)
 
@@ -108,6 +117,8 @@ theme = request('/api/generator/themes/' + theme['id'], 'PUT', theme)
 theme_ref = {'id': theme['id'], 'revision': theme['revision']}
 video_draft = request('/api/generator/designs', 'POST', {'name': 'Video trim and repeat smoke', 'stage': 'prestream', 'theme': theme_ref})
 video_draft['scenes'][0].update(layout='media', media_kind='video', duration_seconds=1.2, content_region={'width_percent': 60, 'height_percent': 60}, video=dict(asset=asset_ref, trim_start_seconds=.2, trim_end_seconds=.8, repeat=True, audio_enabled=True, audio_volume_percent=50))
+video_draft['scenes'][0]['transition'] = {'kind': 'crossfade', 'duration_seconds': .2}
+video_draft['scenes'].append(dict(id='smoke-next', layout='title', text='Next scene', duration_seconds=.6))
 video_draft['soundtrack'] = dict(asset=music_ref, mode='repeat', volume_percent=30, fade_in_seconds=.1, fade_out_seconds=.1)
 video_draft = request('/api/generator/designs/' + video_draft['id'], 'PUT', video_draft)
 video_job = request('/api/generator/jobs', 'POST', {'design_id': video_draft['id'], 'version': video_draft['version']})
@@ -120,6 +131,8 @@ assert video_job['state'] == 'ready', video_job
 assert 0 < video_job['mix_gain'] <= 1, video_job
 assert video_job['theme_snapshot']['style']['effect'] == 'pixel-trail', video_job
 assert video_job['theme_snapshot']['style']['logo'] == logo_ref, video_job
+video_expected_frames = round(1.6 * video_job['profile']['fps'])
+assert math.isclose(video_job['duration'], video_expected_frames / video_job['profile']['fps'], abs_tol=1e-9), video_job
 video_output = output.with_name(output.stem + '-video.mp4')
 video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview', raw=True))
 
@@ -133,7 +146,7 @@ stage_command('end_stream', revision=revision)
 wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
-result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_preview': str(video_output)}
+result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_expected_frames': video_expected_frames, 'video_preview': str(video_output)}
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))
 print(json.dumps(result))
