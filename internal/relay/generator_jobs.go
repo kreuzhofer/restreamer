@@ -236,6 +236,10 @@ func newGenerationJob(d mediaauthor.Design, p config.BRBProfile, themes ...media
 	if _, err := rand.Read(id[:]); err != nil {
 		return GenerationJob{}, err
 	}
+	if d.Stage == "ending" && d.EndingFadeSeconds == nil {
+		seconds := 1.0
+		d.EndingFadeSeconds = &seconds
+	}
 	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: generatorRenderer, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	theme := mediaauthor.RetroTheme(1)
 	if len(themes) > 0 {

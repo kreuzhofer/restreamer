@@ -29,6 +29,7 @@
   let assetsFetching = false;
   let assetUploading = false;
   const fields = {
+    ending_fade_seconds: ['ending-fade', 'ending-fade-error'],
     'soundtrack.asset': ['soundtrack-asset', 'soundtrack-asset-error'],
     'soundtrack.mode': ['soundtrack-mode', 'soundtrack-mode-error'],
     'soundtrack.volume_percent': ['soundtrack-volume', 'soundtrack-volume-error'],
@@ -102,6 +103,8 @@
     $('loop-duration').value = draft.loop_transition?.duration_seconds || 0.5;
     $('loop-duration-controls').hidden = $('loop-transition').value !== 'crossfade';
     renderScenes(); renderSelectedScene(); renderMusicPicker(); renderDesignTheme();
+    $('ending-finish').hidden = draft.stage !== 'ending';
+    $('ending-fade').value = draft.ending_fade_seconds ?? 1;
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
     $('design-editor').hidden = false; $('generator-empty').hidden = true;
     notify(''); saveState(`Saved · version ${draft.version}`);
@@ -177,6 +180,7 @@
       draft.loop_transition = $('loop-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('loop-duration').value)} : {kind: 'cut'};
       $('loop-duration-controls').hidden = $('loop-transition').value !== 'crossfade';
     }
+    if (draft.stage === 'ending') draft.ending_fade_seconds = Number($('ending-fade').value);
     const musicValue = $('soundtrack-asset').value;
     if (musicValue) {
       const [id, revision] = musicValue.split(':');
@@ -245,6 +249,10 @@
       validationIssues = result.issues;
       renderScenes();
       $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.stage === 'prestream' ? 'per complete cycle' : 'total'} after transition overlaps at ${result.profile.fps} fps`;
+      if (draft.stage === 'ending') {
+        const fade = Math.round((draft.ending_fade_seconds ?? 1) * result.profile.fps) / result.profile.fps;
+        $('ending-fade-effective').textContent = fade === 0 ? 'Final fade disabled: the final image and audio are preserved.' : `Final ${fade.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds fade to black and silence after rounding to video frames, within the total above.`;
+      }
       for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
       for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
       $('scene-issues').replaceChildren();

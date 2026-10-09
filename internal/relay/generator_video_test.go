@@ -135,7 +135,7 @@ func generatorSplitVideo(t *testing.T) []byte {
 }
 func videoDesign(t *testing.T, s *Server, id string, seconds, start, end, volume float64, repeat, audio bool) mediaauthor.Design {
 	t.Helper()
-	body := fmt.Sprintf(`{"name":"Video boundaries","stage":"ending","theme":{"id":"retro","revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","text":"","duration_seconds":%g,"video":{"asset":{"id":%q,"revision":1},"trim_start_seconds":%g,"trim_end_seconds":%g,"repeat":%t,"audio_enabled":%t,"audio_volume_percent":%g}}]}`, seconds, id, start, end, repeat, audio, volume)
+	body := fmt.Sprintf(`{"name":"Video boundaries","stage":"ending","ending_fade_seconds":0,"theme":{"id":"retro","revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","text":"","duration_seconds":%g,"video":{"asset":{"id":%q,"revision":1},"trim_start_seconds":%g,"trim_end_seconds":%g,"repeat":%t,"audio_enabled":%t,"audio_volume_percent":%g}}]}`, seconds, id, start, end, repeat, audio, volume)
 	w := dashboardRequest(s, "POST", "/api/generator/designs", body)
 	if w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())

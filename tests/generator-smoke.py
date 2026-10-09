@@ -52,6 +52,20 @@ if '--verify-video' in sys.argv:
     print('Decoded crossfade frame count:', saved['video_expected_frames'])
     sys.exit(0)
 
+if '--verify-ending' in sys.argv:
+    saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
+    prefix = Path(sys.argv[sys.argv.index('--verify-ending') + 1])
+    frames = prefix.with_suffix('.rgb').read_bytes()
+    assert len(frames) == saved['ending_frames'] * 16 * 16 * 3, len(frames)
+    assert max(frames[-16 * 16 * 3:]) == 0, 'Ending must finish on a black frame'
+    samples = array.array('h', prefix.with_suffix('.pcm').read_bytes())
+    end = round(saved['ending_duration'] * saved['sample_rate'])
+    tail = samples[end - saved['sample_rate'] // 100:end]
+    assert len(tail) == saved['sample_rate'] // 100, 'Ending audio is too short'
+    assert max(abs(value) for value in tail) <= 4, 'Presented ending tail must be silent'
+    print('Ending frame count, final black frame, and presented audio silence passed')
+    sys.exit(0)
+
 if '--verify-audio' in sys.argv:
     saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
     samples = array.array('h', Path(sys.argv[sys.argv.index('--verify-audio') + 1]).read_bytes())
@@ -79,6 +93,10 @@ if '--verify-restart' in sys.argv:
     assert video['theme_snapshot']['style']['effect'] == 'pixel-trail', video
     assert video['theme_snapshot']['style']['logo'] == saved['logo_asset'], video
     assert video['design_snapshot']['scenes'][0]['transition'] == {'kind': 'crossfade', 'duration_seconds': .2}, video
+    assert video['design_snapshot']['loop_transition'] == {'kind': 'crossfade', 'duration_seconds': .2}, video
+    ending = request('/api/generator/jobs/' + saved['ending_job'])
+    assert ending['state'] == 'ready' and ending['media_revision'] == saved['ending_revision'], ending
+    assert ending['duration'] == saved['ending_duration'], ending
     brb = request('/api/dashboard')['brb_assets']
     assert brb['generation'] == saved['brb_generation'] and brb['theme'] == saved['brb_theme'], brb
     assert request('/api/brb/theme/candidate') is None
@@ -123,6 +141,7 @@ video_draft['scenes'][0].update(layout='media', media_kind='video', duration_sec
 video_draft['scenes'][0]['transition'] = {'kind': 'crossfade', 'duration_seconds': .2}
 video_draft['scenes'].append(dict(id='smoke-next', layout='title', text='Next scene', duration_seconds=.6))
 video_draft['soundtrack'] = dict(asset=music_ref, mode='repeat', volume_percent=30, fade_in_seconds=.1, fade_out_seconds=.1)
+video_draft['loop_transition'] = {'kind': 'crossfade', 'duration_seconds': .2}
 video_draft = request('/api/generator/designs/' + video_draft['id'], 'PUT', video_draft)
 video_job = request('/api/generator/jobs', 'POST', {'design_id': video_draft['id'], 'version': video_draft['version']})
 # A shared theme edit must not change the captured rendering or retained logo.
@@ -134,10 +153,20 @@ assert video_job['state'] == 'ready', video_job
 assert 0 < video_job['mix_gain'] <= 1, video_job
 assert video_job['theme_snapshot']['style']['effect'] == 'pixel-trail', video_job
 assert video_job['theme_snapshot']['style']['logo'] == logo_ref, video_job
-video_expected_frames = round(1.6 * video_job['profile']['fps'])
-assert math.isclose(video_job['duration'], video_expected_frames / video_job['profile']['fps'], abs_tol=1e-9), video_job
+video_expected_frames = 2 * round(1.4 * video_job['profile']['fps'])
+assert math.isclose(video_job['duration'], video_expected_frames / 2 / video_job['profile']['fps'], abs_tol=1e-9), video_job
 video_output = output.with_name(output.stem + '-video.mp4')
-video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview', raw=True))
+video_output.write_bytes(request('/api/library/revisions/' + video_job['media_revision'] + '/preview?passes=2', raw=True))
+
+# An ending uses the same captured scenes/music, with its default finite fade.
+ending_draft = request('/api/generator/designs', 'POST', {'name': 'Finite ending smoke', 'stage': 'ending', 'theme': theme_ref})
+ending_draft.update(scenes=video_draft['scenes'], soundtrack=video_draft['soundtrack'])
+ending_draft = request('/api/generator/designs/' + ending_draft['id'], 'PUT', ending_draft)
+ending_job = request('/api/generator/jobs', 'POST', {'design_id': ending_draft['id'], 'version': ending_draft['version']})
+ending_job = wait_for('/api/generator/jobs/' + ending_job['id'], lambda item: item['state'] in ('ready', 'failed', 'cancelled', 'interrupted'))
+assert ending_job['state'] == 'ready' and math.isclose(ending_job['duration'], 1.6, abs_tol=1e-9), ending_job
+ending_output = output.with_name(output.stem + '-ending.mp4')
+ending_output.write_bytes(request('/api/library/revisions/' + ending_job['media_revision'] + '/preview', raw=True))
 
 # BRB preparation retains the current media until explicit activation, and pins
 # the same immutable theme revision even after the shared theme was edited.
@@ -154,16 +183,17 @@ assert request('/api/brb/theme/candidate') is None
 
 status = request('/status')
 assert status['stage']['stage'] == 'OFF' and not status['forwarding'], status
-request('/api/stage-media', 'PUT', {'prestream': revision, 'ending': revision, 'shortcuts': []})
+request('/api/stage-media', 'PUT', {'prestream': revision, 'ending': ending_job['media_revision'], 'shortcuts': []})
 stage_command('prestream', mode='preview_only', revision=revision)
 state = request('/api/stage')
 assert state['stage'] == 'PRESTREAM' and state['mode'] == 'preview_only' and state['media']['revision'] == revision, state
-stage_command('end_stream', revision=revision)
+stage_command('end_stream', revision=ending_job['media_revision'])
 wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
 result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_expected_frames': video_expected_frames, 'video_preview': str(video_output)}
 result.update(brb_generation=brb_current['generation'], brb_theme=brb_current['theme'])
+result.update(ending_job=ending_job['id'], ending_revision=ending_job['media_revision'], ending_duration=ending_job['duration'], ending_frames=round(ending_job['duration'] * ending_job['profile']['fps']))
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))
 print(json.dumps(result))

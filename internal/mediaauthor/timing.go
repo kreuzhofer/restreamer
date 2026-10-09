@@ -102,7 +102,11 @@ func SequenceDuration(d Design, fps int) float64 {
 	p, _ := PlanTiming(d, fps)
 	return float64(max(0, p.Frames)) / float64(fps)
 }
-func ValidateTiming(d Design, fps int) []Issue { _, issues := PlanTiming(d, fps); return issues }
+func ValidateTiming(d Design, fps int) []Issue {
+	plan, issues := PlanTiming(d, fps)
+	_, finishIssues := EndingFadeFrames(d, fps, plan.Frames)
+	return append(issues, finishIssues...)
+}
 
 // CompositionDuration is the complete scene/music timeline before circular overlap.
 func CompositionDuration(d Design, fps int) float64 {
@@ -111,4 +115,5 @@ func CompositionDuration(d Design, fps int) float64 {
 	}
 	p, _ := PlanTiming(d, fps)
 	return float64(max(0, p.CompositionFrames)) / float64(fps)
+
 }

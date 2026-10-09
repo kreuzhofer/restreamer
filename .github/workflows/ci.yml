@@ -111,6 +111,9 @@ jobs:
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           ffmpeg -v error -i /tmp/generated-smoke-video.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-audio.pcm
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
+          ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf scale=16:16 -vsync 0 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
+          ffmpeg -v error -i /tmp/generated-smoke-ending.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-ending.pcm
+          python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
           # No platform connection is possible: delivery stays blocked and the
           # dummy destination URLs also point only to the container's localhost.
@@ -228,6 +231,9 @@ jobs:
           python3 tests/generator-smoke.py --verify-video /tmp/generated-smoke-video.json
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-video.mp4 > /tmp/generated-smoke-audio.pcm
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -vf scale=16:16 -vsync 0 -pix_fmt rgb24 -f rawvideo pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.rgb
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.pcm
+          python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           docker rm -f restreamer-arm64-smoke
           start_container
           python3 tests/generator-smoke.py --verify-restart
