@@ -29,6 +29,8 @@ const maxAssetImageBytes = 32 << 20
 const maxAssetRevisions = 200
 
 type AssetRevision struct {
+	Samples         int64   `json:"samples,omitempty"`
+	SampleRate      int     `json:"sample_rate,omitempty"`
 	Revision        int     `json:"revision"`
 	Digest          string  `json:"sha256"`
 	Bytes           int64   `json:"bytes"`
@@ -65,6 +67,8 @@ func assetRevisionPath(root string, ref mediaauthor.AssetRef, kind string) strin
 	extension := ".png"
 	if kind == "video" {
 		extension = ".mp4"
+	} else if kind == "audio" {
+		extension = ".wav"
 	}
 	return filepath.Join(root, ref.ID, strconv.Itoa(ref.Revision)+extension)
 }
@@ -96,11 +100,11 @@ func (g *generatorStore) loadAssets() error {
 			return errors.New("invalid asset storage entry")
 		}
 		var a GeneratorAsset
-		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || (a.Kind != "image" && a.Kind != "video") || a.Revision != len(a.Revisions) || a.Revision < 1 {
+		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || (a.Kind != "image" && a.Kind != "video" && a.Kind != "audio") || a.Revision != len(a.Revisions) || a.Revision < 1 {
 			return errors.New("invalid asset metadata")
 		}
 		for i, r := range a.Revisions {
-			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || (a.Kind == "image" && (r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels)) || (a.Kind == "video" && !validVideoMetadata(r)) {
+			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || (a.Kind == "image" && (r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels)) || (a.Kind == "video" && !validVideoMetadata(r)) || (a.Kind == "audio" && !validMusicMetadata(r)) {
 				return errors.New("invalid asset revision metadata")
 			}
 		}
@@ -123,6 +127,14 @@ func (g *generatorStore) assetRevision(ref mediaauthor.AssetRef) (AssetRevision,
 // assetIssues is called with g.mu held, including across draft/job publication.
 func (g *generatorStore) assetIssues(d mediaauthor.Design) []mediaauthor.Issue {
 	out := make([]mediaauthor.Issue, 0)
+	if d.Soundtrack != nil {
+		ref := d.Soundtrack.Asset
+		r, ok := g.assetRevision(ref)
+		info, err := os.Lstat(g.assetPath(ref))
+		if !ok || g.assets[ref.ID].Kind != "audio" || err != nil || !info.Mode().IsRegular() || info.Size() != r.Bytes {
+			out = append(out, mediaauthor.Issue{Field: "soundtrack.asset", Message: "The selected music revision is unavailable. Choose an available audio revision explicitly."})
+		}
+	}
 	for i, scene := range d.Scenes {
 		refs := map[string]*mediaauthor.AssetRef{"image": scene.Image}
 		if scene.Video != nil {

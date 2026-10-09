@@ -61,14 +61,30 @@ type Scene struct {
 	FontSize float64 `json:"font_size,omitempty"`
 }
 
+type Soundtrack struct {
+	Asset          AssetRef `json:"asset"`
+	Mode           string   `json:"mode"`
+	VolumePercent  *float64 `json:"volume_percent,omitempty"`
+	FadeInSeconds  float64  `json:"fade_in_seconds,omitempty"`
+	FadeOutSeconds float64  `json:"fade_out_seconds,omitempty"`
+}
+
+func (m Soundtrack) Volume() float64 {
+	if m.VolumePercent == nil {
+		return 100
+	}
+	return *m.VolumePercent
+}
+
 type Design struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Stage     string   `json:"stage"`
-	Version   int      `json:"version"`
-	Theme     ThemeRef `json:"theme"`
-	Scenes    []Scene  `json:"scenes"`
-	UpdatedAt string   `json:"updated_at"`
+	Soundtrack *Soundtrack `json:"soundtrack,omitempty"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Stage      string      `json:"stage"`
+	Version    int         `json:"version"`
+	Theme      ThemeRef    `json:"theme"`
+	Scenes     []Scene     `json:"scenes"`
+	UpdatedAt  string      `json:"updated_at"`
 }
 
 type Issue struct {
@@ -108,6 +124,10 @@ func ValidateCutTiming(d Design, fps int) []Issue {
 func DesignAssetRefs(d Design) []AssetRef {
 	refs := make([]AssetRef, 0)
 	seen := make(map[AssetRef]bool)
+	if d.Soundtrack != nil {
+		refs = append(refs, d.Soundtrack.Asset)
+		seen[d.Soundtrack.Asset] = true
+	}
 	for _, scene := range d.Scenes {
 		if scene.Video != nil && !seen[scene.Video.Asset] {
 			refs = append(refs, scene.Video.Asset)

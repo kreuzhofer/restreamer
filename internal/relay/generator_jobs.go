@@ -28,6 +28,7 @@ const generatorTimeout = 15 * time.Minute
 // GenerationJob captures immutable inputs. Only state, progress, error and the
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
+	MixGain        *float64           `json:"mix_gain,omitempty"`
 	ID             string             `json:"id"`
 	Sequence       uint64             `json:"sequence"`
 	QueuePosition  int                `json:"queue_position,omitempty"`
@@ -183,7 +184,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			g.jobsMu.Lock()
 			job.Message = "Rendering captured revision."
 			g.jobsMu.Unlock()
-			revision, err = s.renderGenerator(jobCtx, snapshot, func(percent int) {
+			revision, err = s.renderGenerator(jobCtx, &snapshot, func(percent int) {
 				g.jobsMu.Lock()
 				defer g.jobsMu.Unlock()
 				if job.State == "running" {
@@ -193,6 +194,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			release()
 		}
 		g.jobsMu.Lock()
+		job.MixGain = snapshot.MixGain
 		switch {
 		case job.State == "cancelling":
 			job.State = "cancelled"

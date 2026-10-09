@@ -17,7 +17,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
-func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress func(int)) (string, error) {
+func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress func(int)) (string, error) {
 	dir := filepath.Join(s.generator.workRoot, j.ID)
 	if os.Mkdir(dir, 0700) != nil {
 		return "", errors.New("Cannot create render workspace; check storage.")
@@ -83,6 +83,13 @@ func (s *Server) renderGenerator(ctx context.Context, j GenerationJob, progress 
 	}
 	if err := pcm.Close(); err != nil {
 		return "", errors.New("Cannot save continuous scene audio.")
+	}
+	if j.Design.Soundtrack != nil {
+		gain, err := s.mixGeneratorMusic(ctx, *j, pcmPath, dir, maxGeneratorOutputBytes-segmentBytes)
+		if err != nil {
+			return "", err
+		}
+		j.MixGain = &gain
 	}
 	os.Remove(filepath.Join(dir, "scene.png"))
 	manifest := filepath.Join(dir, "sequence.txt")

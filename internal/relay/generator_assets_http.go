@@ -54,8 +54,8 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 	if kind == "" {
 		kind = "image"
 	}
-	if kind != "image" && kind != "video" {
-		http.Error(w, "Choose image or video asset kind", 400)
+	if kind != "image" && kind != "video" && kind != "audio" {
+		http.Error(w, "Choose image, video or audio asset kind", 400)
 		return
 	}
 	limit := int64(maxAssetUploadBytes)
@@ -65,6 +65,11 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 		limit = maxVideoAssetBytes
 		deadline = 15 * time.Minute
 		extension = ".mp4"
+	}
+	if kind == "audio" {
+		limit = maxMusicUploadBytes
+		deadline = 5 * time.Minute
+		extension = ".wav"
 	}
 	typ, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if !controlOriginAllowed(r) || typ != "multipart/form-data" {
@@ -118,6 +123,8 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 	var meta AssetRevision
 	if kind == "video" {
 		meta, err = stageGeneratorVideo(uploadCtx, part, normalized)
+	} else if kind == "audio" {
+		meta, err = stageGeneratorMusic(uploadCtx, part, normalized)
 	} else {
 		meta, err = normalizeGeneratorImage(part, normalized)
 	}
@@ -274,6 +281,16 @@ func (s *Server) generatorAssetImage(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "video/mp4")
 		http.ServeContent(w, r, "video.mp4", time.Time{}, f)
+		return
+	}
+	if kind == "audio" {
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Minute))
+		if err := verifyMusicRevision(f, meta); err != nil {
+			http.Error(w, err.Error(), 409)
+			return
+		}
+		w.Header().Set("Content-Type", "audio/wav")
+		http.ServeContent(w, r, "music.wav", time.Time{}, f)
 		return
 	}
 	data, err := readImageRevision(f, meta)
