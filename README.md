@@ -722,3 +722,33 @@ Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin)
 - `GET /api/broadcast-preview`: streaming fragmented MP4, using the same bounded
   viewer limit as the input preview. `/status` and `/api/dashboard` include
   `library_enabled` and `playback` state, source, position and preview timeline.
+
+### Media generator drafts
+
+Open **Media generator** from the dashboard to create independent prestream or
+ending show designs. The first editor supports a multiline title scene, defaults
+to 10 seconds, and selects the built-in Retro theme revision independently of its
+text and timing. Drafts autosave beneath `<library_directory>/generator/designs`
+(or the default BRB library directory). Wait for **Saved** before closing the tab.
+A failed save retains local edits and offers Retry; a concurrent-tab conflict
+requires Reload saved draft or Save local work as a copy. Neither draft saves nor
+quick previews change broadcast media.
+
+Quick previews use embedded Go Sans and Go Mono scalable fonts, with no system
+fonts or new runtime executables. The same Go raster renderer and glyph metrics
+are available to prepared-media generation. Font size is specified at 1080p and
+scales with the active streaming profile. Latin text including European accents,
+Greek and Cyrillic are supported; missing glyphs (including unsupported emoji)
+and text overflow produce field errors. Text wraps at spaces and explicit line
+breaks, preserves mixed case, and is never automatically shrunk or truncated.
+Clear the font-size field to inherit the theme's 64-point default.
+
+Draft input is limited to 64 KiB per request, 4096 UTF-8 bytes per title, 180 bytes
+per design name, and 200 saved designs. This first slice accepts one title scene.
+Durations must be finite, greater than zero, and at most 3600 seconds; font sizes
+range from 24 to 120 at 1080p. These are bounded authoring limits, not rendering
+performance promises. Drafts retain invalid durations/unsupported glyphs for
+correction; preview validation uses the current streaming profile (up to 4K).
+Only one quick preview or validation runs at a time per server. Preview requires
+the existing dashboard authentication and same-origin control header, and uses
+untrusted text strictly as raster data.

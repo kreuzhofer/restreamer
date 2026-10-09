@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
+ <title>Restreamer · Media generator</title>
+ <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/generator.css">
+ <script src="/generator.js" defer></script>
+</head>
+<body><main>
+ <header class="topbar"><a class="brand" href="/">↗ restreamer</a><a class="generator-back" href="/">Back to live control</a></header>
+ <section class="intro"><div><p class="eyebrow">AUTHOR MEDIA</p><h1>Design your show.</h1><p class="subtitle">Independent drafts for prestream and ending. Saving a design does not change what is on air.</p></div></section>
+ <p id="generator-notice" class="notice" role="alert" hidden></p>
+ <div class="generator-grid">
+ <aside class="panel generator-sidebar" aria-labelledby="designs-heading"><h2 id="designs-heading">Show designs</h2>
+  <form id="new-design"><label>New design name<input id="new-name" maxlength="180" value="Untitled show" required></label><label>Generator<select id="new-stage"><option value="prestream">Prestream</option><option value="ending">Ending</option></select></label><button class="preview-button" type="submit">Create blank design</button></form>
+  <nav id="design-list" aria-label="Saved show designs"></nav>
+ </aside>
+ <section id="design-editor" class="panel generator-editor" aria-labelledby="editor-heading" hidden>
+  <div class="panel-heading"><div><p class="eyebrow" id="design-stage">DRAFT</p><h2 id="editor-heading">Title scene</h2></div><span id="save-state" role="status" aria-live="polite">Saved</span></div>
+  <p id="save-error" class="notice" role="alert" hidden></p>
+  <div id="save-actions" class="generator-actions" hidden><button id="save-retry" class="preview-button" type="button">Retry save</button><button id="save-reload" class="preview-button" type="button">Reload saved draft</button><button id="save-copy" class="preview-button" type="button">Save local work as a copy</button></div>
+  <form id="scene-form" novalidate>
+   <label>Show design name<input id="design-name" maxlength="180" aria-describedby="name-error"></label><small id="name-error" class="field-error"></small>
+   <p class="generator-theme">Style theme: <strong>Retro · revision 1</strong><span>Appearance is separate from scene content and timing.</span></p>
+   <label>Title text<textarea id="scene-text" rows="5" maxlength="4096" aria-describedby="text-help text-error" placeholder="Welcome to the show"></textarea></label>
+   <small id="text-help">Mixed case and line breaks are preserved. Go fonts support Latin (including accented European text), Greek and Cyrillic. Unsupported characters and overflow are shown below. Up to 4096 UTF-8 bytes.</small><small id="text-error" class="field-error"></small>
+   <div class="generator-fields"><div><label>Font<select id="scene-font" aria-describedby="font-error"><option value="">Theme default · Go Sans</option><option value="go-sans">Go Sans</option><option value="go-mono">Go Mono</option></select></label><small id="font-error" class="field-error"></small></div><div><label>Font size at 1080p<input id="scene-size" type="number" min="24" max="120" step="1" placeholder="Theme default · 64" aria-describedby="size-error"></label><small id="size-error" class="field-error"></small></div><div><label>Duration (seconds)<input id="scene-duration" type="number" min="0.001" max="3600" step="any" value="10" aria-describedby="duration-error"></label><small id="duration-error" class="field-error"></small></div></div>
+  </form>
+  <div class="generator-preview-heading"><h3>Quick scene preview</h3><span id="preview-profile"></span></div><canvas id="scene-preview" width="1280" height="720" role="img" aria-label="Quick title scene preview" hidden></canvas>
+  <p id="preview-state" class="stage-help" role="status">Enter your title to preview the scene.</p>
+  <p class="stage-help">Editable draft only. This preview does not generate, select or activate broadcast media.</p>
+ </section>
+ <section id="generator-empty" class="panel generator-empty"><h2>Start with a blank title</h2><p>Create a design or reopen a saved draft. Text scenes start at 10 seconds.</p></section>
+ </div>
+ </main></body></html>

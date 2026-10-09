@@ -28,6 +28,10 @@ func (s *Server) initialize() error {
 			s.initErr = err
 			return
 		}
+		if err := s.initializeGenerator(); err != nil {
+			s.initErr = err
+			return
+		}
 		if s.cfg.StateFile == "" {
 			return
 		}

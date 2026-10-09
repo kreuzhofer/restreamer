@@ -19,6 +19,7 @@ import (
 
 type Server struct {
 	library      *videoLibrary
+	generator    *generatorStore
 	cfg          config.Config
 	log          *slog.Logger
 	active       atomic.Bool
