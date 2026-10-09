@@ -3,7 +3,6 @@ package mediaauthor
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
 	"math"
 	"strings"
@@ -30,6 +29,10 @@ func mustFont(data []byte) *opentype.Font {
 
 // Validate uses exactly the glyph metrics and content regions used by RenderScene.
 func Validate(d Design, width, height int) []Issue {
+	return ValidateWithTheme(d, RetroTheme(1), width, height)
+}
+
+func ValidateWithTheme(d Design, theme Theme, width, height int) []Issue {
 	issues := make([]Issue, 0)
 	if strings.TrimSpace(d.Name) == "" {
 		issues = append(issues, Issue{"name", "Name this show design."})
@@ -37,8 +40,8 @@ func Validate(d Design, width, height int) []Issue {
 	if d.Stage != "prestream" && d.Stage != "ending" {
 		issues = append(issues, Issue{"stage", "Choose prestream or ending."})
 	}
-	if d.Theme.ID != "retro" || d.Theme.Revision != 1 {
-		issues = append(issues, Issue{"theme", "Choose the built-in retro theme, revision 1."})
+	if d.Theme.ID != theme.ID || d.Theme.Revision != theme.Revision {
+		issues = append(issues, Issue{"theme", "Choose an available exact theme revision."})
 	}
 	if len(d.Scenes) == 0 || len(d.Scenes) > MaxScenes {
 		issues = append(issues, Issue{"scenes", "Use between 1 and 20 scenes."})
@@ -53,7 +56,7 @@ func Validate(d Design, width, height int) []Issue {
 		if math.IsNaN(scene.DurationSeconds) || math.IsInf(scene.DurationSeconds, 0) || scene.DurationSeconds <= 0 || scene.DurationSeconds > 3600 {
 			issues = append(issues, Issue{prefix + "duration_seconds", "Use a finite duration greater than zero and at most 3600 seconds."})
 		}
-		layout, field, message := layoutScene(scene, width, height)
+		layout, field, message := layoutSceneStyled(scene, width, height, theme.Style)
 		if layout.face != nil {
 			layout.face.Close()
 		}
@@ -78,7 +81,12 @@ type sceneLayout struct {
 	alignment   string
 }
 
-func layoutScene(scene Scene, width, height int) (result sceneLayout, field, message string) {
+func layoutScene(scene Scene, width, height int) (sceneLayout, string, string) {
+	return layoutSceneStyled(scene, width, height, RetroTheme(1).Style)
+}
+
+func layoutSceneStyled(scene Scene, width, height int, style Style) (result sceneLayout, field, message string) {
+	scene = resolveSceneStyle(scene, style)
 	fail := func(field, message string) (sceneLayout, string, string) { return result, field, message }
 	if width < 320 || height < 180 || width > 3840 || height > 2160 {
 		return fail("text", "Unsupported streaming profile.")
@@ -104,7 +112,7 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 		rh = 80
 	}
 	if math.IsNaN(rw) || math.IsInf(rw, 0) || math.IsNaN(rh) || math.IsInf(rh, 0) || rw < 30 || rw > 90 || rh < 30 || rh > 90 {
-		return fail("content_region", "Content width and height must be between 30% and 90% (blank inherits 80%).")
+		return fail("content_region", "Content width and height must be between 30% and 90% (blank inherits the theme).")
 	}
 	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
 	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2, (width+regionWidth)/2, (height+regionHeight)/2)
@@ -122,6 +130,9 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 		result.imageRegion = image.Rect(result.region.Max.X-regionWidth*47/100, result.region.Min.Y, result.region.Max.X, result.region.Max.Y)
 		regionWidth = regionWidth * 47 / 100
 		result.region.Max.X = result.region.Min.X + regionWidth
+	}
+	if style.Logo != nil && scene.Layout != "media" && result.region.Overlaps(logoRegion(width, height, style)) {
+		return fail("content_region", "The content region overlaps the selected logo band. Reduce its height or choose a smaller logo.")
 	}
 	f := sansFont
 	switch scene.Font {
@@ -144,7 +155,7 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 	}
 	result.face = face
 	metrics := face.Metrics()
-	lineHeight := metrics.Height * 6 / 5
+	lineHeight := fixed.Int26_6(float64(metrics.Height) * style.LineSpacingPercent / 100)
 	nextY := fixed.Int26_6(0)
 	appendText := func(text, field string, indent fixed.Int26_6, bullet bool) (string, string) {
 		for _, r := range text {
@@ -207,7 +218,7 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 				return fail(field, message)
 			}
 			if i < len(scene.Items)-1 {
-				nextY += lineHeight / 4
+				nextY += fixed.Int26_6(float64(lineHeight) * style.ListSpacingPercent / 100)
 			}
 		}
 	}
@@ -226,21 +237,19 @@ func RenderScene(scene Scene, width, height int) (*image.RGBA, error) {
 // RenderSceneWithImage composes decoded image data, keeping filesystem access
 // outside the authoring model. Both preview and generation use this raster.
 func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*image.RGBA, error) {
-	layout, _, message := layoutScene(scene, width, height)
+	return RenderSceneStyled(scene, width, height, RetroTheme(1).Style, RenderInputs{Image: asset}, 0, 25)
+}
+
+func RenderSceneStyled(scene Scene, width, height int, style Style, inputs RenderInputs, frame, fps int) (*image.RGBA, error) {
+	layout, _, message := layoutSceneStyled(scene, width, height, style)
 	if layout.face != nil {
 		defer layout.face.Close()
 	}
 	if message != "" {
 		return nil, fmt.Errorf("%s", message)
 	}
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{15, 18, 35, 255}), image.Point{}, draw.Src)
-	accent := image.NewUniform(color.RGBA{63, 224, 208, 255})
-	margin := height / 24
-	thickness := max(2, height/180)
-	for _, rect := range []image.Rectangle{image.Rect(margin, margin, width-margin, margin+thickness), image.Rect(margin, height-margin-thickness, width-margin, height-margin), image.Rect(margin, margin, margin+thickness, height-margin), image.Rect(width-margin-thickness, margin, width-margin, height-margin)} {
-		draw.Draw(img, rect, accent, image.Point{}, draw.Src)
-	}
+	img := ThemeBackdrop(width, height, style, inputs)
+	asset := inputs.Image
 	if !layout.imageRegion.Empty() {
 		if asset == nil || asset.Bounds().Empty() {
 			return nil, fmt.Errorf("The selected image revision is unavailable.")
@@ -253,10 +262,16 @@ func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*i
 		xdraw.ApproxBiLinear.Scale(img, target, asset, bounds, draw.Over, nil)
 	}
 	if layout.face == nil {
+		if inputs.Logo != nil {
+			foreground := ThemeForeground(width, height, style, inputs)
+			draw.Draw(img, img.Bounds(), foreground, image.Point{}, draw.Over)
+		}
+		drawEffect(img, style, frame, fps)
 		return img, nil
 	}
 	baseline := fixed.I(layout.region.Min.Y) + (fixed.I(layout.region.Dy())-layout.height)/2 + layout.face.Metrics().Ascent
-	drawer := font.Drawer{Dst: img, Src: image.NewUniform(color.RGBA{238, 232, 255, 255}), Face: layout.face}
+	textColor, _ := ParseColor(style.TextColor)
+	drawer := font.Drawer{Dst: img, Src: image.NewUniform(textColor), Face: layout.face}
 	for _, line := range layout.lines {
 		x := fixed.I(layout.region.Min.X) + line.indent
 		spare := fixed.I(layout.region.Dx()) - line.indent - font.MeasureString(layout.face, line.text)
@@ -273,5 +288,10 @@ func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*i
 		drawer.Dot = fixed.Point26_6{X: x, Y: baseline + line.y}
 		drawer.DrawString(line.text)
 	}
+	if inputs.Logo != nil {
+		foreground := ThemeForeground(width, height, style, inputs)
+		draw.Draw(img, img.Bounds(), foreground, image.Point{}, draw.Over)
+	}
+	drawEffect(img, style, frame, fps)
 	return img, nil
 }

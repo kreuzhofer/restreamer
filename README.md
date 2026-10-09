@@ -746,6 +746,33 @@ Template requests allow 65 KiB, including a 1 KiB envelope around the existing
 (create an independent design from an exact template version and selected theme).
 Built-in starters are immutable sources; their copied scenes are fully editable.
 
+### Versioned style themes
+
+The generator's **Style theme library** offers Retro revision 1 (the original
+static appearance) and Retro revision 2 (pixel corners and an animated pixel
+trail). Duplicate either into a named theme. Supported settings include Go Sans
+or Go Mono, 24–120 point type at 1080p, three palette colors, exact background
+and logo image revisions, logo corner and size, content dimensions, line/list
+spacing, borders, and a deterministic four-square decorative trail. Logo boxes
+must not overlap text regions; validation reports collisions and typography
+that no longer fits. Images keep their proportions and transparency.
+
+**Publish new revision** retains every previous revision. Designs select an
+exact theme revision separately from content templates. **Apply updated theme**
+changes only that reference: scene order, text, timing, soundtrack and supported
+scene overrides remain intact. Review layout validation and generate again to
+create new output. Editing a theme never changes another draft, a captured job,
+or selected/on-air media. Quick preview's effect time shows the same integer
+step positions used by generated video, restarting per scene.
+
+Theme revisions are stored under `<library_directory>/generator/themes`, with a
+limit of 200 custom revisions. Referenced image revisions remain protected from
+deletion and appear in asset uses. Jobs capture the full resolved theme alongside
+the pinned design and streaming profile. Theme images are verified and decoded
+sequentially, then bounded to the output dimensions (logos to 20% width and 10%
+height); animation uses one small sprite input, never a frame cache or a separate
+browser/Node runtime. Generation remains sequential with bounded scene files.
+
 ### Media generator drafts
 
 Open **Media generator** from the dashboard to create independent prestream or
@@ -765,7 +792,7 @@ scales with the active streaming profile. Latin text including European accents,
 Greek and Cyrillic are supported; missing glyphs (including unsupported emoji)
 and text overflow produce field errors. Text wraps at spaces and explicit line
 breaks, preserves mixed case, and is never automatically shrunk or truncated.
-Clear the font-size field to inherit the theme's 64-point default.
+Clear the font-size field to inherit the selected theme's default.
 
 Draft input is limited to 64 KiB per request, 4096 UTF-8 bytes of combined title
 and item text per scene, 180 bytes per design name, and 200 saved designs. A

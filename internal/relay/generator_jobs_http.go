@@ -41,11 +41,12 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.library.mu.Lock()
 	profile := s.library.profile
 	s.library.mu.Unlock()
-	if issues := append(generationIssues(draft, profile), g.assetIssues(draft)...); len(issues) > 0 {
+	theme, _ := g.resolveTheme(draft.Theme)
+	if issues := append(append(generationIssues(draft, profile, theme), g.assetIssues(draft)...), g.themeIssues(draft.Theme)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"error": "Resolve design validation before generating.", "issues": issues})
 		return
 	}
-	job, err := newGenerationJob(draft, profile)
+	job, err := newGenerationJob(draft, profile, theme)
 	if err != nil {
 		http.Error(w, "Cannot create generation identity", 503)
 		return
@@ -174,7 +175,7 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "The captured renderer is unavailable after a server update. This exact retry cannot run. Generate saved draft creates a new job and may include newer edits.", 409)
 		return
 	}
-	if issues := g.assetIssues(previous.Design); len(issues) > 0 {
+	if issues := append(g.assetIssues(previous.Design), g.themeIssues(previous.Design.Theme)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}

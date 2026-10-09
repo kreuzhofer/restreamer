@@ -64,7 +64,9 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if draft.Scenes == nil {
 			draft.Scenes = []mediaauthor.Scene{{ID: "scene-1", Layout: "title", DurationSeconds: 10}}
-			draft.Theme = mediaauthor.ThemeRef{ID: "retro", Revision: 1}
+			if draft.Theme.ID == "" && draft.Theme.Revision == 0 {
+				draft.Theme = mediaauthor.ThemeRef{ID: "retro", Revision: 1}
+			}
 		}
 		if !designBounds(draft) {
 			http.Error(w, "Design requires prestream or ending, at most 20 scenes, a name up to 180 bytes, and at most 4096 text bytes per scene", 400)
@@ -91,7 +93,7 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot create draft identity", 503)
 		return
 	}
-	if issues := g.assetIssues(draft); len(issues) > 0 {
+	if issues := append(g.assetIssues(draft), g.themeIssues(draft.Theme)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
@@ -143,7 +145,7 @@ func (s *Server) generatorDesignHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 409, map[string]any{"error": "A newer draft was saved in another tab. Reload or save your local work as a copy.", "current": current})
 		return
 	}
-	if issues := g.assetIssues(draft); len(issues) > 0 {
+	if issues := append(g.assetIssues(draft), g.themeIssues(draft.Theme)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
@@ -181,10 +183,17 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	s.library.mu.Lock()
 	profile := s.library.profile
 	s.library.mu.Unlock()
-	issues := mediaauthor.Validate(draft, profile.Width, profile.Height)
+	s.generator.mu.Lock()
+	theme, themeErr := s.generator.resolveTheme(draft.Theme)
+	s.generator.mu.Unlock()
+	issues := mediaauthor.ValidateWithTheme(draft, theme, profile.Width, profile.Height)
+	if themeErr != nil {
+		issues = append(issues, mediaauthor.Issue{Field: "theme", Message: themeErr.Error()})
+	}
 	issues = append(issues, mediaauthor.ValidateCutTiming(draft, profile.FPS)...)
 	s.generator.mu.Lock()
 	issues = append(issues, s.generator.assetIssues(draft)...)
+	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
 		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
@@ -214,7 +223,21 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": []mediaauthor.Issue{{Field: fmtSceneField(sceneIndex, "image"), Message: err.Error()}}})
 		return
 	}
-	img, err := mediaauthor.RenderSceneWithImage(draft.Scenes[sceneIndex], profile.Width, profile.Height, asset)
+	inputs, err := s.loadThemeInputs(theme, profile.Width, profile.Height)
+	if err != nil {
+		http.Error(w, err.Error(), 422)
+		return
+	}
+	inputs.Image = asset
+	frame := 0
+	if value := r.URL.Query().Get("frame"); value != "" {
+		frame, err = strconv.Atoi(value)
+		if err != nil || frame < 0 || frame > profile.FPS*600 {
+			http.Error(w, "Preview frame must be within 600 seconds", 400)
+			return
+		}
+	}
+	img, err := mediaauthor.RenderSceneStyled(draft.Scenes[sceneIndex], profile.Width, profile.Height, theme.Style, inputs, frame, profile.FPS)
 	if err != nil {
 		http.Error(w, "Cannot render scene preview", 422)
 		return

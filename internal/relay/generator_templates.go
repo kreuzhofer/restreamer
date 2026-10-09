@@ -248,14 +248,13 @@ func (s *Server) generatorTemplateCopyHTTP(w http.ResponseWriter, r *http.Reques
 	if !generatorDecode(w, r, &input) {
 		return
 	}
-	// Theme support is deliberately independent of template contents.
-	if input.Theme.ID != "retro" || input.Theme.Revision != 1 {
-		http.Error(w, "Choose an available theme revision separately from the template", 422)
-		return
-	}
 	g := s.generator
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if issues := g.themeIssues(input.Theme); len(issues) > 0 {
+		generatorJSON(w, 422, map[string]any{"issues": issues})
+		return
+	}
 	template, err := g.readTemplate(r.PathValue("id"))
 	if errors.Is(err, os.ErrNotExist) {
 		http.Error(w, "Template not found", 404)

@@ -137,9 +137,23 @@ func (g *generatorStore) assetUsesLocked(id string) ([]AssetUse, error) {
 		return nil, err
 	}
 	add := func(d mediaauthor.Design, kind, owner, name string) {
-		for _, ref := range mediaauthor.DesignAssetRefs(d) {
+		refs := mediaauthor.DesignAssetRefs(d)
+		if d.Theme.ID != "" {
+			theme, err := g.resolveTheme(d.Theme)
+			if err == nil {
+				refs = append(refs, mediaauthor.ThemeAssetRefs(theme)...)
+			}
+		}
+		for _, ref := range refs {
 			if id == "" || ref.ID == id {
 				out = append(out, AssetUse{AssetID: ref.ID, Kind: kind, ID: owner, Name: name, Revision: ref.Revision})
+			}
+		}
+	}
+	for _, theme := range g.themes {
+		for _, ref := range mediaauthor.ThemeAssetRefs(theme) {
+			if id == "" || ref.ID == id {
+				out = append(out, AssetUse{AssetID: ref.ID, Kind: "theme", ID: fmt.Sprintf("%s:%d", theme.ID, theme.Revision), Name: fmt.Sprintf("%s · revision %d", theme.Name, theme.Revision), Revision: ref.Revision})
 			}
 		}
 	}
@@ -200,10 +214,14 @@ func (s *Server) loadSceneImage(scene mediaauthor.Scene) (image.Image, error) {
 	if scene.Image == nil {
 		return nil, errors.New("Choose an image revision for this scene.")
 	}
+	return s.loadAssetImage(*scene.Image)
+}
+
+func (s *Server) loadAssetImage(ref mediaauthor.AssetRef) (image.Image, error) {
 	g := s.generator
 	g.mu.Lock()
-	meta, ok := g.assetRevision(*scene.Image)
-	file, err := os.Open(g.assetPath(*scene.Image))
+	meta, ok := g.assetRevision(ref)
+	file, err := os.Open(g.assetPath(ref))
 	g.mu.Unlock()
 	if !ok || err != nil {
 		if file != nil {
