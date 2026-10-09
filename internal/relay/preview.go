@@ -32,11 +32,16 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 	s.previewMu.Unlock()
 	var epoch uint64
 	if r.URL.Path == "/api/broadcast-preview" {
-		if s.broadcast == nil || !s.forwarding.Load() {
-			http.Error(w, "Master forwarding is off", 503)
+		if s.broadcast == nil {
+			http.Error(w, "Broadcast is OFF", 503)
 			return
 		}
 		s.broadcast.mu.Lock()
+		if s.broadcast.control.stage == "OFF" {
+			s.broadcast.mu.Unlock()
+			http.Error(w, "Broadcast is OFF", 503)
+			return
+		}
 		h = s.broadcast.hub
 		done = s.broadcast.previewChanged
 		epoch = s.broadcast.previewEpoch

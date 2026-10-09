@@ -155,6 +155,10 @@ func openClip(path string, idx *clipIndex) (*clipReader, error) {
 }
 func (r *clipReader) close() { r.file.Close() }
 func (r *clipReader) seek(position time.Duration) (time.Duration, error) {
+	info, err := r.file.Stat()
+	if err != nil || info.Size() != r.index.Size {
+		return 0, errors.New("prepared file is unavailable or changed")
+	}
 	if position < 0 || position >= r.index.Duration {
 		return 0, errors.New("seek must be within the video")
 	}
@@ -172,6 +176,9 @@ func (r *clipReader) next() (*rtmp.Message, error) {
 	for {
 		typ, ts, n, next, err := clipTag(r.file, r.offset, r.index.Size)
 		if err != nil {
+			if errors.Is(err, io.EOF) && r.offset != r.index.Size {
+				return nil, io.ErrUnexpectedEOF
+			}
 			return nil, err
 		}
 		offset := r.offset

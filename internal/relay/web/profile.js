@@ -4,7 +4,7 @@
   const equal = (a, b) => a && b && ['width', 'height', 'fps', 'sample_rate'].every(key => Number(a[key]) === Number(b[key]));
   let snapshot, saved, draft, connected = false, assetsBusy = false, pending = false;
   const dirty = () => !!draft && !equal(draft, saved);
-  const canSave = () => connected && snapshot?.brb?.ready && !snapshot.forwarding && !assetsBusy && !pending && dirty();
+  const canSave = () => connected && snapshot?.brb?.ready && snapshot.stage?.stage === 'OFF' && !assetsBusy && !pending && dirty();
 
   function renderProfile() {
     el('input-profile').hidden = !snapshot?.brb?.ready || !saved;
@@ -16,8 +16,8 @@
     select.value = resolution;
     el('profile-fps').value = String(draft.fps);
     el('profile-sample-rate').value = String(draft.sample_rate);
-    el('profile-fields').disabled = !connected || pending || assetsBusy || snapshot.forwarding;
-    el('profile-locked').hidden = !snapshot.forwarding;
+    el('profile-fields').disabled = !connected || pending || assetsBusy || snapshot.stage?.stage !== 'OFF';
+    el('profile-locked').hidden = snapshot.stage?.stage === 'OFF';
     el('profile-unsaved').hidden = !dirty() || pending;
     el('profile-save').disabled = !canSave();
     el('profile-save').textContent = pending ? 'Rebuilding BRB…' : 'Save & rebuild';

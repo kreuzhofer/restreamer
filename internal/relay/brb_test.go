@@ -104,15 +104,15 @@ func TestBRBTransitionsPreserveOutputTimeline(t *testing.T) {
 
 func TestMasterOffRequiresExplicitConfirmation(t *testing.T) {
 	s := dashboardServer(t)
-	s.setForwarding(true)
-	for _, body := range []string{`{"enabled":false}`, `{"enabled":false,"confirmed":false}`} {
-		w := dashboardRequest(s, "PUT", "/api/forwarding", body)
+	startLiveControlTest(t, s)
+	for _, confirmed := range []any{nil, false} {
+		w := stageRequest(t, s, "stop_now", map[string]any{"confirmed": confirmed})
 		if w.Code != 409 || !s.forwarding.Load() {
 			t.Fatalf("unconfirmed shutdown: %d", w.Code)
 		}
 	}
-	w := dashboardRequest(s, "PUT", "/api/forwarding", `{"enabled":false,"confirmed":true}`)
-	if w.Code != 204 || s.forwarding.Load() {
+	w := stageRequest(t, s, "stop_now", nil)
+	if w.Code != 200 || s.forwarding.Load() {
 		t.Fatalf("confirmed stop failed: %d", w.Code)
 	}
 }

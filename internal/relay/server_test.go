@@ -225,12 +225,14 @@ func TestFanoutAndIndependentReconnect(t *testing.T) {
 		t.Fatal("healthy destination was reconnected")
 	}
 	c.Net.Close()
-	eventually(t, func() bool {
-		return !s.active.Load() && s.outputs[0].snapshot().State == "idle" && s.outputs[1].snapshot().State == "idle"
-	})
-	// A new OBS session must start with fresh cached headers and timestamps.
+	eventually(t, func() bool { return !s.active.Load() })
+	if state := readStage(t, s); state.Stage != "LIVE" || state.Source != "off" {
+		t.Fatal("publisher loss changed established LIVE intent", state)
+	}
+	// The server-owned LIVE session retains destinations across publisher loss.
+	// A new OBS session must provide fresh headers before it can resume delivery,
+	// and its reset timestamps must continue the existing destination timeline.
 	c2 := publishInput(t, address)
-	eventually(t, func() bool { return s.outputs[0].snapshot().State == "waiting_for_keyframe" })
 	writePacket(t, c2, keyframe(0))
 	select {
 	case <-a.packets:
@@ -241,6 +243,12 @@ func TestFanoutAndIndependentReconnect(t *testing.T) {
 	writePacket(t, c2, keyframe(time.Second))
 	if got := receive(t, a); got.Body[1] != 0 {
 		t.Fatal("new session missing header")
+	}
+	if got := receive(t, a); !bytes.Equal(got.Body, keyframe(time.Second).Body) || got.Timestamp <= 0 {
+		t.Fatal("new publisher did not continue destination timeline", got.Timestamp)
+	}
+	if a.count() != 2 || b.count() != 1 {
+		t.Fatal("publisher reconnect replaced a healthy destination session")
 	}
 }
 

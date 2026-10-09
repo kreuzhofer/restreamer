@@ -21,6 +21,9 @@ func (s *Server) initialize() error {
 			s.initErr = err
 			return
 		}
+		if s.broadcast == nil {
+			s.broadcast = newBroadcast(s, nil)
+		}
 		if err := s.initializeLibrary(); err != nil {
 			s.initErr = err
 			return
@@ -63,6 +66,13 @@ func (s *Server) setTarget(name string, enabled bool) error {
 	}
 	s.controlMu.Lock()
 	defer s.controlMu.Unlock()
+	_, err := s.setTargetLocked(name, enabled)
+	return err
+}
+
+// Caller holds controlMu, so validation, persistence and the visible preference
+// change are one operation for both shared commands and internal callers.
+func (s *Server) setTargetLocked(name string, enabled bool) (bool, error) {
 	var target *output
 	state := savedState{Version: 1, Targets: make(map[string]bool)}
 	for _, o := range s.outputs {
@@ -72,22 +82,23 @@ func (s *Server) setTarget(name string, enabled bool) error {
 		}
 	}
 	if target == nil {
-		return errUnknownTarget
+		return false, errUnknownTarget
 	}
 	if enabled && !target.snapshot().CanEnable {
-		return errTargetUnavailable
+		return false, errTargetUnavailable
 	}
 	state.Targets[name] = enabled
 	if s.cfg.StateFile != "" {
 		if err := writeState(s.cfg.StateFile, state); err != nil {
-			return errSaveState
+			return false, errSaveState
 		}
 	}
-	if target.snapshot().Enabled != enabled {
+	changed := target.snapshot().Enabled != enabled
+	if changed {
 		target.setEnabled(enabled)
 		s.log.Info("target switch changed", "target", name, "enabled", enabled)
 	}
-	return nil
+	return changed, nil
 }
 
 // Write in the same directory and rename atomically so interrupted saves never

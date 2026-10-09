@@ -116,44 +116,54 @@ func TestLibraryDiscoveryUploadPersistenceAndProfileChanges(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	eventually(t, func() bool { files := l.status().Files; return len(files) == 1 && files[0].State == "ready" })
 	entry := l.status().Files[0]
-	s.setForwarding(true)
-	body := `{"action":"play","id":"` + entry.ID + `","loop":true}`
-	if w := dashboardRequest(s, "PUT", "/api/playback", body); w.Code != 204 {
+	if w := dashboardRequest(s, "PUT", "/api/stage-media", `{"prestream":"`+entry.Revision+`","shortcuts":[]}`); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := stageRequest(t, s, "prestream", map[string]any{"revision": entry.Revision}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := stageRequest(t, s, "play_clip", map[string]any{"revision": entry.Revision, "loop": true}); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	s.broadcast.tick(time.Now())
 	started := s.broadcast.clip.started
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"resume"}`); w.Code != 204 {
+	if w := stageRequest(t, s, "resume", nil); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
 	if !s.broadcast.clip.streaming || s.broadcast.clip.started != started {
 		t.Fatal("duplicate resume restarted an already playing file")
 	}
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"seek","position":1.8}`); w.Code != 204 {
+	if w := stageRequest(t, s, "seek", map[string]any{"position": 1.8}); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
 	if s.broadcast.playbackStatus(time.Now()).Position > 1.8 {
 		t.Fatal("seek rounded forward")
 	}
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"seek","position":999}`); w.Code != 400 {
+	if w := stageRequest(t, s, "seek", map[string]any{"position": 999}); w.Code != 409 {
 		t.Fatal("invalid seek accepted")
 	}
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"pause"}`); w.Code != 204 {
+	if w := stageRequest(t, s, "pause", nil); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
 	s.broadcast.tick(time.Now())
 	if !s.broadcast.status().Active {
 		t.Fatal("pause did not show BRB")
 	}
-	s.broadcast.setManual(true)
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"resume"}`); w.Code != 409 {
-		t.Fatal("resume bypassed manual BRB")
+	if w := stageRequest(t, s, "brb", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
 	}
-	s.broadcast.setManual(false)
+	if w := stageRequest(t, s, "resume", nil); w.Code != 409 {
+		t.Fatal("resume bypassed deliberate BRB")
+	}
+	if w := stageRequest(t, s, "return", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
 	if s.broadcast.playbackStatus(time.Now()).State != "paused" {
-		t.Fatal("manual BRB cleared explicit pause")
+		t.Fatal("deliberate BRB cleared explicit pause")
 	}
-	s.setForwarding(false)
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
 	generation := s.broadcast.media.settings.Generation
 	if w := assetRequest(t, s, map[string]string{"fps": "25"}, "", nil); w.Code != 204 {
 		t.Fatal(w.Code, w.Body.String())
@@ -203,14 +213,14 @@ func TestLibraryDiscoveryUploadPersistenceAndProfileChanges(t *testing.T) {
 
 func TestLibraryAuthenticationAndUploadLimits(t *testing.T) {
 	s := dashboardServer(t)
-	for _, path := range []string{"/api/library", "/api/library/upload", "/api/playback", "/api/broadcast-preview", "/library.js"} {
+	for _, path := range []string{"/api/library", "/api/library/upload", "/api/library/prepare", "/api/stage-media", "/api/stage/commands", "/api/broadcast-preview", "/library.js"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 401 {
 			t.Fatal("unprotected route", path, w.Code)
 		}
 	}
-	if w := dashboardRequest(s, "PUT", "/api/playback", `{"action":"play"}`); w.Code != 409 {
+	if w := stageRequest(t, s, "play_clip", nil); w.Code != 409 {
 		t.Fatal("library available without BRB")
 	}
 	requireFFmpeg(t)
@@ -223,7 +233,7 @@ func TestLibraryAuthenticationAndUploadLimits(t *testing.T) {
 	if err != nil || len(files) != 0 {
 		t.Fatal("partial upload left behind")
 	}
-	r := httptest.NewRequest("PUT", "/api/playback", strings.NewReader(`{"action":"stop"}`))
+	r := httptest.NewRequest("POST", "/api/stage/commands", strings.NewReader(`{"id":"missing-control","action":"stop_now"}`))
 	r.SetBasicAuth(s.cfg.DashboardUsername, s.cfg.DashboardPassword)
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

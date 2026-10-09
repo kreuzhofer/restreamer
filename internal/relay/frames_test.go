@@ -36,7 +36,9 @@ func TestFrameAccountingQueueFailureAndIntentionalSkips(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	publish(videoConfig())
+	// Queue accounting needs only a recognizable header packet small enough
+	// for this deliberately tiny queue; codec validation has separate coverage.
+	publish(packet(rtmp.Video, 0, 0x17, 0, 0, 0, 0, 1))
 	publish(packet(rtmp.Video, 0, 0x27, 1, 0, 0, 0, 1)) // Await initial keyframe.
 	publish(keyframe(time.Second))
 	for range 2 {
@@ -217,11 +219,12 @@ func TestFrameCountersLivePauseResumeAndReconnect(t *testing.T) {
 	if got := s.outputs[1].snapshot(); got.DroppedFrames != 0 || got.SkippedFrames != 0 || got.PausedFrames != 0 {
 		t.Fatalf("healthy target affected: %+v", got)
 	}
+	connections := a.count()
 	c.Net.Close()
 	eventually(t, func() bool { return !s.active.Load() })
-	// New OBS session: counters remain cumulative, old errors don't turn startup into drops.
+	// LIVE intent retains destination sessions across OBS loss. A fresh input
+	// keyframe resumes delivery on that connection with cumulative counters.
 	c = publishInput(t, address)
-	eventually(t, func() bool { return s.outputs[0].snapshot().State == "waiting_for_keyframe" })
 	writePacket(t, c, videoConfig())
 	writePacket(t, c, keyframe(0))
 	for range 2 {
@@ -230,5 +233,8 @@ func TestFrameCountersLivePauseResumeAndReconnect(t *testing.T) {
 	eventually(t, func() bool { return s.outputs[0].snapshot().Frames == 4 && s.inputFrames.Load() == 7 })
 	if s.outputs[0].snapshot().DroppedFrames != 1 {
 		t.Fatal("new publisher inherited old outage")
+	}
+	if a.count() != connections {
+		t.Fatal("OBS recovery reconnected the destination")
 	}
 }

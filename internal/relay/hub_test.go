@@ -11,7 +11,10 @@ import (
 func packet(typ uint8, ts time.Duration, body ...byte) *rtmp.Message {
 	return &rtmp.Message{Type: typ, Timestamp: ts, Body: body}
 }
-func videoConfig() *rtmp.Message { return packet(rtmp.Video, 0, 0x17, 0, 0, 0, 0, 1, 0x64, 0, 0x1f) }
+
+// Reuse the parsed SPS/PPS fixture so stage readiness tests have valid AVC
+// initialization rather than a truncated placeholder sequence header.
+func videoConfig() *rtmp.Message { return previewVideoConfig() }
 func audioConfig() *rtmp.Message { return packet(rtmp.Audio, 0, 0xaf, 0, 0x12, 0x10) }
 func keyframe(ts time.Duration) *rtmp.Message {
 	return packet(rtmp.Video, ts, 0x17, 1, 0, 0, 0, 0, 0, 0, 2, 0x65, 0x88)

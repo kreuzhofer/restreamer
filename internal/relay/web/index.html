@@ -9,6 +9,7 @@
  <link rel="stylesheet" href="/dashboard.css">
  <script src="/dashboard.js" defer></script>
  <script src="/profile.js" defer></script>
+ <script src="/stages.js" defer></script>
  <script src="/library.js" defer></script>
  <script src="/preview.js" defer></script>
 </head>
@@ -23,6 +24,29 @@
    <div class="window"><span class="window-dot"></span> Rolling 15 minutes <span class="window-detail">· sampled every second</span></div>
   </section>
   <div id="notice" class="notice" role="alert" hidden></div>
+  <section class="panel stage-panel" aria-labelledby="stage-title">
+   <div class="panel-heading"><div><p class="eyebrow">SHOW CONTROL</p><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
+   <div id="delivery-banner" class="delivery-banner" role="status" hidden></div>
+   <div class="stage-summary" aria-live="polite">
+    <div><span class="stage-label">Selected stage</span><strong id="stage-selected">—</strong></div>
+    <div><span class="stage-label">On-air source</span><strong id="stage-source">—</strong></div>
+    <div><span class="stage-label">Return destination</span><strong id="stage-return">None</strong></div>
+   </div>
+   <p id="stage-media" class="stage-help"></p>
+   <div id="stage-pending" class="stage-pending" role="status" hidden><div><strong>Go live pending</strong><p id="stage-pending-reason"></p></div><button id="stage-cancel-pending" class="preview-button" type="button">Cancel pending transition</button></div>
+   <p id="stage-error" class="notice" role="alert" hidden></p>
+   <p id="stage-completion" class="stage-help" role="status" hidden></p>
+   <div class="stage-buttons" role="group" aria-label="Choose broadcast stage">
+    <button id="stage-prestream" class="stage-button" type="button" aria-pressed="false" disabled><span>01</span> Prestream<small>Loop starting soon</small></button>
+    <button id="stage-live" class="stage-button" type="button" aria-pressed="false" disabled><span>02</span> Go live<small>Switch to OBS</small></button>
+    <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled><span>03</span> BRB<small>Stay on a deliberate break</small></button>
+    <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled><span>04</span> End stream<small>Play ending, then stop</small></button>
+   </div>
+   <div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div>
+   <div class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div><label id="rehearsal-label" class="check-label"><input id="stage-rehearsal" type="checkbox"> Start a preview-only rehearsal</label></div>
+   <p id="stage-help" class="stage-help">Only Prestream and Go live can start a broadcast. Starts OFF after every server restart. OBS input preview stays available.</p>
+   <p id="command-status" class="stage-help" role="status"></p>
+  </section>
   <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
   <div class="input-grid">
   <section class="panel input-panel" aria-labelledby="input-title">
@@ -40,7 +64,7 @@
       <label>Frame rate <select id="profile-fps"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label>
       <label>Audio sample rate <select id="profile-sample-rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>
      </div></fieldset>
-     <p id="profile-locked" class="profile-help" hidden>Turn master forwarding off before changing this profile.</p>
+     <p id="profile-locked" class="profile-help" hidden>Stop the broadcast or rehearsal before changing this profile.</p>
      <div id="profile-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved profile changes</strong><p>Saving will rebuild BRB and re-prepare your video library. Original uploads are preserved. Each video becomes playable when its new conversion is ready.</p></div>
      <div class="profile-actions"><button id="profile-save" class="preview-button" type="submit" disabled>Save &amp; rebuild</button><button id="profile-cancel" class="preview-button" type="button" disabled>Cancel changes</button></div>
      <p id="profile-save-status" class="profile-help" role="status"></p>
@@ -54,13 +78,9 @@
    <div class="panel-footer"><span>Original input · audio starts muted</span><span>Preview stays on while forwarding is off</span></div>
   </section>
   </div>
-  <section class="panel forwarding-panel" aria-labelledby="forwarding-title">
-   <div><h2 id="forwarding-title">Forward to destinations</h2><p id="forwarding-help">Off at every application launch. Individual target switches are kept.</p></div>
-   <button id="forwarding-toggle" class="toggle" type="button" role="switch" aria-label="Forward to destinations" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button>
-  </section>
   <section class="panel brb-panel" aria-labelledby="brb-title">
    <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
-   <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div><button id="brb-toggle" class="toggle" type="button" role="switch" aria-label="Manual BRB" aria-checked="false" disabled><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Off</span></button></div>
+   <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div></div>
    <p id="brb-active-profile" class="brb-active-profile" hidden></p>
    <div id="brb-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; save BRB</b> to apply your changes. The shared streaming profile is managed in the OBS input card.</p></div>
    <p id="brb-error" class="notice" role="alert" hidden></p>
@@ -83,30 +103,35 @@
   </section>
   <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
    <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>
-   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Files are prepared for the active saved profile. Playback replaces OBS; stopping or finishing returns to OBS, or BRB when OBS is unavailable.</p>
+   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Preparing content creates a ready media revision. Saving a selection affects its next use; current and suspended playback keep their selected revision until you confirm a replacement.</p>
    <form id="library-upload"><label>MP4 file <input id="library-file" type="file" accept=".mp4,video/mp4" required></label><button id="library-upload-button" class="preview-button" type="submit">Upload MP4</button><button id="library-upload-cancel" class="preview-button" type="button" hidden>Cancel upload</button></form>
    <p id="library-upload-status" role="status" class="library-help"></p>
    <p id="library-error" class="notice" role="alert" hidden></p>
+   <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>
+    <form id="stage-selections-form"><div class="selection-fields"><label>Starting soon <select id="selection-prestream"></select></label><label>Ending video <select id="selection-ending"></select></label></div><div class="shortcut-editor"><h3>Clip shortcuts</h3><div id="selection-shortcuts"></div><button id="selection-add-shortcut" class="preview-button" type="button">Add clip shortcut</button></div><p id="selection-warning" class="library-help"></p><div class="library-actions"><button id="selection-save" class="preview-button" type="submit">Save selections</button><button id="selection-cancel" class="preview-button" type="button">Discard changes</button></div><p id="selection-status" class="library-help" role="status"></p></form>
+   </details>
    <div class="library-grid">
-    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p>
-     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
+    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p><label>Media revision <select id="library-revision"></select></label>
+     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-preview" class="preview-button" type="button">Preview revision</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
      <p id="playback-status" role="status" class="library-help">No file playing</p>
-     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause file</button><button id="playback-resume" class="preview-button" type="button">Resume file</button><button id="playback-stop" class="preview-button" type="button">Stop file</button></div>
+     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>
+     <label class="check-label"><input id="playback-loop" type="checkbox"> Loop current clip until stopped</label>
      <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
-     <p class="library-help">Release the seek bar to jump to the preceding keyframe (within about one second). Pause shows BRB. Manual BRB pauses the file and resumes it when switched off. Master off ends playback.</p>
+     <p class="library-help">Release the seek bar to resume at a decodable keyframe. Pause shows BRB. Deliberate BRB suspends the clip until Return. Stop clip restores its recorded return stage. PRESTREAM loops automatically; ENDING cannot be paused or scrubbed.</p>
     </div>
-    <div class="broadcast-preview"><div class="panel-heading"><h3>Broadcast preview</h3><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video><p id="broadcast-status" role="status" class="library-help">Master forwarding is off</p><p class="library-help">Same feed sent to destinations · audio starts muted. Platform viewers may see additional buffering delay. Preview controls affect only this browser.</p></div>
+    <div class="candidate-preview"><h3>Ready revision preview</h3><video id="candidate-video" controls muted playsinline aria-label="Ready revision preview" hidden></video><p id="candidate-status" class="library-help">Choose a ready video and Preview revision to review its exact content.</p><div class="library-actions"><button id="library-replace-now" class="preview-button" type="button" disabled>Replace now</button><button id="library-replace-return" class="preview-button" type="button" disabled>Replace on return</button></div><p class="library-help">Replacement starts this revision at the beginning. Current media keeps playing during preparation and preview.</p></div>
    </div>
   </section>
+  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><p class="eyebrow">ACTUAL SELECTED FEED</p><h2 id="broadcast-title">Broadcast preview</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="library-help">Selected feed · audio starts muted. Available during rehearsal and with no destinations. Relay delivery does not confirm platform-side playback. Preview controls affect only this browser.</p></section>
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
   </section>
   <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>FPS and drops are measured at the relay; OBS and platform playback statistics are unavailable.</span><span id="updated">Awaiting first update</span></footer>
  </main>
- <dialog id="stop-dialog" aria-labelledby="stop-title" aria-describedby="stop-help">
-  <h2 id="stop-title">End the broadcast?</h2><p id="stop-help">Turning master forwarding off disconnects every destination and stops video playback, BRB and music. OBS can stay connected.</p>
-  <div class="dialog-actions"><button id="stop-cancel" class="preview-button" type="button" autofocus>Keep broadcasting</button><button id="stop-confirm" class="danger-button" type="button">End broadcast</button></div>
+ <dialog id="stage-dialog" aria-labelledby="stage-dialog-title" aria-describedby="stage-dialog-effect stage-dialog-context">
+  <h2 id="stage-dialog-title">Confirm broadcast change</h2><p id="stage-dialog-effect"></p><p id="stage-dialog-context" class="confirmation-context"></p><p id="stage-dialog-stale" class="notice" role="alert" hidden>The broadcast changed while this confirmation was open. Cancel and review the updated state before trying again.</p>
+  <div class="dialog-actions"><button id="stage-dialog-cancel" class="preview-button" type="button" autofocus>Cancel</button><button id="stage-dialog-confirm" class="preview-button" type="button">Confirm</button></div>
  </dialog>
  <template id="target-template">
   <article class="panel target-panel">

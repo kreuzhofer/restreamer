@@ -40,7 +40,7 @@ func dashboardRequest(s *Server, method, path, body string) *httptest.ResponseRe
 
 func TestDashboardAuthenticationAndControl(t *testing.T) {
 	s := dashboardServer(t)
-	for _, path := range []string{"/", "/dashboard.js", "/preview.js", "/dashboard.css", "/status", "/api/dashboard", "/api/preview", "/api/forwarding", "/api/targets/one"} {
+	for _, path := range []string{"/", "/dashboard.js", "/stages.js", "/preview.js", "/dashboard.css", "/status", "/api/dashboard", "/api/preview", "/api/stage", "/api/stage/commands"} {
 		for _, password := range []string{"", "incorrect"} {
 			r := httptest.NewRequest("GET", path, nil)
 			if password != "" {
@@ -72,24 +72,37 @@ func TestDashboardAuthenticationAndControl(t *testing.T) {
 			}
 		}
 	}
-	if w := dashboardRequest(s, "PUT", "/api/targets/one", `{"enabled":false}`); w.Code != 204 {
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "one", "enabled": false}); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
 	if s.outputs[0].snapshot().Enabled {
 		t.Fatal("target still enabled")
 	}
 	for _, tc := range []struct {
-		path, body string
-		code       int
+		target  string
+		enabled any
+		code    int
 	}{
-		{"one", `{"enabled":null}`, 400}, {"one", `{}`, 400}, {"one", `{"enabled":"true"}`, 400},
-		{"one", `{"enabled":true,"key":"secret"}`, 400}, {"one", `{"enabled":true}{}`, 400},
-		{"one", strings.Repeat(" ", 1025) + `{"enabled":true}`, 400},
-		{"absent", `{"enabled":true}`, 404}, {"missing-key", `{"enabled":true}`, 409},
-		{"invalid-url", `{"enabled":true}`, 409},
+		{"one", nil, 409}, {"one", "true", 400},
+		{"absent", true, 404}, {"missing-key", true, 409},
+		{"invalid-url", true, 409},
 	} {
-		if w := dashboardRequest(s, "PUT", "/api/targets/"+tc.path, tc.body); w.Code != tc.code {
-			t.Fatalf("%s %s: %d", tc.path, tc.body, w.Code)
+		if w := stageRequest(t, s, "set_target", map[string]any{"target": tc.target, "enabled": tc.enabled}); w.Code != tc.code {
+			t.Fatalf("%s %v: %d %s", tc.target, tc.enabled, w.Code, w.Body.String())
+		}
+	}
+	state := readStage(t, s)
+	command, err := json.Marshal(map[string]any{"id": "invalid-command", "server_id": state.ServerID, "context": state.Context, "action": "set_target", "target": "one", "enabled": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{
+		string(command[:len(command)-1]) + `,"key":"secret"}`,
+		string(command) + `{}`,
+		strings.Repeat(" ", 4097) + string(command),
+	} {
+		if w := dashboardRequest(s, "POST", "/api/stage/commands", body); w.Code != 400 {
+			t.Fatalf("invalid command accepted: %d %s", w.Code, w.Body.String())
 		}
 	}
 	if s.outputs[0].snapshot().Enabled {
@@ -103,38 +116,54 @@ func TestDashboardAuthenticationAndControl(t *testing.T) {
 
 func TestDashboardRejectsCrossOriginControl(t *testing.T) {
 	s := dashboardServer(t)
-	for _, path := range []string{"/api/targets/one", "/api/forwarding"} {
-		for _, tc := range []struct {
-			origin, fetchSite, controlHeader, contentType string
-			want                                          int
-		}{
-			{"https://evil.example", "", "1", "application/json", 403},
-			{"null", "", "1", "application/json", 403},
-			{"https://dashboard.example", "cross-site", "1", "application/json", 403},
-			{"https://dashboard.example", "same-origin", "", "application/json", 403},
-			{"https://dashboard.example", "same-origin", "1", "text/plain", 403},
-			{"https://dashboard.example", "same-origin", "1", "application/json", 204},
-			{"", "", "1", "application/json", 204},
-		} {
-			r := httptest.NewRequest("PUT", "http://dashboard.example"+path, strings.NewReader(`{"enabled":false,"confirmed":true}`))
-			r.SetBasicAuth("admin", "dashboard-secret")
-			r.Header.Set("Origin", tc.origin)
-			r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
-			r.Header.Set("X-Restreamer-Control", tc.controlHeader)
-			r.Header.Set("Content-Type", tc.contentType)
-			w := httptest.NewRecorder()
-			s.Handler().ServeHTTP(w, r)
-			if w.Code != tc.want {
-				t.Fatalf("%+v: %d", tc, w.Code)
-			}
+	for _, tc := range []struct {
+		origin, fetchSite, controlHeader, contentType string
+		want                                          int
+	}{
+		{"https://evil.example", "", "1", "application/json", 403},
+		{"null", "", "1", "application/json", 403},
+		{"https://dashboard.example", "cross-site", "1", "application/json", 403},
+		{"https://dashboard.example", "same-origin", "", "application/json", 403},
+		{"https://dashboard.example", "same-origin", "1", "text/plain", 403},
+		{"https://dashboard.example", "same-origin", "1", "application/json", 200},
+		{"", "", "1", "application/json", 200},
+	} {
+		state := readStage(t, s)
+		command, err := json.Marshal(map[string]any{"id": "origin-control", "server_id": state.ServerID, "context": state.Context, "action": "stop_now", "confirmed": true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest("POST", "http://dashboard.example/api/stage/commands", bytes.NewReader(command))
+		r.SetBasicAuth("admin", "dashboard-secret")
+		r.Header.Set("Origin", tc.origin)
+		r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
+		r.Header.Set("X-Restreamer-Control", tc.controlHeader)
+		r.Header.Set("Content-Type", tc.contentType)
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("%+v: %d", tc, w.Code)
 		}
 	}
-	r := httptest.NewRequest(http.MethodOptions, "/api/targets/one", nil)
+	r := httptest.NewRequest(http.MethodOptions, "/api/stage/commands", nil)
 	r.Header.Set("Origin", "https://evil.example")
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, r)
 	if w.Header().Get("Access-Control-Allow-Origin") != "" {
 		t.Fatal("cross-origin preflight allowed")
+	}
+}
+
+func TestSupersededControlRoutesCannotBypassStageCommands(t *testing.T) {
+	s := dashboardServer(t)
+	for _, path := range []string{"/api/targets/one", "/api/forwarding", "/api/brb", "/api/playback"} {
+		w := dashboardRequest(s, "PUT", path, `{"enabled":false,"confirmed":true}`)
+		if w.Code != http.StatusNotFound && w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("superseded route still accepts controls: %s returned %d", path, w.Code)
+		}
+	}
+	if !s.outputs[0].snapshot().Enabled || readStage(t, s).Stage != "OFF" {
+		t.Fatal("superseded controls changed broadcast state")
 	}
 }
 
@@ -229,7 +258,7 @@ func TestLiveTargetStopResumeAndIsolation(t *testing.T) {
 			receive(t, dest)
 		}
 	}
-	if w := dashboardRequest(s, "PUT", "/api/targets/one", `{"enabled":false}`); w.Code != 204 {
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "one", "enabled": false}); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
 	eventually(t, func() bool { return s.outputs[0].snapshot().State == "disabled" })
@@ -246,7 +275,7 @@ func TestLiveTargetStopResumeAndIsolation(t *testing.T) {
 		t.Fatal("stopped target received media")
 	default:
 	}
-	if w := dashboardRequest(s, "PUT", "/api/targets/one", `{"enabled":true}`); w.Code != 204 {
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "one", "enabled": true}); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
 	eventually(t, func() bool { return a.count() == 2 && s.outputs[0].snapshot().State == "waiting_for_keyframe" })

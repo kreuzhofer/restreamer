@@ -12,7 +12,7 @@ function setup() {
       addEventListener(name, fn) {this.events[name] = fn;}});
     return elements.get(id);
   };
-  let data = {forwarding: false, brb: {ready: true}, brb_profile: {width: 1280, height: 720, fps: 25, sample_rate: 48000}};
+  let data = {forwarding: false, stage: {stage: 'OFF', mode: 'off'}, brb: {ready: true}, brb_profile: {width: 1280, height: 720, fps: 25, sample_rate: 48000}};
   let online = true, busy = false, response = {ok: true}, requests = [];
   const context = vm.createContext({window: {}, document: {getElementById: el}, Option: function(text, value) {this.value = value;}, FormData, AbortSignal,
     location: {origin: 'http://localhost'}, fetch: async (url, init) => {requests.push(init);return response;},
@@ -53,9 +53,9 @@ test('all fields must match; cancel restores the entire saved profile', () => {
   assert.equal(ui.el('profile-save').disabled, true);
   assert.equal(ui.requests.length, 0);
 });
-test('master on, disconnection and artwork preparation prevent saving', async () => {
+test('active stages, rehearsal, disconnection and artwork preparation prevent saving', async () => {
   const ui = setup();ui.change('profile-fps', '30');
-  for (const block of [() => ui.state({forwarding: true}), () => {ui.state({forwarding:false});ui.online(false);}, () => {ui.online(true);ui.busy(true);}]) {
+  for (const block of [() => ui.state({forwarding: true, stage: {stage: 'LIVE', mode: 'real'}}), () => ui.state({forwarding: false, stage: {stage: 'PRESTREAM', mode: 'preview_only'}}), () => {ui.state({stage: {stage: 'OFF', mode: 'off'}});ui.online(false);}, () => {ui.online(true);ui.busy(true);}]) {
     block();assert.equal(ui.el('profile-save').disabled, true);await ui.save();
   }
   assert.equal(ui.requests.length, 0);

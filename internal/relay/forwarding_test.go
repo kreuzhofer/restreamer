@@ -9,45 +9,58 @@ import (
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
+	"github.com/kreuzhofer/restreamer/internal/rtmp"
 )
+
+func startLiveControlTest(t *testing.T, s *Server) {
+	t.Helper()
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	now := time.Now()
+	s.broadcast.ingest(videoConfig(), now)
+	s.broadcast.ingest(audioConfig(), now)
+	s.broadcast.ingest(packet(rtmp.Audio, 0, 0xaf, 1, 0), now)
+	s.broadcast.ingest(keyframe(0), now)
+	if state := readStage(t, s); state.Stage != "LIVE" {
+		t.Fatal("fresh input did not complete LIVE selection", state)
+	}
+}
 
 func TestForwardingStartsOffAndIsNotPersisted(t *testing.T) {
 	s := dashboardServer(t)
 	if s.forwarding.Load() {
 		t.Fatal("forwarding started enabled")
 	}
-	if w := dashboardRequest(s, "PUT", "/api/forwarding", `{"enabled":true}`); w.Code != 204 {
-		t.Fatal(w.Code, w.Body.String())
-	}
+	startLiveControlTest(t, s)
 	if !s.forwarding.Load() {
 		t.Fatal("forwarding not enabled")
-	}
-	if err := s.setTarget("one", false); err != nil {
-		t.Fatal(err)
-	}
-	if w := dashboardRequest(s, "PUT", "/api/forwarding", `{"enabled":false,"confirmed":true}`); w.Code != 204 {
-		t.Fatal(w.Code)
-	}
-	if s.outputs[0].snapshot().Enabled {
-		t.Fatal("master changed target preference")
-	}
-	s.setForwarding(true)
-	reloaded := New(s.cfg, s.log)
-	if err := reloaded.initialize(); err != nil {
-		t.Fatal(err)
-	}
-	if reloaded.forwarding.Load() || reloaded.outputs[0].snapshot().Enabled {
-		t.Fatal("wrong restart state")
 	}
 	var status struct {
 		Forwarding bool `json:"forwarding"`
 	}
 	w := dashboardRequest(s, "GET", "/api/dashboard", "")
 	if json.Unmarshal(w.Body.Bytes(), &status) != nil || !status.Forwarding {
-		t.Fatal("missing master status")
+		t.Fatal("missing delivery status")
 	}
-	for _, body := range []string{`{}`, `{"enabled":null}`, `{"enabled":true,"other":1}`, `{"enabled":true}{}`} {
-		if w := dashboardRequest(s, "PUT", "/api/forwarding", body); w.Code != 400 {
+	if err := s.setTarget("one", false); err != nil {
+		t.Fatal(err)
+	}
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if s.outputs[0].snapshot().Enabled {
+		t.Fatal("master changed target preference")
+	}
+	reloaded := New(s.cfg, s.log)
+	if err := reloaded.initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.forwarding.Load() || reloaded.outputs[0].snapshot().Enabled || readStage(t, reloaded).Stage != "OFF" {
+		t.Fatal("wrong restart state")
+	}
+	for _, body := range []string{`{}`, `{"id":null}`, `{"id":"invalid","action":"go_live","other":1}`, `{"id":"invalid","action":"go_live"}{}`} {
+		if w := dashboardRequest(s, "POST", "/api/stage/commands", body); w.Code != 400 {
 			t.Fatal("invalid control accepted")
 		}
 	}

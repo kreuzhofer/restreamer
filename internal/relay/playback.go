@@ -12,11 +12,14 @@ type PlaybackStatus struct {
 	State          string  `json:"state"`
 	Source         string  `json:"source"`
 	ID             string  `json:"id,omitempty"`
+	Revision       string  `json:"revision,omitempty"`
 	Name           string  `json:"name,omitempty"`
 	Position       float64 `json:"position"`
 	Duration       float64 `json:"duration"`
+	Remaining      float64 `json:"remaining"`
 	Loop           bool    `json:"loop"`
 	PauseReason    string  `json:"pause_reason,omitempty"`
+	ReturnStage    string  `json:"return_stage,omitempty"`
 	Error          string  `json:"error,omitempty"`
 	Epoch          uint64  `json:"epoch"`
 	TimelineBaseMS int64   `json:"timeline_base_ms"`
@@ -24,7 +27,7 @@ type PlaybackStatus struct {
 
 type clipPlayback struct {
 	continuation                           bool
-	ID, Name                               string
+	ID, Name, Revision                     string
 	reader                                 *clipReader
 	loop, paused, streaming, eof           bool
 	position, startPosition, broadcastBase time.Duration
@@ -48,8 +51,12 @@ func (p *clipPlayback) freeze(now time.Time) {
 func (b *broadcast) playbackStatus(now time.Time) PlaybackStatus {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.playbackStatusLocked(now)
+}
+
+func (b *broadcast) playbackStatusLocked(now time.Time) PlaybackStatus {
 	s := PlaybackStatus{State: "idle", Source: "off", Error: b.playbackError, Epoch: b.previewEpoch}
-	if b.server.forwarding.Load() {
+	if b.control.stage != "OFF" {
 		s.Source = "brb"
 		if b.live {
 			s.Source = "obs"
@@ -57,8 +64,10 @@ func (b *broadcast) playbackStatus(now time.Time) PlaybackStatus {
 	}
 	if p := b.clip; p != nil {
 		s.ID, s.Name, s.Loop = p.ID, p.Name, p.loop
+		s.Revision = p.Revision
 		s.Duration = p.reader.index.Duration.Seconds()
 		s.Position = p.positionAt(now).Seconds()
+		s.Remaining = max(0, s.Duration-s.Position)
 		s.State = "playing"
 		s.Source = "file"
 		s.TimelineBaseMS = (p.broadcastBase - p.startPosition).Milliseconds()
@@ -69,6 +78,9 @@ func (b *broadcast) playbackStatus(now time.Time) PlaybackStatus {
 			if b.manual {
 				s.PauseReason = "manual_brb"
 			}
+		}
+		if b.control.failed {
+			s.State, s.Source = "failed", "brb"
 		}
 	}
 	return s
@@ -124,16 +136,16 @@ func (b *broadcast) startClip(now time.Time) error {
 // process or decoder is needed during playback, pause, seek or looping.
 func (b *broadcast) tickClip(now time.Time) bool {
 	p := b.clip
-	if p == nil || p.paused || b.manual {
+	if p == nil || p.paused || b.manual || b.control.failed {
 		return false
 	}
 	if !p.streaming {
 		if p.position >= p.reader.index.Duration && !p.loop {
-			b.stopClip("")
-			return false
+			b.finishPlayback(now)
+			return true
 		}
 		if b.startClip(now) != nil {
-			b.stopClip("Cannot seek prepared video; prepare it again")
+			b.failPlayback("Cannot seek prepared video; prepare it again and Retry", now)
 			return false
 		}
 	}
@@ -143,7 +155,7 @@ func (b *broadcast) tickClip(now time.Time) bool {
 			if errors.Is(err, io.EOF) {
 				p.eof = true
 			} else if err != nil {
-				b.stopClip("Cannot read prepared video; check storage and prepare it again")
+				b.failPlayback("Cannot read prepared video; check storage and prepare it again and Retry", now)
 				return false
 			} else {
 				p.pending = msg
@@ -159,8 +171,8 @@ func (b *broadcast) tickClip(now time.Time) bool {
 				p.streaming = false
 				return true
 			}
-			b.stopClip("")
-			return false
+			b.finishPlayback(now)
+			return true
 		}
 		elapsed := now.Sub(p.started)
 		if p.pending.Timestamp-p.startPosition > elapsed {

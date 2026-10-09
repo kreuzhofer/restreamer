@@ -63,21 +63,48 @@ jobs:
           start_container
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/dashboard)" = 401
           curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/ > /dev/null
-          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.forwarding == false'
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding \
-            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":true}'
-          test "$(curl -s -o /dev/null -w '%{http_code}' -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}')" = 409
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/brb -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":true}'
-          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.brb.ready == true and .brb.manual == true'
-          # Prepare/play a real MP4 inside the read-only container. No real
-          # destinations are used; the configured targets point to localhost.
-          ffmpeg -v error -f lavfi -i testsrc2=size=320x180:rate=25 -t 4 -c:v libx264 -threads 2 /tmp/library-smoke.mp4
-          curl --fail -s -u ci:ci-dashboard-password -H 'X-Restreamer-Control: 1' \
+          api() {
+            curl --fail --show-error -s -u ci:ci-dashboard-password "$@"
+          }
+          stage_status() {
+            api http://127.0.0.1:18080/api/stage > /tmp/stage-status.json
+          }
+          command_serial=0
+          stage_command() {
+            local action="$1" options='{}'
+            if [ "$#" -gt 1 ]; then options="$2"; fi
+            command_serial=$((command_serial + 1))
+            stage_status
+            jq -n --slurpfile stage /tmp/stage-status.json --arg action "$action" \
+              --arg id "ci-$command_serial" --argjson options "$options" \
+              '{id:$id,server_id:$stage[0].server_id,context:$stage[0].context,action:$action,confirmed:true} + $options' > /tmp/stage-command.json
+            api -X POST http://127.0.0.1:18080/api/stage/commands \
+              -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+              --data-binary @/tmp/stage-command.json | jq -e '.state == "completed" or .state == "pending"'
+          }
+          wait_stage() {
+            local expected="$1"
+            for attempt in {1..30}; do
+              stage_status
+              if jq -e --arg expected "$expected" '.stage == $expected' /tmp/stage-status.json; then return 0; fi
+              sleep 1
+            done
+            cat /tmp/stage-status.json
+            return 1
+          }
+          stage_status
+          jq -e '.stage == "OFF" and .mode == "off" and .pending == null' /tmp/stage-status.json
+          api http://127.0.0.1:18080/status | jq -e '.forwarding == false and .brb.ready == true'
+          # A real prepared MP4 drives the normal sequence in isolated rehearsal.
+          # No platform connection is possible: delivery stays blocked and the
+          # dummy destination URLs also point only to the container's localhost.
+          ffmpeg -y -v error -f lavfi -i testsrc2=size=320x180:rate=25 -t 4 -c:v libx264 -threads 2 /tmp/library-smoke.mp4
+          api -H 'X-Restreamer-Control: 1' \
             -F 'file=@/tmp/library-smoke.mp4' http://127.0.0.1:18080/api/library/upload
           wait_library() {
             for attempt in {1..90}; do
-              curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/api/library > /tmp/library-status.json
-              if jq -e '.files | length == 1 and .[0].state == "ready"' /tmp/library-status.json; then return 0; fi
+              api http://127.0.0.1:18080/api/library > /tmp/library-status.json
+              if jq -e '(.files | length) == 1 and .files[0].state == "ready" and (.files[0].revision | length) == 64' /tmp/library-status.json; then return 0; fi
               if jq -e 'any(.files[]; .state == "failed")' /tmp/library-status.json; then cat /tmp/library-status.json; return 1; fi
               sleep 1
             done
@@ -85,22 +112,60 @@ jobs:
             return 1
           }
           wait_library
-          clip_id=$(jq -r '.files[0].id' /tmp/library-status.json)
-          jq -n --arg id "$clip_id" '{action:"play",id:$id,loop:true}' > /tmp/playback.json
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/playback \
-            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data-binary @/tmp/playback.json
-          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.playback.state == "paused" and .playback.pause_reason == "manual_brb"'
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/brb -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
-          curl --fail -s -u ci:ci-dashboard-password http://127.0.0.1:18080/status | jq -e '.playback.state == "playing" and .playback.source == "file"'
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/playback -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"action":"seek","position":2}'
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/forwarding -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false,"confirmed":true}'
-          curl --fail -s -u ci:ci-dashboard-password -X PUT http://127.0.0.1:18080/api/targets/twitch \
-            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data '{"enabled":false}'
+          revision=$(jq -r '.files[0].revision' /tmp/library-status.json)
+          jq -n --arg revision "$revision" \
+            '{prestream:$revision,ending:$revision,shortcuts:[{name:"Smoke clip",revision:$revision}]}' > /tmp/stage-media.json
+          api -X PUT http://127.0.0.1:18080/api/stage-media \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' --data-binary @/tmp/stage-media.json
+          api "http://127.0.0.1:18080/api/library/revisions/$revision/preview" > /tmp/candidate-preview.mp4
+          ffmpeg -v error -xerror -i /tmp/candidate-preview.mp4 -f null -
+          stage_command prestream "$(jq -nc --arg revision "$revision" '{mode:"preview_only",revision:$revision}')"
+          stage_status
+          jq -e '.stage == "PRESTREAM" and .mode == "preview_only" and .source == "file"' /tmp/stage-status.json
+          # Capture the actual broadcast feed. A stage change closes it cleanly
+          # at an MP4 fragment boundary, without a timeout-truncated media file.
+          api http://127.0.0.1:18080/api/broadcast-preview > /tmp/broadcast-preview.mp4 &
+          preview_pid=$!
+          for attempt in {1..30}; do
+            if [ "$(wc -c < /tmp/broadcast-preview.mp4)" -gt 4096 ]; then break; fi
+            if ! kill -0 "$preview_pid" 2>/dev/null; then wait "$preview_pid"; echo "Preview closed before receiving media" >&2; exit 1; fi
+            sleep 1
+          done
+          test "$(wc -c < /tmp/broadcast-preview.mp4)" -gt 4096
+          stage_command brb
+          wait "$preview_pid"
+          ffmpeg -v error -xerror -i /tmp/broadcast-preview.mp4 -f null -
+          stage_command return
+          stage_command play_clip "$(jq -nc --arg revision "$revision" '{revision:$revision}')"
+          stage_command pause
+          stage_command seek '{"position":1}'
+          stage_command resume
+          stage_command stop_clip
+          stage_status
+          jq -e '.stage == "PRESTREAM" and .mode == "preview_only"' /tmp/stage-status.json
+          # Repeated identical command IDs reconcile outcomes instead of applying
+          # the transition again. No client stays connected while ending runs.
+          stage_command end_stream "$(jq -nc --arg revision "$revision" '{revision:$revision}')"
+          api -X POST http://127.0.0.1:18080/api/stage/commands \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+            --data-binary @/tmp/stage-command.json | jq -e '.state == "completed" or .state == "pending"'
+          wait_stage OFF
+          api http://127.0.0.1:18080/status | jq -e '.forwarding == false and all(.outputs[]; .attempts == 0)'
+          stage_command set_target '{"target":"twitch","enabled":false}'
+          cp /tmp/stage-command.json /tmp/before-restart-command.json
           docker rm -f restreamer-smoke
           start_container
           wait_library
-          curl --fail --show-error -s -u ci:ci-dashboard-password \
-            http://127.0.0.1:18080/status | jq -e '.forwarding == false and .playback.state == "idle" and .brb.ready == true and .brb.manual == false and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
+          api http://127.0.0.1:18080/api/stage-media > /tmp/restarted-stage-media.json
+          jq -e --arg revision "$revision" '.prestream == $revision and .ending == $revision and .shortcuts == [{name:"Smoke clip",revision:$revision}]' /tmp/restarted-stage-media.json
+          stage_status
+          jq -e '.stage == "OFF" and .mode == "off" and .pending == null' /tmp/stage-status.json
+          api http://127.0.0.1:18080/status | jq -e '.forwarding == false and .playback.state == "idle" and .brb.ready == true and all(.outputs[]; .attempts == 0) and ([.outputs[] | select(.name == "twitch") | .enabled == false] | all)'
+          test "$(curl -s -o /tmp/restarted-command-result.json -w '%{http_code}' -u ci:ci-dashboard-password \
+            -X POST http://127.0.0.1:18080/api/stage/commands -H 'Content-Type: application/json' \
+            -H 'X-Restreamer-Control: 1' --data-binary @/tmp/before-restart-command.json)" = 409
+          jq -e '.state == "rejected"' /tmp/restarted-command-result.json
+
   image:
     needs: test
     runs-on: ubuntu-latest

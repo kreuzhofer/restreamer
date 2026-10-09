@@ -10,9 +10,7 @@ let connected = false;
 let controlError = '';
 let refreshSequence = 0;
 let graphMetric = 'bitrate';
-let forwardingPending = false;
-let brbPending = false, assetsPending = false, assetsDirty = false, assetGeneration;
-const pending = new Set();
+let assetsPending = false, assetsDirty = false, assetGeneration;
 const rate = bps => (bps / 1e6).toFixed(2);
 const timeLabel = milliseconds => new Date(milliseconds).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 
@@ -64,12 +62,7 @@ function badge(element, state) {
 }
 function render() {
  if (!snapshot) return;
- const master = $('#forwarding-toggle');
- master.setAttribute('aria-checked', String(snapshot.forwarding));
- master.disabled = !connected || forwardingPending;
- $('.toggle-text', master).textContent = forwardingPending ? 'Updating…' : snapshot.forwarding ? 'On' : 'Off';
- $('.forwarding-panel').dataset.enabled = String(snapshot.forwarding);
- $('#forwarding-help').textContent = snapshot.forwarding ? 'Broadcast is on. Turning this off ends all destinations, including BRB.' : 'Forwarding is off. Input and preview continue; target switches are kept. Resets off at every application launch.';
+ window.broadcastStages?.update(snapshot, connected);
  renderBRB();
  window.updatePreview?.(connected && snapshot.publishing);
  window.updateLibrary?.(snapshot, connected);
@@ -96,7 +89,7 @@ function render() {
    card = $('#target-template').content.firstElementChild.cloneNode(true);
    $('.target-name', card).textContent = output.name;
    $('.toggle', card).setAttribute('aria-label', `Enable ${output.name}`);
-   $('.toggle', card).addEventListener('click', () => toggle(output.name));
+   $('.toggle', card).addEventListener('click', () => window.broadcastStages?.target(snapshot.outputs.find(item => item.name === output.name)));
    cards.set(output.name, card);
    $('#targets').append(card);
   }
@@ -114,7 +107,7 @@ function render() {
   $('.target-graph-label', card).textContent = graphMetric === 'fps' ? 'FPS · frames/s' : 'Bitrate · Mbps';
   const graphPoints = graphMetric === 'fps' ? samples.map(p => ({time: p.time, value: p.output_fps?.[output.name]})).filter(p => Number.isFinite(p.value)) : points;
   chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
-  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? 'Master forwarding is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? snapshot.brb?.active ? 'Sending BRB video and audio.' : 'Forwarding the original stream.' : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
+  let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? snapshot.stage?.mode === 'preview_only' ? 'Rehearsal blocks destination delivery. Preference is kept.' : 'Broadcast is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? `Sending ${snapshot.stage?.source === 'obs' ? 'OBS' : snapshot.stage?.source === 'brb' ? 'BRB' : 'prepared video'} video and audio.` : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
   $('.target-message', card).textContent = message;
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
   const issue = $('.issue', card);
@@ -123,10 +116,10 @@ function render() {
   issue.textContent = output.last_error ? `${output.state === 'retrying' ? 'Issue' : 'Last issue'} · ${timeLabel(output.last_error_at)} — ${issues[output.last_error] || 'Destination connection failed.'}` : '';
   const button = $('.toggle', card);
   button.setAttribute('aria-checked', String(output.enabled));
-  button.disabled = !connected || !output.can_enable || pending.has(output.name);
-  $('.toggle-text', card).textContent = pending.has(output.name) ? 'Saving…' : output.enabled ? 'On' : 'Off';
+  button.disabled = !connected || !output.can_enable || window.broadcastStages?.busy() || (snapshot.stage?.stage === 'ENDING' && !snapshot.stage?.error && !output.enabled);
+  $('.toggle-text', card).textContent = output.enabled ? 'On' : 'Off';
   $('.switch-label', card).textContent = !output.can_enable ? 'Configuration required' : output.enabled ? 'Target enabled' : 'Target disabled';
-  $('.switch-help', card).textContent = !output.can_enable ? 'Set a server URL and key, then redeploy.' : !snapshot.forwarding ? 'Master forwarding must also be on to send this stream.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.publishing ? 'Switch on to resume from the live stream.' : 'Switch on to send your next live stream.';
+  $('.switch-help', card).textContent = !output.can_enable ? 'Set a server URL and key, then redeploy.' : snapshot.stage?.mode === 'preview_only' ? 'Preference only. Stop rehearsal before a real broadcast.' : snapshot.stage?.stage === 'OFF' ? 'Choose Prestream or Go live to start delivery.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.stage?.stage === 'ENDING' ? 'Additional destinations cannot join during ENDING.' : 'Enable to join the current on-air source.';
  }
 }
 function connection(ok, message) {
@@ -154,53 +147,14 @@ async function refresh() {
  }
  render();
 }
-async function toggle(name) {
- const output = snapshot.outputs.find(o => o.name === name);
- if (!connected || pending.has(name)) return;
- pending.add(name);
- controlError = '';
- render();
- try {
-  const response = await fetch(`${location.origin}/api/targets/${encodeURIComponent(name)}`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled: !output.enabled}), signal: AbortSignal.timeout(8000)});
-  if (!response.ok) throw new Error((await response.text()).trim() || 'Could not change this target.');
- } catch (error) { controlError = error.message; }
- finally { pending.delete(name); await refresh(); }
-}
-async function toggleForwarding() {
- if (!connected || forwardingPending || !snapshot) return;
- if (snapshot.forwarding) {
-  $('#stop-dialog').showModal();
-  $('#stop-cancel').focus();
-  return;
- }
- await setForwarding(true);
-}
-async function setForwarding(enabled) {
- if (forwardingPending) return;
- forwardingPending = true;
- controlError = '';
- render();
- try {
-  const response = await fetch(`${location.origin}/api/forwarding`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled, confirmed: !enabled}), signal: AbortSignal.timeout(8000)});
-  if (!response.ok) throw new Error((await response.text()).trim() || 'Could not change forwarding.');
- } catch (error) { controlError = error.message; }
- finally { forwardingPending = false; await refresh(); }
-}
 function renderBRB() {
  const brb = snapshot.brb || {};
- const button = $('#brb-toggle');
- button.disabled = !connected || !brb.ready || brbPending;
- button.setAttribute('aria-checked', String(!!brb.manual));
- $('.toggle-text', button).textContent = brbPending ? 'Updating…' : brb.manual ? 'On' : 'Off';
- const active = connected && snapshot.forwarding && brb.active;
- $('#brb-badge').textContent = !connected ? 'Unavailable' : active ? 'BRB active' : brb.ready ? 'Protection ready' : 'Not configured';
+ const active = connected && snapshot.stage?.source === 'brb';
+ const deliberate = snapshot.stage?.stage === 'BRB';
+ $('#brb-badge').textContent = !connected ? 'Unavailable' : active ? deliberate ? 'Deliberate BRB' : 'Fallback BRB' : brb.ready ? 'Protection ready' : 'Not configured';
  $('#brb-badge').className = `badge ${active ? 'warn' : brb.ready ? 'live' : ''}`;
- $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : !snapshot.forwarding ? brb.manual ? 'Manual BRB selected · master forwarding is off' : 'BRB ready · master forwarding is off' : active ? brb.manual ? 'Manual BRB · broadcast still live' : 'Waiting for OBS · broadcast still live' : brb.manual ? 'Switching to manual BRB…' : 'OBS live · automatic protection armed';
- $('#brb-help').textContent = brb.manual ? 'OBS reconnecting will not end manual BRB. Switch BRB off when you are ready.' : 'OBS disconnects activate BRB automatically, with no time limit. Only master off ends the broadcast.';
- if (connected && snapshot.forwarding && snapshot.playback?.id) {
-  $('#brb-status').textContent = brb.manual ? 'Manual BRB · video paused' : snapshot.playback.state === 'paused' ? 'Video paused · BRB on air' : 'Video playback · protection ready';
-  if (brb.manual) $('#brb-help').textContent = 'Switch manual BRB off to resume the video. OBS reconnecting will not replace it.';
- }
+ $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : active ? deliberate ? 'Deliberate break · OBS will not replace it' : 'Fallback media is on air' : brb.ready ? 'Fallback BRB is prepared' : 'Fallback BRB is not ready';
+ $('#brb-help').textContent = deliberate ? 'Use Return to resume the recorded stage, or choose a different stage.' : 'Prepared fallback is required for Prestream, clips, deliberate BRB and Ending. Ordinary LIVE can run without BRB.';
  $('#brb-settings').hidden = !brb.ready;
  const profile = snapshot.brb_profile;
  $('#brb-active-profile').hidden = !brb.ready || !profile;
@@ -226,18 +180,6 @@ function renderBRB() {
   }
  }
 }
-async function toggleBRB() {
- if (!connected || brbPending || !snapshot?.brb?.ready) return;
- const enabled = !snapshot.brb.manual;
- brbPending = true;
- controlError = '';
- render();
- try {
-  const response = await fetch(`${location.origin}/api/brb`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({enabled}), signal: AbortSignal.timeout(8000)});
-  if (!response.ok) throw new Error((await response.text()).trim());
- } catch (error) { controlError = error.message; }
- finally { brbPending = false; await refresh(); }
-}
 async function saveBRB(event) {
  event.preventDefault();
  if (!connected || assetsPending || window.streamProfile?.isPending()) return;
@@ -255,7 +197,6 @@ async function saveBRB(event) {
  } catch (error) { $('#brb-save-status').textContent = error.message; }
  finally { assetsPending = false; await refresh(); }
 }
-$('#brb-toggle').addEventListener('click', toggleBRB);
 $('#brb-form').addEventListener('submit', saveBRB);
 function brbFormChanged() {
  assetsDirty = true;
@@ -264,9 +205,6 @@ function brbFormChanged() {
 }
 $('#brb-form').addEventListener('input', brbFormChanged);
 $('#brb-form').addEventListener('change', brbFormChanged);
-$('#stop-cancel').addEventListener('click', () => $('#stop-dialog').close());
-$('#stop-confirm').addEventListener('click', () => { $('#stop-dialog').close(); setForwarding(false); });
-$('#forwarding-toggle').addEventListener('click', toggleForwarding);
 async function poll()
  { await refresh(); setTimeout(poll, 2000); }
 let resizeTimer;

@@ -351,7 +351,7 @@ func TestBRBLegacySettingsDefaultMessage(t *testing.T) {
 
 func TestBRBControlAndUploadAuthentication(t *testing.T) {
 	s := dashboardServer(t)
-	for _, path := range []string{"/api/brb", "/api/brb/image", "/api/brb/assets"} {
+	for _, path := range []string{"/api/stage/commands", "/api/brb/image", "/api/brb/assets"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, httptest.NewRequest("POST", path, nil))
 		if w.Code != 401 {
@@ -367,7 +367,7 @@ func TestBRBControlAndUploadAuthentication(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("cross-origin upload allowed")
 	}
-	if w := dashboardRequest(s, "PUT", "/api/brb", `{"enabled":true}`); w.Code != 409 {
+	if w := stageRequest(t, s, "brb", nil); w.Code != 409 {
 		t.Fatal("unconfigured BRB enabled")
 	}
 }

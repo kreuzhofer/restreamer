@@ -131,6 +131,11 @@ func (s *Server) brbImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.broadcast.mu.Lock()
+	if s.broadcast.media == nil {
+		s.broadcast.mu.Unlock()
+		http.Error(w, "BRB is not configured", 409)
+		return
+	}
 	// Open while holding the same lock used to replace/delete an old generation.
 	f, err := os.Open(filepath.Join(s.cfg.BRB.Directory, s.broadcast.media.settings.Generation, "image.png"))
 	s.broadcast.mu.Unlock()
@@ -154,6 +159,13 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.broadcast == nil {
+		http.Error(w, "Configure BRB before uploading assets", 409)
+		return
+	}
+	s.broadcast.mu.Lock()
+	configured := s.broadcast.media != nil
+	s.broadcast.mu.Unlock()
+	if !configured {
 		http.Error(w, "Configure BRB before uploading assets", 409)
 		return
 	}
@@ -219,9 +231,14 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if oldProfile != settings.Profile && s.forwarding.Load() {
-		http.Error(w, "Turn master forwarding off before changing the shared streaming profile", 409)
-		return
+	if oldProfile != settings.Profile {
+		s.broadcast.mu.Lock()
+		active := s.broadcast.control.stage != "OFF" || s.broadcast.control.pending != nil
+		s.broadcast.mu.Unlock()
+		if active {
+			http.Error(w, "Stop the broadcast or rehearsal and cancel pending starts before changing the shared streaming profile", 409)
+			return
+		}
 	}
 	// Profile-only saves that match the active profile must not rebuild media.
 	// Keep existing asset-update requests (including explicit re-preparation).
@@ -308,9 +325,14 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	settings.Generation = filepath.Base(dir)
 	s.controlMu.Lock()
 	defer s.controlMu.Unlock()
-	if oldProfile != settings.Profile && s.forwarding.Load() {
-		http.Error(w, "Profile unchanged: master forwarding was enabled during preparation", 409)
-		return
+	if oldProfile != settings.Profile {
+		s.broadcast.mu.Lock()
+		active := s.broadcast.control.stage != "OFF" || s.broadcast.control.pending != nil
+		s.broadcast.mu.Unlock()
+		if active {
+			http.Error(w, "Profile unchanged: a broadcast, rehearsal, or pending start began during preparation", 409)
+			return
+		}
 	}
 	if err = writeState(filepath.Join(root, "current.json"), settings); err != nil {
 		http.Error(w, "Cannot save BRB settings; previous assets remain active", 500)

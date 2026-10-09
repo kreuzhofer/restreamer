@@ -125,4 +125,68 @@ function createPreview(prefix, url, liveText, waitingText) {
 return {update, position: () => ({epoch:Number(video.dataset.epoch),timeMS:Number(video.dataset.baseMs)+video.currentTime*1000,ready:video.readyState>=2})};
 }
 window.updatePreview = createPreview('preview','/api/preview','Live input preview','Waiting for OBS input').update;
-window.broadcastPreview = createPreview('broadcast','/api/broadcast-preview','Live broadcast preview','Master forwarding is off');
+window.broadcastPreview = createPreview('broadcast','/api/broadcast-preview','Broadcast-source preview · selected feed','Broadcast is off');
+
+// Candidate previews are finite exact revisions. Reaching EOF must leave the
+// decoded video available for review instead of reconnecting like a live feed.
+(() => {
+  const video = document.querySelector('#candidate-video');
+  const status = document.querySelector('#candidate-status');
+  let controller, objectURL;
+  function stop() {
+    controller?.abort(); controller = undefined;
+    video.pause(); video.removeAttribute('src'); video.load();
+    if (objectURL) { URL.revokeObjectURL(objectURL); objectURL = undefined; }
+  }
+  function appended(buffer, value, signal) {
+    return new Promise((resolve, reject) => {
+      const finish = error => { buffer.removeEventListener('updateend', done); buffer.removeEventListener('error', failed); signal.removeEventListener('abort', aborted); error ? reject(error) : resolve(); };
+      const done = () => finish();
+      const failed = () => finish(new Error('This ready revision could not be decoded by the browser.'));
+      const aborted = () => finish(new DOMException('Stopped', 'AbortError'));
+      buffer.addEventListener('updateend', done, {once: true}); buffer.addEventListener('error', failed, {once: true}); signal.addEventListener('abort', aborted, {once: true});
+      if (signal.aborted) { aborted(); return; }
+      try { value ? buffer.appendBuffer(value) : buffer.remove(0, Math.max(0, video.currentTime - 10)); } catch (error) { finish(error); }
+    });
+  }
+  window.previewCandidate = async revision => {
+    stop();
+    const current = new AbortController(); controller = current;
+    let reader, timeout;
+    status.textContent = `Loading exact revision ${revision}…`;
+    try {
+      timeout = setTimeout(() => current.abort(new Error('Revision preview timed out. Choose Preview revision to try again.')), 15000);
+      const response = await fetch(`${location.origin}/api/library/revisions/${encodeURIComponent(revision)}/preview`, {signal: current.signal, cache: 'no-store'});
+      clearTimeout(timeout);
+      if (!response.ok) throw new Error((await response.text()).trim() || 'Ready revision preview unavailable.');
+      const mime = response.headers.get('X-Preview-Codecs');
+      if (!window.MediaSource || !mime || !MediaSource.isTypeSupported(mime)) throw new Error('Preview needs a browser with Media Source Extensions and H.264/AAC support.');
+      const source = new MediaSource(); objectURL = URL.createObjectURL(source);
+      await new Promise((resolve, reject) => {
+        source.addEventListener('sourceopen', resolve, {once: true});
+        current.signal.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), {once: true});
+        video.src = objectURL;
+      });
+      const buffer = source.addSourceBuffer(mime); reader = response.body.getReader();
+      let started = false;
+      while (!current.signal.aborted) {
+        timeout = setTimeout(() => current.abort(new Error('Revision preview stalled. Choose Preview revision to try again.')), 15000);
+        const {done, value} = await reader.read();
+        clearTimeout(timeout);
+        if (done) { source.endOfStream(); break; }
+        await appended(buffer, value, current.signal);
+        if (!started && buffer.buffered.length) {
+          started = true;
+          status.textContent = `Previewing revision ${revision}. This does not change the broadcast.`;
+          video.play().catch(() => { if (!current.signal.aborted) status.textContent = `Revision ${revision} ready · press Play to review.`; });
+        }
+        // Read ahead only a small window, including while the preview is paused.
+        while (!current.signal.aborted && buffer.buffered.length && buffer.buffered.end(buffer.buffered.length - 1) - video.currentTime > 30) await new Promise(resolve => setTimeout(resolve, 250));
+        if (buffer.buffered.length && video.currentTime > 20 && buffer.buffered.start(0) < video.currentTime - 20) await appended(buffer, null, current.signal);
+      }
+    } catch (error) {
+      if (!current.signal.aborted || current.signal.reason?.name !== 'AbortError') status.textContent = current.signal.reason?.message || error.message;
+    } finally { clearTimeout(timeout); try { await reader?.cancel(); } catch { /* Preview already disconnected. */ } }
+  };
+  window.addEventListener('pagehide', stop);
+})();

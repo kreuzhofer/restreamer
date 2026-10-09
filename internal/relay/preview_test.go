@@ -154,7 +154,7 @@ func TestPreviewViewerLimit(t *testing.T) {
 }
 
 func TestPreviewInvalidConfig(t *testing.T) {
-	for _, p := range []*rtmp.Message{videoConfig(), packet(rtmp.Video, 0, 0x17, 0, 0, 0, 0), packet(rtmp.Audio, 0, 0xaf, 0, 0xff)} {
+	for _, p := range []*rtmp.Message{packet(rtmp.Video, 0, 0x17, 0, 0, 0, 0, 1, 0x64, 0, 0x1f), packet(rtmp.Video, 0, 0x17, 0, 0, 0, 0), packet(rtmp.Audio, 0, 0xaf, 0, 0xff)} {
 		m := previewMux{}
 		if _, err := m.push(p); err == nil {
 			t.Fatal("invalid configuration accepted")

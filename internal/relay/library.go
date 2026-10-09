@@ -18,22 +18,25 @@ import (
 )
 
 type LibraryEntry struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	State            string            `json:"state"`
-	Progress         int               `json:"progress"`
-	Duration         float64           `json:"duration"`
-	Bytes            int64             `json:"bytes"`
-	Error            string            `json:"error,omitempty"`
-	Profile          config.BRBProfile `json:"profile"`
-	stamp, key, path string
-	index            *clipIndex
+	ID                         string            `json:"id"`
+	Revision                   string            `json:"revision,omitempty"`
+	Name                       string            `json:"name"`
+	State                      string            `json:"state"`
+	Progress                   int               `json:"progress"`
+	Duration                   float64           `json:"duration"`
+	Bytes                      int64             `json:"bytes"`
+	Error                      string            `json:"error,omitempty"`
+	Profile                    config.BRBProfile `json:"profile"`
+	stamp, key, path, identity string
+	index                      *clipIndex
 }
 type LibraryStatus struct {
-	Enabled     bool           `json:"enabled"`
-	UploadLimit int64          `json:"upload_limit"`
-	Error       string         `json:"error,omitempty"`
-	Files       []LibraryEntry `json:"files"`
+	Enabled     bool                 `json:"enabled"`
+	UploadLimit int64                `json:"upload_limit"`
+	Error       string               `json:"error,omitempty"`
+	Files       []LibraryEntry       `json:"files"`
+	Revisions   []MediaRevision      `json:"revisions"`
+	Selections  StageMediaSelections `json:"selections"`
 }
 type videoLibrary struct {
 	mu, scanMu, uploadMu sync.Mutex
@@ -41,6 +44,8 @@ type videoLibrary struct {
 	limit                int64
 	profile              config.BRBProfile
 	entries              map[string]*LibraryEntry
+	revisions            map[string]*MediaRevision
+	selected             StageMediaSelections
 	wake                 chan struct{}
 	cancel               context.CancelFunc
 	jobID                string
@@ -67,7 +72,7 @@ func clipCacheKey(id, stamp string, p config.BRBProfile) string {
 }
 
 func (s *Server) initializeLibrary() error {
-	if s.broadcast == nil {
+	if s.broadcast == nil || s.broadcast.media == nil {
 		return nil
 	}
 	root := s.cfg.LibraryDirectory
@@ -78,13 +83,13 @@ func (s *Server) initializeLibrary() error {
 	if limit == 0 {
 		limit = 4096
 	}
-	for _, name := range []string{"originals", "prepared"} {
+	for _, name := range []string{"originals", "prepared", "revisions"} {
 		if os.MkdirAll(filepath.Join(root, name), 0700) != nil {
 			return errors.New("cannot create persistent video library")
 		}
 	}
-	s.library = &videoLibrary{root: root, limit: int64(limit) << 20, profile: s.broadcast.media.settings.Profile, entries: make(map[string]*LibraryEntry), wake: make(chan struct{}, 1)}
-	return nil
+	s.library = &videoLibrary{root: root, limit: int64(limit) << 20, profile: s.broadcast.media.settings.Profile, entries: make(map[string]*LibraryEntry), revisions: make(map[string]*MediaRevision), wake: make(chan struct{}, 1)}
+	return s.library.loadRevisions()
 }
 func (l *videoLibrary) notify() {
 	select {
@@ -100,6 +105,8 @@ func (l *videoLibrary) status() LibraryStatus {
 		status.Files = append(status.Files, *e)
 	}
 	sort.Slice(status.Files, func(i, j int) bool { return status.Files[i].Name < status.Files[j].Name })
+	status.Selections = l.selectionsLocked()
+	status.Revisions = l.revisionsLocked()
 	return status
 }
 func (l *videoLibrary) setProfile(profile config.BRBProfile) {
@@ -118,6 +125,7 @@ func (l *videoLibrary) setProfile(profile config.BRBProfile) {
 		e.Progress = 0
 		e.Error = ""
 		e.index = nil
+		e.Revision = ""
 		e.Profile = profile
 		e.key = clipCacheKey(e.ID, e.stamp, profile)
 		if wasDiscovering {
@@ -156,13 +164,22 @@ func (l *videoLibrary) scan() {
 		}
 		id := clipHash(file.Name())
 		seen[id] = true
-		stamp := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
 		e := l.entries[id]
+		identity := sourceFileIdentity(info)
+		stamp := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+		var digestErr error
+		if e != nil && identity != "" && e.identity == identity {
+			stamp = e.stamp
+		} else if info.Size() > 0 && info.Size() <= l.limit {
+			var digest string
+			digest, digestErr = mediaDigest(filepath.Join(l.root, "originals", file.Name()))
+			stamp += ":" + digest
+		}
 		if e == nil || e.stamp != stamp {
 			if l.jobID == id && l.cancel != nil {
 				l.cancel()
 			}
-			e = &LibraryEntry{ID: id, Name: file.Name(), State: "discovering", Bytes: info.Size(), stamp: stamp, Profile: l.profile}
+			e = &LibraryEntry{ID: id, Name: file.Name(), State: "discovering", Bytes: info.Size(), stamp: stamp, identity: identity, Profile: l.profile}
 			e.key = clipCacheKey(id, stamp, l.profile)
 			l.entries[id] = e
 		} else if e.State == "discovering" {
@@ -171,6 +188,10 @@ func (l *videoLibrary) scan() {
 		if info.Size() > l.limit || info.Size() == 0 {
 			e.State = "failed"
 			e.Error = "MP4 is empty or exceeds the configured upload limit"
+		}
+		if digestErr != nil {
+			e.State = "failed"
+			e.Error = "Cannot read original MP4; check storage"
 		}
 	}
 	if l.lastError == "" {
@@ -253,7 +274,8 @@ func (l *videoLibrary) validateOriginal(e *LibraryEntry) error {
 	if info.Size() == 0 || info.Size() > l.limit {
 		return errors.New("MP4 is empty or exceeds the configured upload limit")
 	}
-	if fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano()) != e.stamp {
+	digest, err := mediaDigest(filepath.Join(l.root, "originals", e.Name))
+	if err != nil || fmt.Sprintf("%d:%d:%s", info.Size(), info.ModTime().UnixNano(), digest) != e.stamp {
 		return errors.New("Original MP4 changed; waiting for library discovery")
 	}
 	return nil
@@ -322,6 +344,11 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 	e.path = path
 	e.index = idx
 	e.Error = ""
+	if err := l.retainRevision(e); err != nil {
+		e.State = "failed"
+		e.Error = "Cannot retain prepared revision; check storage"
+		return
+	}
 	// Keep originals; obsolete conversions can be unlinked after replacement.
 	// An already-open playing file remains readable on the supported Unix hosts.
 	files, _ := os.ReadDir(filepath.Join(l.root, "prepared"))
@@ -345,7 +372,7 @@ func (l *videoLibrary) open(id string) (*clipPlayback, config.BRBProfile, error)
 	if err != nil {
 		return nil, e.Profile, errors.New("Cannot open prepared video; prepare it again")
 	}
-	return &clipPlayback{ID: e.ID, Name: e.Name, reader: reader}, e.Profile, nil
+	return &clipPlayback{ID: e.ID, Name: e.Name, Revision: e.Revision, reader: reader}, e.Profile, nil
 }
 func (l *videoLibrary) retry(id string) error {
 	l.mu.Lock()

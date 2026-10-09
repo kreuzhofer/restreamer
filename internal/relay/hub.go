@@ -14,13 +14,14 @@ var errCodec = errors.New("v1 requires H.264 video and AAC audio; choose these c
 // A subscription belongs to one connection attempt. Overflow invalidates the
 // whole attempt: resuming with arbitrary interframes would produce broken video.
 type subscription struct {
-	packets      chan *rtmp.Message
-	failed       chan struct{}
-	waiting      bool
-	bytes        int
-	broken       bool
-	output       *output
-	queuedFrames uint64
+	packets       chan *rtmp.Message
+	failed        chan struct{}
+	waiting       bool
+	bytes         int
+	broken        bool
+	output        *output
+	queuedFrames  uint64
+	pendingWrites int // Includes the packet currently being written to the socket.
 }
 
 type hub struct {
@@ -80,6 +81,18 @@ func (h *hub) consumed(s *subscription, m *rtmp.Message) {
 	h.mu.Unlock()
 }
 
+func (h *hub) delivered(s *subscription) {
+	h.mu.Lock()
+	s.pendingWrites--
+	h.mu.Unlock()
+}
+
+func (h *hub) pending(s *subscription) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return s.pendingWrites
+}
+
 func (h *hub) offer(s *subscription, m *rtmp.Message) {
 	if s.broken {
 		if s.output != nil && isVideoFrame(m) {
@@ -90,6 +103,7 @@ func (h *hub) offer(s *subscription, m *rtmp.Message) {
 	if s.bytes+len(m.Body) <= h.limit {
 		select {
 		case s.packets <- m:
+			s.pendingWrites++
 			s.bytes += len(m.Body)
 			if isVideoFrame(m) {
 				s.queuedFrames++
@@ -159,7 +173,7 @@ func (h *hub) publish(m *rtmp.Message) error {
 		}
 	}
 	for s := range h.subs {
-		if s.output != nil && !s.output.forwardingAllowed() {
+		if s.output != nil && !s.output.admissionAllowed() {
 			if isVideoFrame(m) {
 				s.output.discardFrames(1, true)
 			}

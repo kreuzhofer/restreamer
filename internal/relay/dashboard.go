@@ -5,10 +5,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/json"
-	"errors"
-	"io"
 	"io/fs"
-	"mime"
 	"net/http"
 	"time"
 )
@@ -25,14 +22,17 @@ func (s *Server) Handler() http.Handler {
 	private := http.NewServeMux()
 	private.HandleFunc("GET /status", s.dashboardStatus)
 	private.HandleFunc("GET /api/dashboard", s.dashboardStatus)
-	private.HandleFunc("PUT /api/targets/{name}", s.targetControl)
-	private.HandleFunc("PUT /api/forwarding", s.targetControl)
+	private.HandleFunc("GET /api/stage", s.stageStatusHTTP)
+	private.HandleFunc("POST /api/stage/commands", s.stageCommandHTTP)
+	private.HandleFunc("GET /api/stage/commands/{id}", s.stageCommandOutcomeHTTP)
 	private.HandleFunc("GET /api/preview", s.preview)
 	private.HandleFunc("GET /api/broadcast-preview", s.preview)
 	private.HandleFunc("GET /api/library", s.libraryStatus)
+	private.HandleFunc("GET /api/stage-media", s.stageMediaSettings)
+	private.HandleFunc("PUT /api/stage-media", s.stageMediaSettings)
+	private.HandleFunc("PUT /api/library/prepare", s.libraryPrepare)
+	private.HandleFunc("GET /api/library/revisions/{revision}/preview", s.libraryRevisionPreview)
 	private.HandleFunc("POST /api/library/upload", s.libraryUpload)
-	private.HandleFunc("PUT /api/playback", s.playbackControl)
-	private.HandleFunc("PUT /api/brb", s.targetControl)
 	private.HandleFunc("POST /api/brb/assets", s.brbAssets)
 	private.HandleFunc("GET /api/brb/image", s.brbImage)
 	assets, _ := fs.Sub(dashboardFiles, "web")
@@ -85,17 +85,21 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 		BRB            BRBStatus       `json:"brb"`
 		BRBAssets      brbSettings     `json:"brb_assets"`
 		BRBProfile     any             `json:"brb_profile,omitempty"`
+		Stage          StageStatus     `json:"stage"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputs {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
 	status.Forwarding = s.forwarding.Load()
 	if s.broadcast != nil {
+		status.Stage = s.broadcast.stageStatus(now)
 		status.BRB = s.broadcast.status()
 		status.Playback = s.broadcast.playbackStatus(now)
 		status.LibraryEnabled = s.library != nil
 		s.broadcast.mu.Lock()
-		status.BRBAssets = s.broadcast.media.settings
+		if s.broadcast.media != nil {
+			status.BRBAssets = s.broadcast.media.settings
+		}
 		s.broadcast.mu.Unlock()
 		b := status.BRBAssets.Profile
 		status.BRBProfile = map[string]int{"width": b.Width, "height": b.Height, "fps": b.FPS, "sample_rate": b.SampleRate}
@@ -105,56 +109,4 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status)
-}
-
-func (s *Server) targetControl(w http.ResponseWriter, r *http.Request) {
-	// A custom header plus JSON forces cross-origin browser requests through a
-	// preflight, which this server does not allow. Also reject hostile Origins.
-	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if !controlOriginAllowed(r) || mediaType != "application/json" {
-		http.Error(w, "Control requests require same-origin JSON", http.StatusForbidden)
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1024)
-	defer r.Body.Close()
-	var body struct {
-		Enabled   *bool `json:"enabled"`
-		Confirmed bool  `json:"confirmed,omitempty"`
-	}
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&body) != nil || body.Enabled == nil || decoder.Decode(new(any)) != io.EOF {
-		http.Error(w, "Expected one JSON object with enabled: true or false", http.StatusBadRequest)
-		return
-	}
-	if r.URL.Path == "/api/brb" {
-		if s.broadcast == nil {
-			http.Error(w, "BRB is not configured", 409)
-			return
-		}
-		s.broadcast.setManual(*body.Enabled)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.URL.Path == "/api/forwarding" {
-		if !*body.Enabled && !body.Confirmed {
-			http.Error(w, "Confirm turning master forwarding off: this ends the broadcast, including BRB.", http.StatusConflict)
-			return
-		}
-		s.setForwarding(*body.Enabled)
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if err := s.setTarget(r.PathValue("name"), *body.Enabled); err != nil {
-		code := http.StatusInternalServerError
-		if errors.Is(err, errUnknownTarget) {
-			code = http.StatusNotFound
-		}
-		if errors.Is(err, errTargetUnavailable) {
-			code = http.StatusConflict
-		}
-		http.Error(w, err.Error(), code)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }

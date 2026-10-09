@@ -10,10 +10,19 @@ func (s *Server) setForwarding(enabled bool) {
 	}
 	if !enabled && s.broadcast != nil {
 		s.broadcast.mu.Lock()
+		s.broadcast.control.stage, s.broadcast.control.mode = "OFF", "off"
+		s.broadcast.cancelPending("cancelled", "Broadcast stopped")
 		s.broadcast.stopClip("")
+		s.broadcast.clearReturn()
 		s.broadcast.active = false
 		s.broadcast.live = false
 		s.broadcast.resetBroadcastPreview()
+		s.broadcast.mu.Unlock()
+	} else if enabled && s.broadcast != nil {
+		s.broadcast.mu.Lock()
+		if s.broadcast.control.stage == "OFF" {
+			s.broadcast.control.stage, s.broadcast.control.mode = "LIVE", "real"
+		}
 		s.broadcast.mu.Unlock()
 	}
 	for _, o := range s.outputs {

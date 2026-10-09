@@ -17,6 +17,57 @@ import (
 
 const brbFPSTolerance = 0.1
 
+// Readiness checks encoded framing and initialization without decoding or
+// re-encoding live video. A FLV keyframe flag alone can describe an empty or
+// malformed access unit and must not activate a destination session.
+func validLiveKeyframe(header, frame *rtmp.Message) bool {
+	if header == nil || len(header.Body) < 12 || header.Body[0]&0x8f != 7 || header.Body[1] != 0 ||
+		frame == nil || len(frame.Body) < 7 || frame.Body[0] != 0x17 || frame.Body[1] != 1 {
+		return false
+	}
+	var avc amp4.AVCDecoderConfiguration
+	avc.SetType(amp4.BoxTypeAvcC())
+	if _, err := amp4.Unmarshal(bytes.NewReader(header.Body[5:]), uint64(len(header.Body)-5), &avc, amp4.Context{}); err != nil ||
+		avc.ConfigurationVersion != 1 || len(avc.SequenceParameterSets) == 0 || len(avc.PictureParameterSets) == 0 || avc.LengthSizeMinusOne == 2 {
+		return false
+	}
+	for _, parameter := range avc.SequenceParameterSets {
+		var sps h264.SPS
+		if len(parameter.NALUnit) < 4 || parameter.NALUnit[0]&0x1f != 7 || sps.Unmarshal(parameter.NALUnit) != nil {
+			return false
+		}
+	}
+	for _, parameter := range avc.PictureParameterSets {
+		if len(parameter.NALUnit) < 2 || parameter.NALUnit[0]&0x9f != 8 {
+			return false
+		}
+	}
+	lengthBytes := int(avc.LengthSizeMinusOne) + 1
+	payload := frame.Body[5:]
+	idr := false
+	for len(payload) > 0 {
+		if len(payload) < lengthBytes {
+			return false
+		}
+		size := 0
+		for _, value := range payload[:lengthBytes] {
+			size = size<<8 | int(value)
+		}
+		payload = payload[lengthBytes:]
+		if size < 1 || size > len(payload) || payload[0]&0x80 != 0 {
+			return false
+		}
+		if payload[0]&0x1f == 5 {
+			if size < 2 {
+				return false
+			}
+			idr = true
+		}
+		payload = payload[size:]
+	}
+	return idr
+}
+
 type brbMismatch struct {
 	Field  string `json:"field"`
 	Ingest any    `json:"ingest"`
@@ -50,6 +101,10 @@ func (s *Server) validateBRBInput(m *rtmp.Message) error {
 		return nil
 	}
 	s.broadcast.mu.Lock()
+	if s.broadcast.media == nil {
+		s.broadcast.mu.Unlock()
+		return nil
+	}
 	cfg := s.broadcast.media.settings.Profile
 	s.broadcast.mu.Unlock()
 	check := &brbInputCheck{ingest: make(map[string]any), brb: make(map[string]any), mismatches: []brbMismatch{}}

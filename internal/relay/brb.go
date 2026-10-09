@@ -22,6 +22,7 @@ type BRBStatus struct {
 // A broadcast outlives publishers. All source selection and timestamp mapping
 // happen under mu, before fanout; output failures remain independent.
 type broadcast struct {
+	control                 stageControl
 	clip                    *clipPlayback
 	playbackError           string
 	previewChanged          chan struct{}
@@ -47,11 +48,15 @@ type broadcast struct {
 }
 
 func newBroadcast(s *Server, media *brbMedia) *broadcast {
-	return &broadcast{server: s, hub: newHub(s.cfg.QueueBytes, s.outputs...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
+	b := &broadcast{server: s, control: newStageControl(), hub: newHub(s.cfg.QueueBytes, s.outputs...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
+	if s.forwarding.Load() {
+		b.control.stage, b.control.mode = "LIVE", "real"
+	}
+	return b
 }
 
 func (b *broadcast) run(ctx context.Context) {
-	defer func() { b.mu.Lock(); b.stopClip(""); b.resetBroadcastPreview(); b.mu.Unlock() }()
+	defer func() { b.mu.Lock(); b.stopClip(""); b.clearReturn(); b.resetBroadcastPreview(); b.mu.Unlock() }()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -79,7 +84,7 @@ func (b *broadcast) status() BRBStatus {
 	} else if b.live && b.server.forwarding.Load() {
 		reason = "live"
 	}
-	return BRBStatus{Enabled: true, Ready: b.media != nil, Active: b.active && b.server.forwarding.Load(), Manual: b.manual, Reason: reason, Error: b.lastError}
+	return BRBStatus{Enabled: b.media != nil, Ready: b.media != nil, Active: b.active && b.control.stage != "OFF", Manual: b.manual, Reason: reason, Error: b.lastError}
 }
 
 func (b *broadcast) setManual(enabled bool) {
@@ -122,12 +127,16 @@ func (b *broadcast) tick(now time.Time) {
 	defer b.mu.Unlock()
 	previousTick := b.lastTick
 	b.lastTick = now
-	if !b.server.forwarding.Load() {
+	b.expirePending(now)
+	if b.control.stage == "OFF" {
 		b.active = false
 		b.live = false
 		return
 	}
-	stale := b.lastVideo.IsZero() || now.Sub(b.lastVideo) >= inputStall || b.lastAudio.IsZero() || now.Sub(b.lastAudio) >= inputStall
+	if b.tickEndingDrain(now) {
+		return
+	}
+	stale := b.lastVideo.IsZero() || now.Sub(b.lastVideo) >= inputStall || b.media != nil && (b.lastAudio.IsZero() || now.Sub(b.lastAudio) >= inputStall)
 	if stale && b.live {
 		b.live = false
 	}
@@ -142,7 +151,7 @@ func (b *broadcast) tick(now time.Time) {
 	if b.tickClip(now) {
 		return
 	}
-	if b.manual || !b.live {
+	if b.media != nil && (b.manual || !b.live) {
 		if !b.active {
 			b.startFallback(now)
 		}
@@ -221,7 +230,13 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	if m.Type == rtmp.Audio && len(m.Body) > 1 && m.Body[1] == 1 {
 		b.lastAudio = now
 	}
-	if !b.server.forwarding.Load() || b.manual || b.clip != nil {
+	b.expirePending(now)
+	key := isVideoFrame(m) && m.Body[0]>>4 == 1
+	ready := key && validLiveKeyframe(b.headers[1], m) && (b.media == nil || b.headers[2] != nil && !b.lastAudio.IsZero() && now.Sub(b.lastAudio) < inputStall)
+	if b.control.pending != nil && ready {
+		b.commitLive(now)
+	}
+	if b.control.stage != "LIVE" || b.manual || b.clip != nil {
 		if isVideoFrame(m) {
 			for _, o := range b.server.outputs {
 				o.discardFrames(1, true)
@@ -229,9 +244,8 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 		}
 		return
 	}
-	key := isVideoFrame(m) && m.Body[0]>>4 == 1
 	if !b.live {
-		if !key || b.headers[1] == nil || b.headers[2] == nil || b.lastAudio.IsZero() || now.Sub(b.lastAudio) >= inputStall {
+		if !ready {
 			if isVideoFrame(m) {
 				for _, o := range b.server.outputs {
 					o.discardFrames(1, true)
@@ -252,6 +266,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 		b.live = true
 		b.active = false
 		b.lastError = ""
+		b.playbackError = ""
 		b.server.log.Info("live input resumed")
 	}
 	if header >= 0 {
@@ -286,12 +301,18 @@ func (b *broadcast) emit(m *rtmp.Message, ts time.Duration) {
 		if cts&0x800000 != 0 {
 			cts |= ^int32(0xffffff)
 		}
-		fps := b.media.settings.Profile.FPS
+		fps := 0
+		if b.media != nil {
+			fps = b.media.settings.Profile.FPS
+		}
 		if fps > 0 {
 			end += max(0, time.Duration(cts)*time.Millisecond) + time.Second/time.Duration(fps)
 		}
 	} else if m.Type == rtmp.Audio && len(m.Body) > 1 && m.Body[1] == 1 {
-		rate := b.media.settings.Profile.SampleRate
+		rate := 0
+		if b.media != nil {
+			rate = b.media.settings.Profile.SampleRate
+		}
 		if rate > 0 {
 			end += 1024 * time.Second / time.Duration(rate)
 		}

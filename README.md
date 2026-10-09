@@ -30,7 +30,11 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - JSON logs, HTTP liveness/status endpoints, and graceful SIGTERM shutdown.
 - Password-protected dashboard with independent live target switches and rolling
   15-minute bitrate graphs for the input and every output. Switches persist in a
-  Docker volume; changing them does not disconnect OBS or other destinations.\n- Authenticated input video preview and a master forwarding switch that starts\n  off on every application launch, independently of saved target switches.
+  Docker volume; changing them does not disconnect OBS or other destinations.
+- Server-owned OFF, PRESTREAM, LIVE, BRB, CLIP, and ENDING stages, with separate
+  OBS-input and broadcast previews. Every application launch starts OFF.
+- Exact prepared-media selections, predictable clip returns, bounded ending
+  delivery, and isolated preview-only rehearsals.
 
 There is no live transcoding, recording, public playback endpoint, audio-only mode,
 Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher
@@ -60,7 +64,8 @@ URLs have defaults; override them with your platform's ingest URL if needed.
 Server URLs contain the application path,
 **without** the stream key; keys are sent separately and literally.
 Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to enable the dashboard.
-Both credentials are needed to operate the forwarding switch. Without them,\nRTMP input and health checks still run, but forwarding remains off.
+Both credentials are needed to operate broadcast stages. Without them,
+RTMP input and health checks still run, but the broadcast remains OFF.
 
 ```sh
 docker compose pull
@@ -162,9 +167,10 @@ docker compose down
 unavailable. `/status` reports `publishing`, each target's state, connection attempt
 count, effective `enabled` flag, and media bytes sent (cumulative since process start).
 Disabled outputs report `enabled: false`, state `disabled`, and never connect or
-retry. If every output is disabled, the service still accepts OBS but discards
-the stream; nothing is broadcast. States for active targets are `idle`,
-`connecting`, `waiting_for_keyframe`, `streaming`, and `retrying`; `streaming` means
+retry. With every output disabled, OBS input and the broadcast preview can
+continue, but no destination receives media. Target states include `idle`,
+`connecting`, `waiting_for_keyframe`, `streaming`, `retrying`, `draining`, and
+`drained`; `streaming` means
 media is being written, not that a platform has made the broadcast public.
 
 ## Dashboard and live controls
@@ -173,7 +179,8 @@ Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS
 URL) and sign in with `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`. Authentication
 uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
 `/healthz` remains public for Docker healthchecks. If both credentials are absent,
-the dashboard and status API return 503 while RTMP input continues operating.\nForwarding stays off until enabled through the authenticated dashboard/API.
+the dashboard and status API return 503 while RTMP input continues operating.
+A broadcast starts only through the authenticated dashboard/API.
 
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
@@ -183,21 +190,54 @@ Docker network can use `http://restreamer:8080`; a host proxy can use
 `STATUS_BIND_ADDRESS` to a reachable private interface and allow that proxy through
 your firewall. You do not need WebSocket support.
 
-- **Forward to destinations** is the master switch. It starts **off on every
-  process/container launch**, even when saved target switches are on. Turn it on
-  to forward to enabled targets. Turning it off requires confirmation, closes all target connections, and
-  cancels retries; OBS input, statistics, and preview continue. It never changes
-  or persists over the individual target preferences. Reloading the page or
-  reconnecting OBS does not reset it; restarting the application does.
-- Switch a target **off**
- to close its connection and cancel retries. OBS and
-  other outputs continue. Switch it **on** to connect again, send cached headers,
-  and resume at the next live video keyframe. Nothing is buffered for replay.
-- With master forwarding on and BRB enabled, offline OBS is replaced by BRB
-  indefinitely. Without BRB, enabled targets remain **Ready** until input connects.
-  With the master off, they show **Forwarding off**.
-  A missing key or invalid server URL prevents enabling a target; update the
-  container configuration and redeploy to fix it.
+The stage controls express the intended phase of the show. The **on-air source**
+shows the actual selected media; neither confirms public playback on a platform.
+The server owns playback, pending transitions, and ending completion, so closing
+all dashboard clients does not stop a sequence.
+
+| Stage/action | Behavior |
+| --- | --- |
+| **OFF** | No destination delivery. OBS may remain connected and its input preview continues. Every process restart returns here. |
+| **Prestream** | Validate the saved exact starting-soon revision and prepared BRB fallback, then loop it until an explicit stage change. OBS cannot interrupt it. |
+| **Go live** | Keep the current source while waiting up to 10 seconds for a fresh compatible OBS keyframe. Show the pending request and allow cancellation. Timeout leaves the previous sequence intact. Ordinary LIVE works with BRB disabled. |
+| **BRB** | Select a deliberate break. Reconnecting OBS does not leave it. A playing clip is suspended with its position, explicit pause state, and original return stage. |
+| **Play clip** | Play the chosen exact ready revision once, then return to the recorded stage. Replacing clip A with B preserves A's original return destination. A clip interrupting PRESTREAM resumes its original revision near its saved position. |
+| **Return / Stop clip** | Restore the recorded stage; Return from BRB resumes a suspended clip when one exists. An unavailable return source holds fallback BRB with an explanation. |
+| **End stream** | Validate and play the saved ending once, then independently drain each connected destination for at most 10 seconds before selecting OFF. Show incomplete destinations, including those unavailable when draining begins. |
+| **Stop now** | Confirm an immediate stop of the sequence, pending transitions, destination connections, and retries. OBS input and saved target/media selections remain available. |
+
+Only **Prestream** and **Go live** can start from OFF. BRB, clips, and ending
+require an active session; actions that need fallback reject missing/unprepared
+BRB before changing anything. Re-selecting the current stage or current clip is a
+no-op: it does not restart playback or reset a pending deadline. Use **Retry** to
+recover failed prepared-media playback. A runtime media failure holds fallback
+BRB with a persistent error and explicit recovery actions; it never exposes OBS
+automatically. Established LIVE can recover OBS automatically after an outage.
+
+Stage changes, selecting a different clip, Return, Retry, Stop clip, Stop now,
+and media replacement require confirmation of their actual effect. Confirmation
+is bound to the reviewed stage and media selection. Another client's change
+requires fresh review; ordinary playback progress does not. A running ENDING
+rejects ordinary stage changes with **Ending in progress**. Confirmed Stop now
+is its early exit. Explicit ending-media replacement restarts that ending and
+postpones shutdown; ENDING cannot be paused or scrubbed.
+
+Choose **Preview only** when starting a rehearsal. It uses the same sequence and
+broadcast preview but opens no destination connections, even if target switches
+are enabled. **PREVIEW ONLY — NOT BROADCASTING** remains visible. Stop rehearsal
+before starting a real session. For a real session, disabling the last destination
+requires confirmation and retains the stage/preview with **NO DESTINATIONS — NOT
+SENDING**. Re-enabling a destination requires confirmation that it joins the
+current source. During ending playback, targets may be disabled but no additional
+targets may be enabled; existing enabled targets can reconnect until final drain.
+Final drain cancels pending connects and allows no new destination sessions.
+
+- Switch a target off to close its connection and cancel its retries independently.
+  Saved target preferences do not start a session by themselves. A missing key or
+  invalid URL prevents enabling that target; update the configuration and redeploy.
+- A healthy destination closes as soon as its queued and in-flight writes finish;
+  it does not wait for a slow destination's deadline. Ending completion confirms
+  **relay writes**, not platform playback or public availability.
 - Each card shows its connection state, attempts, and latest issue with a
   timestamp. A recovered target keeps its last issue visible for diagnosis.
   Errors are sanitized and never contain destination URLs or keys.
@@ -212,8 +252,8 @@ your firewall. You do not need WebSocket support.
 ### Input preview
 
 The input monitor and player share a row on desktop and stack on smaller screens.
-The player starts muted and previews the original input even with master forwarding
-or all destinations off. Use its audio/fullscreen controls or **Pause preview** to
+The player starts muted and previews the original input even while the stage is
+OFF, during rehearsal, or with all destinations off. Use its audio/fullscreen controls or **Pause preview** to
 stop downloading video without changing forwarding.
 
 Preview uses authenticated `GET /api/preview`: Go repackages H.264/AAC-LC into
@@ -255,7 +295,7 @@ Each destination also shows **Relay drops**, with expandable frame counters:
   connection's queue, not fully written, or omitted while an enabled destination
   is disconnected after an error. An in-flight failed write is counted once.
 - **Omitted while paused:** frames arriving or discarded while that target is
-  disabled or master forwarding is off; these do not increase relay drops.
+  disabled or destination delivery is off; these do not increase relay drops.
 - **Skipped:** initial connection setup, waiting for a keyframe, old-timestamp
   media during resynchronization, and buffered frames discarded on intentional
   cancellation or input-session shutdown. These do not increase relay drops.
@@ -282,24 +322,55 @@ samples (timestamps in Unix milliseconds). Existing `input` and `outputs` values
 remain bitrates in bits per second; `input_fps` and `output_fps` add frames per
 second. Status includes cumulative `input_frames`; target objects include
 `video_frames_sent`, `dropped_frames`, `paused_frames`, and `skipped_frames`.
-`GET /status` omits history. Both include `forwarding`, the current master switch.
-Set it with `PUT /api/forwarding` and `{"enabled":true}` or
-`{"enabled":false,"confirmed":true}`,
-using the same authentication, JSON content type, and `X-Restreamer-Control: 1`
-header as target controls. **Migration for API clients:** master-off requests
-without `confirmed:true` now return 409 without changing the switch. Master
-changes affect the running process only.
-Set a target switch using authenticated JSON:
+`GET /status` omits history. Both include `stage` and the effective `forwarding`
+gate; `forwarding` is status, not an independent operator control.
 
-```sh
-curl --user "$DASHBOARD_USERNAME" \
-  -X PUT http://127.0.0.1:8080/api/targets/twitch \
-  -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
-  --data '{"enabled":false}'
+### Shared stage API and migration
+
+Use authenticated `GET /api/stage` for the stage, actual source, delivery mode,
+server identity, confirmation context, pending transition, and command outcomes.
+Submit JSON commands to `POST /api/stage/commands` with
+`X-Restreamer-Control: 1`. Browser mutations must be same-origin. A command has:
+
+```json
+{
+  "id": "a-new-unique-command-id",
+  "server_id": "server_id-from-reviewed-stage-status",
+  "context": "context-from-reviewed-stage-status",
+  "action": "prestream",
+  "confirmed": true,
+  "mode": "preview_only",
+  "revision": "exact-ready-revision-reviewed-by-the-operator"
+}
 ```
 
-Curl prompts for the password. The control API rejects cross-origin browser
-requests and requires the custom header above; successful updates return 204.
+Use a fresh command ID for a new deliberate action. Retrying the **identical**
+request with the same ID reconciles a lost response without repeating its effect;
+`GET /api/stage/commands/{id}` retrieves its correlated outcome. A reused ID with
+different content is rejected. The server retains up to 256 command outcomes,
+including an outstanding transition; older identities expire with their review
+context and cannot be replayed. A missing outcome requires a fresh state review
+and user action. After a server restart, refresh state and require
+a fresh user action instead of replaying old commands. Stale confirmation contexts
+are rejected. Completed requests return 200, pending transitions return 202, and
+state/confirmation conflicts return 409 with an explanation. Do not turn
+`confirmed:true` into an automatic response to a conflict.
+
+The shared actions are `prestream`, `go_live`, `brb`, `return`, `play_clip`,
+`end_stream`, `stop_now`, `retry`, `stop_clip`, `pause`, `resume`, `seek`,
+`set_loop`, `cancel_pending`, `replace_now`, `replace_on_return`, and `set_target`.
+Clip selection/replacement identifies `revision`; `seek` uses seconds in
+`position`; `set_loop` uses `loop`; `set_target` uses `target` and `enabled`.
+Starts select `mode: "real"` or `"preview_only"`. Direct clip pause, resume, and
+seek do not create a different stage; protected actions still require review.
+
+**API migration:** the former `PUT /api/forwarding`, `PUT /api/brb`,
+`PUT /api/playback`, and `PUT /api/targets/{name}` mutation routes are removed.
+Update automation to the shared command contract; none provides a bypass around
+stage validation, confirmation, ending protection, or rehearsal isolation.
+Media-management routes remain separate: use `PUT /api/library/prepare` with
+`{"id":"library-entry-id"}` to prepare/retry an original, and the revision and
+selection APIs documented below. `/healthz` remains public.
 
 ## Configuration
 
@@ -411,25 +482,20 @@ They use local endpoints and do not broadcast to real platform accounts.
 Enable BRB by setting `BRB_ENABLED=true` in `.env` and recreating the Compose
 service. It defaults off so existing deployments retain their behavior. Custom
 configurations need `brb.enabled=true`, a writable directory, and an initial
-profile (see `config.example.json`). With BRB enabled, master forwarding **on starts broadcasting even
-before OBS connects**. It sends the prepared BRB screen and audio to enabled
-outputs. Master forwarding still starts off after every application restart.
+profile (see `config.example.json`). Enabling BRB prepares fallback media; it does
+not start delivery. Start an explicitly confirmed Prestream or Go live session.
+The broadcast still starts OFF after every application restart.
 
-- Lost or stalled OBS video/audio activates automatic BRB. Stalls are detected
-  after three seconds; a closed connection activates BRB immediately. There is
-  **no BRB timeout**. An OBS disconnect never ends the broadcast.
-- Automatic BRB returns to OBS only after valid current codec headers, audio,
-  and a fresh video keyframe arrive. Destination sessions stay connected and
-  timestamps continue across reconnects, including OBS resetting its timestamps.
-- **Manual BRB** overrides connected OBS and never expires. Turn it on before
-  restarting your computer. Reconnecting OBS does not disable manual BRB.
-  Turn it off to return to OBS at the next keyframe; if OBS is unavailable,
-  automatic BRB continues indefinitely.
-- **Master off**, with the dashboard confirmation, ends all outputs including
-  BRB/music. Individual target switches still control their own destinations.
-  Closing the dashboard, cancelling the dialog, or pressing Escape never stops
-  a broadcast. Application shutdown or loss of the relay's own connectivity
-  cannot be protected by BRB.
+- Established LIVE falls back to BRB when OBS disconnects or its video/audio
+  stalls for three seconds. Fallback has no automatic timeout.
+- LIVE recovers only after compatible current headers, audio, and a fresh video
+  keyframe arrive. Destination sessions stay connected and timestamps continue
+  across OBS reconnects, including OBS resetting its timestamps.
+- Deliberate BRB remains selected until an explicit action leaves it. Use Return
+  for the recorded stage or suspended clip; reconnecting OBS does not leave BRB.
+- Confirmed Stop now ends all outputs including BRB/music. Closing the dashboard,
+  cancelling a dialog, or pressing Escape never stops a broadcast. Application
+  shutdown or loss of the relay's own connectivity cannot be protected by BRB.
 
 Expand **BRB screen & music** in the dashboard:
 
@@ -459,11 +525,11 @@ Expand **BRB screen & music** in the dashboard:
 - **Prepare & save BRB** validates and encodes assets before atomically activating
   them. Failed uploads preserve the previous working assets. The saved dashboard
   profile overrides the initial JSON profile on restart. Assets/profile persist;
-  manual BRB selection does not persist across application restarts.
+  deliberate BRB selection does not persist across application restarts.
 
 The **Shared streaming profile** in the **OBS input** card controls resolution,
 frame rate (including **25 and 30 fps**), and audio sample rate for OBS, BRB,
-and prepared videos. Turn master forwarding **off** before changing it.
+and prepared videos. Select **OFF** before changing it, including ending rehearsal.
 The form shows the active saved profile and keeps edits as an unsaved draft.
 **Save & rebuild** warns that saving rebuilds BRB and re-prepares the video
 library from retained originals. **Cancel changes** restores every saved value.
@@ -485,10 +551,10 @@ Preparation may take up to two minutes and adds temporary CPU/memory use. Allow
 prepared video/audio tracks are limited to 64 MiB each; upload processing is
 serialized and bounded. Output queues remain independently bounded.
 
-Input preview always shows OBS, including during manual BRB. The BRB image preview
+Input preview always shows OBS, including during deliberate BRB. The BRB image preview
 shows the saved artwork. Destination bitrate/FPS and sent counters include BRB
-media. Original OBS frames withheld during manual BRB count as skipped (or paused
-when a target/master is off), not dropped. These counters do not acknowledge
+media. Original OBS frames withheld during deliberate BRB count as skipped (or paused
+when a target or destination delivery is off), not dropped. These counters do not acknowledge
 platform playback. Test switching against your intended destinations before a
 production broadcast; local tests exercise H.264 decoder changes and B-frames,
 but cannot establish every platform's ingest behavior.
@@ -518,12 +584,11 @@ raw payloads/parser errors. Video and audio headers are logged separately; if a
 publisher is rejected before the other header arrives, its properties cannot be
 reported. Stream keys, credentials and arbitrary peer metadata are never logged.
 
-Authenticated APIs: `PUT /api/brb` takes `{"enabled":true}` / `false` for manual
-mode, with the same JSON/control-header requirements as other controls.
+Deliberate BRB is selected through the shared stage command API.
 `POST /api/brb/assets` takes multipart fields `image`, `music`, `volume`, `text`,
 `reset_image=true`, `remove_music=true`, and optional `width`, `height`, `fps`,
 `sample_rate`. It requires `X-Restreamer-Control: 1` and rejects cross-origin
-requests. Profile changes while forwarding is on return 409. `GET /api/brb/image`
+requests. Profile changes require OFF and return 409 during an active session. `GET /api/brb/image`
 returns the saved PNG. Status adds `brb`, `brb_assets`, and `brb_profile`.
 
 ## Later: a separate 1080p Twitch output
@@ -584,20 +649,30 @@ reused after restart. Playback reads bounded packets from disk instead of loadin
 entire videos into memory. Node/browser runtimes are not needed on the server;
 FFmpeg and FFprobe are required (both are in the container image).
 
-Turn **master forwarding on**, choose a ready file, then **Play once** or **Play
-on loop**. OBS is optional and reconnecting OBS does not interrupt a file.
+Save an exact ready revision as starting-soon media, ending media, or a named
+clip shortcut. There can be multiple shortcuts. Selections survive restart, but
+active playback and pending transitions do not. Changed content under the same
+filename cannot silently replace a selected revision.
 
-- **Pause file** holds the position and puts BRB on air; **Resume file** resumes
-  from a nearby preceding keyframe.
-- **Manual BRB** pauses a playing file. Turning it off resumes that file, unless
-  you had explicitly paused the file. Resuming a file never overrides manual BRB.
-- Release the **Playback position** slider to seek to a preceding keyframe,
-  within about one second. Seeking while paused keeps the file paused.
-- **Stop file**, or the end of play-once, returns to a fresh OBS keyframe if OBS
-  is available; BRB fills any wait and remains on air if OBS is absent. Manual
-  BRB remains respected. Looping does not reconnect destinations.
-- Confirmed **master off** closes playback and all destination streams. Restart
-  starts with master off and no selected playback; the library persists.
+Start Prestream or Go live, then choose **Play clip**. A shortcut plays once and
+returns to its recorded stage. Detailed CLIP controls provide pause, resume,
+seek, explicit looping, and Stop clip. Pause holds the position with fallback
+BRB on air; seeking resumes from a preceding keyframe within about one second,
+and seeking while paused keeps it paused. PRESTREAM owns its loop; ENDING is
+play-once and cannot be paused or scrubbed.
+
+Preparation is separate from activation. A ready candidate can be previewed
+without changing the show. **Replace now** requires confirmation of the exact
+revision, starts it at the beginning, and preserves the current stage, return
+stage, loop setting, and destination sessions. A paused clip remains paused at
+the beginning. Replacing an ending explicitly restarts it and postpones shutdown.
+**Replace on return** changes suspended media without interrupting the current
+source; that revision starts from the beginning on return. Without explicit
+replacement, active/suspended playback retains its original revision and position.
+Saving different configured selections applies on subsequent use and does not
+replace media already on air. Failed preparation leaves playback unchanged;
+completed preparation never activates itself, even if every client closed or
+the operator has since left that stage.
 
 **Broadcast preview** uses the same encoded feed sent to destinations, including
 OBS, files and BRB. Its position display follows the visible file when the browser
@@ -607,11 +682,12 @@ Browser preview controls affect only that browser, not the broadcast. Use a
 browser supporting Media Source Extensions with H.264/AAC; platform buffering
 can add a separate delay for remote viewers. The original OBS preview is retained.
 
-Profile changes still require master off. Saving a different resolution, FPS or
+Profile changes require OFF, including ending a preview-only rehearsal. Saving a different resolution, FPS or
 sample rate cancels obsolete preparation, marks the library queued, and prepares
 from the originals. Older incompatible conversions cannot be selected for
 playback. BRB artwork, message or music changes do not reconvert library files.
-Old conversions are removed only after their replacement is ready.
+Immutable revisions retain the content needed by saved selections and active or
+suspended playback; newly prepared content does not retarget those references.
 
 Uploads stream to temporary disk files and publish atomically; interrupted or
 oversized uploads do not enter the library. Defaults/limits: one simultaneous
@@ -625,11 +701,19 @@ after upload, so the upload request does not wait for transcoding.
 
 Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin):
 
-- `GET /api/library`: filenames, IDs, progress, readiness, duration and profile.
+- `GET /api/library`: originals, preparation progress, exact revisions, readiness,
+  duration, profile, and saved selections.
 - `POST /api/library/upload`: multipart with exactly one `file` MP4; returns 202.
-- `PUT /api/playback`: JSON `{"action":"play","id":"…","loop":false}`,
-  `{"action":"pause"}`, `{"action":"resume"}`, `{"action":"stop"}`,
-  `{"action":"seek","position":12.5}`, or `{"action":"prepare","id":"…"}`.
+- `PUT /api/library/prepare`: JSON `{"id":"library-entry-id"}`; returns 202 and
+  performs preparation on the server, independently of client connections.
+- `GET /api/library/revisions/{revision}/preview`: finite authenticated MP4
+  preview of that exact ready candidate, without selecting it on air.
+- `GET /api/stage-media` and `PUT /api/stage-media`: persist exact selections as
+  `{"prestream":"revision-id","ending":"revision-id","shortcuts":[{"name":"Intro","revision":"revision-id"}]}`.
+  Use an empty prestream/ending string to clear it. Up to 32 uniquely named clip
+  shortcuts can be saved. Validation or persistence failures retain old settings.
+- `POST /api/stage/commands`: stage selection and CLIP playback/replacement controls
+  through the shared confirmed command contract above.
 - `GET /api/broadcast-preview`: streaming fragmented MP4, using the same bounded
   viewer limit as the input preview. `/status` and `/api/dashboard` include
   `library_enabled` and `playback` state, source, position and preview timeline.
