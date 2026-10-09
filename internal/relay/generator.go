@@ -17,6 +17,8 @@ import (
 const maxDesignBytes = 64 << 10
 const maxDesigns = 200
 
+var errDesignTooLarge = errors.New("design exceeds 64 KiB after JSON encoding")
+
 type generatorStore struct {
 	mu                 sync.Mutex
 	assetUploadMu      sync.Mutex
@@ -24,6 +26,7 @@ type generatorStore struct {
 	assets             map[string]GeneratorAsset
 	previewMu          sync.Mutex
 	root               string
+	templateRoot       string
 	jobsMu             sync.Mutex
 	jobsRoot, workRoot string
 	jobs               map[string]*GenerationJob
@@ -41,9 +44,10 @@ func (s *Server) initializeGenerator() error {
 		return errors.New("cannot create generator draft storage")
 	}
 	g := &generatorStore{root: root, jobsRoot: filepath.Join(filepath.Dir(root), "jobs"), workRoot: filepath.Join(filepath.Dir(root), "work"), jobs: make(map[string]*GenerationJob), wake: make(chan struct{}, 1)}
-	g.assetsRoot = filepath.Join(filepath.Dir(root), "assets")
+g.assetsRoot = filepath.Join(filepath.Dir(root), "assets")
 	g.assets = make(map[string]GeneratorAsset)
-	for _, dir := range []string{g.jobsRoot, g.workRoot, g.assetsRoot} {
+	g.templateRoot = filepath.Join(filepath.Dir(root), "templates")
+	for _, dir := range []string{g.jobsRoot, g.workRoot, g.assetsRoot, g.templateRoot} {
 		if os.MkdirAll(dir, 0700) != nil {
 			return errors.New("cannot create generator job storage")
 		}
@@ -146,8 +150,11 @@ func (g *generatorStore) list() ([]mediaauthor.Design, error) {
 // a new version, so clients retain their local edits and can retry safely.
 func (g *generatorStore) write(d mediaauthor.Design) error {
 	data, err := json.Marshal(d)
-	if err != nil || len(data) > maxDesignBytes {
+	if err != nil {
 		return errors.New("invalid draft")
+	}
+	if len(data) > maxDesignBytes {
+		return errDesignTooLarge
 	}
 	f, err := os.CreateTemp(g.root, ".draft-*")
 	if err != nil {
