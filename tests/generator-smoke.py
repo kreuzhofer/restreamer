@@ -57,7 +57,8 @@ if '--verify-ending' in sys.argv:
     prefix = Path(sys.argv[sys.argv.index('--verify-ending') + 1])
     frames = prefix.with_suffix('.rgb').read_bytes()
     assert len(frames) == saved['ending_frames'] * 16 * 16 * 3, len(frames)
-    assert max(frames[-16 * 16 * 3:]) == 0, 'Ending must finish on a black frame'
+    last_frame = frames[-16 * 16 * 3:]
+    assert max(last_frame) == 0, ('Ending must finish on a black frame', min(last_frame), max(last_frame), sorted(set(last_frame)))
     samples = array.array('h', prefix.with_suffix('.pcm').read_bytes())
     end = round(saved['ending_duration'] * saved['sample_rate'])
     tail = samples[end - saved['sample_rate'] // 100:end]
