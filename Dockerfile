@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates && mkdir -p /out/data && chown 65532:65532 /out/data
