@@ -173,8 +173,47 @@ jobs:
             -H 'X-Restreamer-Control: 1' --data-binary @/tmp/before-restart-command.json)" = 409
           jq -e '.state == "rejected"' /tmp/restarted-command-result.json
 
+  generator-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t restreamer:arm64-test .
+      - name: Generate and preview media in the native ARM64 container
+        shell: bash
+        run: |
+          docker volume create restreamer-arm64-state
+          trap 'docker logs restreamer-arm64-smoke; docker rm -f restreamer-arm64-smoke; docker volume rm restreamer-arm64-state' EXIT
+          start_container() {
+            docker run -d --name restreamer-arm64-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+              -p 127.0.0.1:18080:8080 -v restreamer-arm64-state:/data \
+              -e INGEST_STREAM_KEY=ci-test-key-123456 -e TARGET_STATE_FILE=/data/targets.json \
+              -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb \
+              -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test \
+              -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test restreamer:arm64-test
+            for attempt in {1..60}; do
+              if docker exec restreamer-arm64-smoke /restreamer healthcheck; then return 0; fi
+              if [ "$(docker inspect --format '{{.State.Running}}' restreamer-arm64-smoke)" != true ]; then
+                echo "ARM64 container exited before becoming healthy" >&2
+                return 1
+              fi
+              sleep 1
+            done
+            echo "ARM64 container did not become healthy within the startup deadline" >&2
+            return 1
+          }
+          start_container
+          export GENERATOR_URL=http://127.0.0.1:18080 GENERATOR_USER=ci GENERATOR_PASSWORD=ci-dashboard-password
+          export GENERATOR_SMOKE_OUTPUT=/tmp/generated-smoke.mp4 GENERATOR_SMOKE_STATE=/tmp/generated-smoke.json
+          python3 tests/generator-smoke.py
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -f null - < /tmp/generated-smoke.mp4
+          docker rm -f restreamer-arm64-smoke
+          start_container
+          python3 tests/generator-smoke.py --verify-restart
+
   image:
-    needs: test
+    needs: [test, generator-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read
