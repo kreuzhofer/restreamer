@@ -41,7 +41,7 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.library.mu.Lock()
 	profile := s.library.profile
 	s.library.mu.Unlock()
-	if issues := append(generationIssues(draft, profile), g.assetIssues(draft)...); len(issues) > 0 {
+	if issues := append(append(generationIssues(draft, profile), g.assetIssues(draft)...), g.videoIssues(draft, profile.FPS)...); len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"error": "Resolve design validation before generating.", "issues": issues})
 		return
 	}

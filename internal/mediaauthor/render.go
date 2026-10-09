@@ -86,6 +86,9 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 	if scene.Layout != "title" && scene.Layout != "list" && scene.Layout != "text-image" && scene.Layout != "media" {
 		return fail("layout", "Choose a title, list, text-image or media layout.")
 	}
+	if scene.MediaKind != "" && scene.MediaKind != "image" && scene.MediaKind != "video" {
+		return fail("media_kind", "Choose image or video media.")
+	}
 	if scene.Alignment != "" && scene.Alignment != "left" && scene.Alignment != "center" && scene.Alignment != "right" {
 		return fail("alignment", "Choose left, center or right alignment.")
 	}
@@ -109,7 +112,11 @@ func layoutScene(scene Scene, width, height int) (result sceneLayout, field, mes
 	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
 	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2, (width+regionWidth)/2, (height+regionHeight)/2)
 	if scene.Layout == "text-image" || scene.Layout == "media" {
-		if scene.Image == nil || scene.Image.ID == "" || scene.Image.Revision < 1 {
+		if scene.IsVideo() {
+			if scene.Video == nil || scene.Video.Asset.ID == "" || scene.Video.Asset.Revision < 1 {
+				return fail("video", "Choose an exact video revision.")
+			}
+		} else if scene.Image == nil || scene.Image.ID == "" || scene.Image.Revision < 1 {
 			return fail("image", "Choose an exact image revision for this layout.")
 		}
 		if scene.Layout == "media" {
@@ -274,4 +281,16 @@ func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*i
 		drawer.DrawString(line.text)
 	}
 	return img, nil
+}
+
+// MediaRegion returns the same contained-media region used by image rasterization.
+func MediaRegion(scene Scene, width, height int) (image.Rectangle, error) {
+	layout, _, message := layoutScene(scene, width, height)
+	if layout.face != nil {
+		layout.face.Close()
+	}
+	if message != "" {
+		return image.Rectangle{}, fmt.Errorf("%s", message)
+	}
+	return layout.imageRegion, nil
 }

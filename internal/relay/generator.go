@@ -67,6 +67,9 @@ func designBounds(d mediaauthor.Design) bool {
 		return false
 	}
 	for _, scene := range d.Scenes {
+		if len(scene.MediaKind) > 20 || (scene.Video != nil && (!validDesignID(scene.Video.Asset.ID) || scene.Video.Asset.Revision < 1 || scene.Video.Asset.Revision > maxAssetRevisions)) {
+			return false
+		}
 		if scene.Image != nil && (!validDesignID(scene.Image.ID) || scene.Image.Revision < 1 || scene.Image.Revision > maxAssetRevisions) {
 			return false
 		}
