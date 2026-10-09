@@ -445,6 +445,11 @@ make build              # bin/restreamer for your local machine
 make cross-build        # static Linux amd64 and arm64 executables in dist/
 ```
 
+Implementation is complete after the final commit is pushed and its GitHub CI
+run succeeds. Releases on `main` also require successful image publication.
+Follow the [delivery completion procedure](docs/agents/delivery.md) and include
+the exact commit SHA and successful CI run link when reporting completion.
+
 Run locally with the configured environment variables exported:
 
 ```sh
