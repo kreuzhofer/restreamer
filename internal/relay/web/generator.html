@@ -12,13 +12,14 @@
  <p id="generator-notice" class="notice" role="alert" hidden></p>
  <div class="generator-grid">
  <aside class="panel generator-sidebar" aria-labelledby="designs-heading"><h2 id="designs-heading">Show designs</h2>
-  <form id="new-design"><label>New design name<input id="new-name" maxlength="180" value="Untitled show" required></label><label>Generator<select id="new-stage"><option value="prestream">Prestream</option><option value="ending">Ending</option></select></label><button class="preview-button" type="submit">Create blank design</button></form>
+  <form id="new-design"><label>New design name<input id="new-name" maxlength="180" value="Untitled show" required></label><label>Generator<select id="new-stage"><option value="prestream">Prestream</option><option value="ending">Ending</option></select></label><label>Content starting point<select id="new-template"><option value="">Blank design</option></select></label><label>Style theme<select id="new-theme"><option value="retro:1">Retro · revision 1</option></select></label><button class="preview-button" type="submit">Create show design</button></form>
   <nav id="design-list" aria-label="Saved show designs"></nav>
  </aside>
  <section id="design-editor" class="panel generator-editor" aria-labelledby="editor-heading" hidden>
   <div class="panel-heading"><div><p class="eyebrow" id="design-stage">DRAFT</p><h2 id="editor-heading">Title scene</h2></div><span id="save-state" role="status" aria-live="polite">Saved</span></div>
   <p id="save-error" class="notice" role="alert" hidden></p>
   <div id="save-actions" class="generator-actions" hidden><button id="save-retry" class="preview-button" type="button">Retry save</button><button id="save-reload" class="preview-button" type="button">Reload saved draft</button><button id="save-copy" class="preview-button" type="button">Save local work as a copy</button></div>
+  <section class="generator-templates" aria-labelledby="template-heading"><h3 id="template-heading">Reusable content templates</h3><p class="stage-help">Draft autosave never updates a template. Save scenes, content, timing and overrides explicitly; choose the style theme separately when creating a show.</p><label>Template name<input id="template-name" maxlength="180" placeholder="Weekly show"></label><div class="generator-actions"><button id="save-template" class="preview-button" type="button">Save as new template</button></div><label>Template to update<select id="update-template"><option value="">Choose a saved template</option></select></label><div class="generator-actions"><button id="update-template-button" class="preview-button" type="button" disabled>Update selected template</button><button id="reload-template" class="preview-button" type="button" hidden>Reload latest template as a new design</button></div><p id="template-status" class="stage-help" role="status" aria-live="polite"></p></section>
   <section class="generator-sequence" aria-labelledby="sequence-heading"><h3 id="sequence-heading">Scene sequence</h3><p id="sequence-duration" class="stage-help" role="status"></p><nav id="scene-list" aria-label="Scene sequence"></nav><div class="generator-actions"><button id="add-title-scene" class="preview-button" type="button">Add title scene</button><button id="add-list-scene" class="preview-button" type="button">Add list scene</button></div><p class="stage-help">Up to 20 scenes and 600 seconds. Scenes cut in order; each duration rounds to the nearest video frame.</p><div id="scene-issues" role="status" aria-label="Composition validation"></div></section>
   <form id="scene-form" novalidate>
    <label>Show design name<input id="design-name" maxlength="180" aria-describedby="name-error"></label><small id="name-error" class="field-error"></small>
@@ -46,6 +47,6 @@
    <p class="stage-help">Generating and previewing do not select or activate media. Ready revisions are available in live control. Up to 600 seconds at 1920 × 1080 and 30 fps.</p>
   </section>
  </section>
- <section id="generator-empty" class="panel generator-empty"><h2>Start with a blank title</h2><p>Create a design or reopen a saved draft. Text scenes start at 10 seconds.</p></section>
+ <section id="generator-empty" class="panel generator-empty"><h2>Start your show design</h2><p>Choose an editable starter, a saved content template, or a blank design. Text scenes start at 10 seconds.</p></section>
  </div>
  </main></body></html>

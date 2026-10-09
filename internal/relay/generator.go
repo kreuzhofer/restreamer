@@ -21,6 +21,7 @@ type generatorStore struct {
 	mu                 sync.Mutex
 	previewMu          sync.Mutex
 	root               string
+	templateRoot       string
 	jobsMu             sync.Mutex
 	jobsRoot, workRoot string
 	jobs               map[string]*GenerationJob
@@ -37,7 +38,8 @@ func (s *Server) initializeGenerator() error {
 		return errors.New("cannot create generator draft storage")
 	}
 	g := &generatorStore{root: root, jobsRoot: filepath.Join(filepath.Dir(root), "jobs"), workRoot: filepath.Join(filepath.Dir(root), "work"), jobs: make(map[string]*GenerationJob), wake: make(chan struct{}, 1)}
-	for _, dir := range []string{g.jobsRoot, g.workRoot} {
+	g.templateRoot = filepath.Join(filepath.Dir(root), "templates")
+	for _, dir := range []string{g.jobsRoot, g.workRoot, g.templateRoot} {
 		if os.MkdirAll(dir, 0700) != nil {
 			return errors.New("cannot create generator job storage")
 		}

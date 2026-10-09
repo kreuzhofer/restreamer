@@ -723,6 +723,28 @@ Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin)
   viewer limit as the input preview. `/status` and `/api/dashboard` include
   `library_enabled` and `playback` state, source, position and preview timeline.
 
+### Reusable content templates
+
+In **Media generator**, choose a blank design, the editable welcome/topics/links
+prestream starter, the thanks/follow-up-links ending starter, or a saved content
+template. Select the style theme separately. Every starter scene can be edited,
+reordered, duplicated, or removed using the normal scene editor.
+
+**Save as new template** captures the current draft content explicitly.
+**Update selected template** replaces only that reusable template; draft autosave
+never does this. Copies are independent: changes to one show or the template do
+not change another show, a captured generation job, or prepared media. Templates
+preserve all supported scene fields and overrides, but do not select a theme.
+Concurrent updates fail visibly and retain local work; reload the latest template
+as a new design, or save local work as a new template.
+
+Up to 200 user templates persist beneath `<library_directory>/generator/templates`.
+Template requests share the 64 KiB authoring limit. The authenticated JSON API is
+`/api/generator/templates` (list/create), `/api/generator/templates/{id}`
+(read/versioned update), and `/api/generator/templates/{id}/designs`
+(create an independent design from an exact template version and selected theme).
+Built-in starters are immutable sources; their copied scenes are fully editable.
+
 ### Media generator drafts
 
 Open **Media generator** from the dashboard to create independent prestream or

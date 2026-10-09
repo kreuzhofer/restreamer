@@ -2,6 +2,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let draft = null;
+  let templates = [];
+  let templateSaving = false;
   let selectedScene = 0;
   let itemEditors = [];
   let validationIssues = [];
@@ -284,11 +286,82 @@
     const button = event.submitter; button.disabled = true;
     const sequence = editSequence;
     try {
-      const created = await (await request('/api/generator/designs', 'POST', {name: $('new-name').value, stage: $('new-stage').value})).json();
-      if (sequence !== editSequence || saving) { notify('New blank design saved. Your current edits were retained; open the new design from the list.'); await listDesigns(); return; }
+      const template = templates.find(item => item.id === $('new-template').value);
+      const theme = {id: 'retro', revision: 1};
+      const path = template ? `/api/generator/templates/${template.id}/designs` : '/api/generator/designs';
+      const body = template ? {name: $('new-name').value, version: template.version, theme} : {name: $('new-name').value, stage: $('new-stage').value, theme};
+      const created = await (await request(path, 'POST', body)).json();
+      if (sequence !== editSequence || saving) { notify('New show design saved. Your current edits were retained; open the new design from the list.'); await listDesigns(); return; }
       openDraft(created);
     } catch (error) { notify(error.message); }
     finally { button.disabled = false; }
+  });
+
+  function renderTemplateChoices() {
+    const chosen = $('new-template').value;
+    const target = $('update-template').value;
+    $('new-template').replaceChildren(new Option('Blank design', ''));
+    $('update-template').replaceChildren(new Option('Choose a saved template', ''));
+    for (const template of templates) {
+      if (template.content.stage === $('new-stage').value) $('new-template').add(new Option(`${template.name}${template.builtin ? ' · starter' : ` · v${template.version}`}`, template.id));
+      if (!template.builtin) $('update-template').add(new Option(`${template.name} · v${template.version} · ${template.content.stage}`, template.id));
+    }
+    if ([...$('new-template').options].some(option => option.value === chosen)) $('new-template').value = chosen;
+    if ([...$('update-template').options].some(option => option.value === target)) $('update-template').value = target;
+    $('update-template-button').disabled = !$('update-template').value || templateSaving;
+  }
+  async function loadTemplates() {
+    templates = await (await request('/api/generator/templates')).json();
+    renderTemplateChoices();
+  }
+  $('new-stage').addEventListener('change', renderTemplateChoices);
+  $('update-template').addEventListener('change', () => {
+    const template = templates.find(item => item.id === $('update-template').value);
+    if (template) $('template-name').value = template.name;
+    $('update-template-button').disabled = !template;
+    $('reload-template').hidden = true;
+    $('template-status').textContent = template ? `Explicit update will replace template v${template.version} with this draft’s content. Existing show designs remain independent.` : '';
+  });
+  async function saveTemplate(update) {
+    if (!draft || templateSaving) return;
+    const selected = templates.find(item => item.id === $('update-template').value);
+    if (update && !selected) return;
+    if (!$('template-name').value.trim()) { $('template-status').textContent = 'Enter a template name first.'; $('template-name').focus(); return; }
+    templateSaving = true;
+    $('save-template').disabled = $('update-template-button').disabled = true;
+    const snapshot = structuredClone(draft);
+    const name = $('template-name').value;
+    $('template-status').textContent = 'Saving explicit template snapshot…';
+    try {
+      const saved = await (await request(update ? `/api/generator/templates/${selected.id}` : '/api/generator/templates', update ? 'PUT' : 'POST', {name, version: update ? selected.version : 0, content: snapshot})).json();
+      await loadTemplates();
+      $('update-template').value = saved.id;
+      $('template-status').textContent = `Saved ${saved.name} · template v${saved.version}. Existing designs and generated revisions are unchanged.`;
+      $('reload-template').hidden = true;
+    } catch (error) {
+      $('template-status').textContent = `${error.message} Your current draft and local edits are retained.`;
+      $('reload-template').hidden = !(update && error.status === 409);
+    } finally {
+      templateSaving = false;
+      $('save-template').disabled = false;
+      $('update-template-button').disabled = !$('update-template').value;
+    }
+  }
+  $('save-template').addEventListener('click', () => saveTemplate(false));
+  $('update-template-button').addEventListener('click', () => saveTemplate(true));
+  $('reload-template').addEventListener('click', async () => {
+    if (!canLeave()) return;
+    const id = $('update-template').value;
+    const sequence = editSequence;
+    try {
+      const latest = await (await request(`/api/generator/templates/${id}`)).json();
+      const created = await (await request(`/api/generator/templates/${id}/designs`, 'POST', {name: latest.name, version: latest.version, theme: structuredClone(draft.theme)})).json();
+      await loadTemplates();
+      if (sequence !== editSequence || saving) { notify('Latest template copied to a new design. Your current edits were retained; open the new design from the list.'); await listDesigns(); return; }
+      openDraft(created);
+      $('template-status').textContent = `Loaded template v${latest.version} into an independent design.`;
+      $('reload-template').hidden = true;
+    } catch (error) { $('template-status').textContent = `${error.message} Your current draft is retained.`; }
   });
 
   function renderJobs() {
@@ -358,6 +431,7 @@
   (async () => {
     try {
       await listDesigns();
+      await loadTemplates();
       const id = new URLSearchParams(location.search).get('id');
       if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
     } catch (error) { notify(error.message); }
