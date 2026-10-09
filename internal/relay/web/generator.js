@@ -36,6 +36,7 @@
     'soundtrack.fade_out_seconds': ['soundtrack-fade-out', 'soundtrack-fade-out-error'],
     name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
     font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
+    'transition.kind': ['scene-transition', 'transition-kind-error'], 'transition.duration_seconds': ['transition-duration', 'transition-duration-error'],
     duration_seconds: ['scene-duration', 'duration-error'], content_region: ['region-width', 'region-error'],
     video: ['scene-video', 'video-error'], 'video.trim': ['video-trim-start', 'video-trim-error'], 'video.audio_enabled': ['video-audio', 'video-audio-error'], 'video.audio_volume_percent': ['video-volume', 'video-volume-error'], alignment: ['scene-alignment', 'alignment-error'], image: ['scene-image', 'image-error'], items: ['list-content', 'items-error']
   };
@@ -132,6 +133,9 @@
     $('scene-font').value = scene.font || '';
     $('scene-size').value = scene.font_size || '';
     $('scene-duration').value = scene.duration_seconds;
+    $('scene-transition').value = scene.transition?.kind || 'cut';
+    $('transition-duration').value = scene.transition?.duration_seconds || 0.5;
+    renderTransitionControls();
     $('scene-alignment').value = scene.alignment || '';
     $('region-width').value = scene.content_region?.width_percent || '';
     $('region-height').value = scene.content_region?.height_percent || '';
@@ -150,6 +154,11 @@
       $('list-items').append(row); itemEditors.push({input: textarea, error});
     }
     $('add-list-item').disabled = (scene.items || []).length >= 20;
+  }
+  function renderTransitionControls() {
+    const last = selectedScene === draft.scenes.length - 1;
+    $('transition-duration-controls').hidden = $('scene-transition').value !== 'crossfade';
+    $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Overlaps shorten the total duration. Generate to inspect the exact transition; the quick preview shows one scene.';
   }
   function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); schedulePreview(); }
   function changed() {
@@ -172,6 +181,8 @@
     if (imageValue) { const [id, revision] = imageValue.split(':'); scene.image = {id, revision: Number(revision)}; } else delete scene.image;
     scene.text = $('scene-text').value; scene.font = $('scene-font').value;
     scene.font_size = Number($('scene-size').value); scene.duration_seconds = Number($('scene-duration').value);
+    scene.transition = $('scene-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('transition-duration').value)} : {kind: 'cut'};
+    renderTransitionControls();
     scene.alignment = $('scene-alignment').value;
     scene.content_region = {width_percent: Number($('region-width').value), height_percent: Number($('region-height').value)};
     if (scene.layout === 'list' || scene.items) scene.items = itemEditors.map(editor => editor.input.value);
@@ -224,7 +235,7 @@
       if (sequence !== previewSequence) return;
       validationIssues = result.issues;
       renderScenes();
-      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds with cuts at ${result.profile.fps} fps`;
+      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds after transition overlaps at ${result.profile.fps} fps`;
       for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
       for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
       $('scene-issues').replaceChildren();
@@ -260,7 +271,7 @@
       canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
       canvas.hidden = false;
       canvas.setAttribute('aria-label', `Quick preview: ${snapshot.scenes[selectedScene].text || 'Blank title scene'}`);
-      $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[selectedScene].duration_seconds} seconds · not on air`;
+      $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[selectedScene].duration_seconds} seconds · ${snapshot.scenes[selectedScene].transition?.kind === 'crossfade' && selectedScene + 1 < snapshot.scenes.length ? 'crossfade shown in generated preview' : 'individual scene'} · not on air`;
     } catch (error) {
       if (error.name !== 'AbortError' && sequence === previewSequence) $('preview-state').textContent = `Preview unavailable: ${error.message}`;
     }

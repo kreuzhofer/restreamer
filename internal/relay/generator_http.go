@@ -190,7 +190,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	if themeErr != nil {
 		issues = append(issues, mediaauthor.Issue{Field: "theme", Message: themeErr.Error()})
 	}
-	issues = append(issues, mediaauthor.ValidateCutTiming(draft, profile.FPS)...)
+	issues = append(issues, mediaauthor.ValidateTiming(draft, profile.FPS)...)
 	s.generator.mu.Lock()
 	issues = append(issues, s.generator.assetIssues(draft)...)
 	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
@@ -198,7 +198,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	issues = append(issues, s.generator.musicIssues(draft, profile.FPS, profile.SampleRate)...)
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
-		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
+		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.SequenceDuration(draft, profile.FPS)})
 		return
 	}
 	sceneIndex := 0

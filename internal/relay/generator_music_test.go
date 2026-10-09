@@ -142,15 +142,20 @@ func TestGeneratorMusicRepeatsWithOneEnvelopeAndIndependentVolume(t *testing.T) 
 	}
 }
 func TestGeneratorMusicUsesOneStablePeakGainWithoutDelay(t *testing.T) {
+	// A short loud interval triggers whole-mix attenuation. Measure stable gain
+	// before/after it at moderate levels: near-full-scale AAC reconstruction
+	// changes individual tone amplitudes differently across encoder versions.
+	// These windows still reject adaptive gain, clipping without attenuation,
+	// altered relative source levels, and added mixer delay.
 	s := libraryServer(t)
 	path := filepath.Join(t.TempDir(), "loud.mp4")
-	args := []string{"-v", "error", "-f", "lavfi", "-i", "color=blue:size=320x180:rate=25:duration=2", "-f", "lavfi", "-i", "aevalsrc=0.95*sin(2*PI*440*t):s=48000:d=2", "-c:v", "libx264", "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", path}
+	args := []string{"-v", "error", "-f", "lavfi", "-i", "color=blue:size=320x180:rate=25:duration=2", "-f", "lavfi", "-i", "aevalsrc='if(between(t,0.8,0.9),0.95,0.2)*sin(2*PI*440*t)':s=48000:d=2", "-c:v", "libx264", "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", path}
 	if out, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
 	data, _ := os.ReadFile(path)
 	v := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "loud.mp4", data))
-	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "loud.wav", musicFixture(t, "aevalsrc=0.95*sin(2*PI*880*t):s=48000", 2)))
+	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "loud.wav", musicFixture(t, "aevalsrc='if(between(t,0.8,0.9),0.95,0.2)*sin(2*PI*880*t)':s=48000", 2)))
 	d := videoDesign(t, s, v.ID, 2, 0, 2, 100, false, true)
 	d.Soundtrack = &mediaauthor.Soundtrack{Asset: mediaauthor.AssetRef{ID: a.ID, Revision: 1}, Mode: "end", VolumePercent: musicVolume(0)}
 	d = saveMusicDesign(t, s, d)
