@@ -80,14 +80,15 @@
       case 'retry': return ['Retry failed playback?', `Retry the selected media from its beginning. ${mode}`];
       case 'stop_clip': return ['Stop this clip?', `Stop the clip and restore ${destination}. ${mode}`];
       case 'stop_now': return [stage.mode === 'preview_only' ? 'Stop rehearsal now?' : 'Stop broadcast now?', 'Immediately stop all stage playback, cancel pending transitions, and disconnect every destination. OBS input may stay connected.'];
-      case 'replace_now': return ['Replace current media?', `Start ${name(request.revision)} from the beginning, preserving the selected stage, return destination and loop setting.${stage.playback?.state === 'paused' ? ' The clip remains paused.' : ''}${stage.stage === 'ENDING' ? ' This restarts the ending video and postpones shutdown.' : ''} ${mode}`];
-      case 'replace_on_return': return ['Replace suspended media on return?', `Keep the current source uninterrupted. When returning to ${destination}, start ${name(request.revision)} from its beginning instead of resuming the old revision. ${mode}`];
+      case 'replace_now': return [`Replace ${stage.stage} media?`, `Start ${name(request.revision)} from the beginning, preserving the selected stage, return destination and loop setting.${stage.playback?.state === 'paused' ? ' The clip remains paused.' : ''}${stage.stage === 'ENDING' ? ' This restarts the ending video and postpones shutdown.' : ''} ${mode}`];
+      case 'replace_on_return': return [`Replace ${stage.return_stage} media on return?`, `Keep the current source uninterrupted. When returning to ${destination}, start ${name(request.revision)} from its beginning instead of resuming the old revision. ${mode}`];
       case 'set_target': return request.enabled ? [`Enable ${request.target}?`, `This destination immediately joins ${sourceName(stage)}, the current on-air source.`] : [`Disable the last destination?`, `Disable ${request.target}. The stage and preview keep running with NO DESTINATIONS — NOT SENDING. This remains a real session, not a rehearsal.`];
       default: return ['Confirm change?', request.action];
     }
   }
-  function request(request, needsConfirmation = true) {
+  function request(request, needsConfirmation = true, expected) {
     if (!online || inflight || refreshing || !current()) return;
+    if (expected && (expected.server_id !== current().server_id || expected.context !== current().context)) return;
     if (request.action === 'prestream') request = {...request, revision: selections.prestream};
     if (request.action === 'end_stream') request = {...request, revision: selections.ending};
     if (current().stage === 'OFF' && ['prestream', 'go_live'].includes(request.action)) request = {...request, mode: el('stage-rehearsal').checked ? 'preview_only' : 'real'};

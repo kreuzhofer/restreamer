@@ -24,7 +24,7 @@
   let jobsFetching = false;
   let reviewedRevision = '';
   let stageSelections = {};
-  let onAirRevision = '';
+  let stageStatus = {}, mediaRevisions = [];
   let assets = [];
   let assetsFetching = false;
   let assetUploading = false;
@@ -461,9 +461,26 @@
       }
       if (job.state === 'ready') {
         const detail = document.createElement('p');
-        const selected = Object.values(stageSelections).some(value => value === job.media_revision);
-        detail.textContent = `Media ${job.media_revision.slice(0, 12)} · ${selected ? 'selected for a stage' : 'not selected for a stage'} · ${onAirRevision === job.media_revision ? 'on air' : 'not on air'}${job.design_snapshot.id === draft.id && job.design_snapshot.version !== draft.version ? ' · newer editable draft exists' : ''}`;
-        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+        const media = mediaRevisions.find(item => item.id === job.media_revision);
+        const selected = ['prestream', 'ending'].filter(kind => stageSelections[kind] === job.media_revision).map(kind => kind.toUpperCase());
+        const onAir = stageStatus.source === 'file' && stageStatus.media?.revision === job.media_revision;
+        const returning = stageStatus.return_media?.revision === job.media_revision;
+        const newer = job.design_snapshot.id === draft.id && job.design_snapshot.version < draft.version;
+        detail.textContent = `Media ${job.media_revision} · ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
+        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+        if (media?.state === 'ready' && job.design_snapshot.stage === 'prestream') {
+          const actions = document.createElement('div'); actions.className = 'generator-actions';
+          const addLink = (action, text) => {
+            const link = document.createElement('a'); link.className = 'preview-button'; link.target = '_blank'; link.rel = 'noopener'; link.textContent = text;
+            const params = {media_revision: job.media_revision, media_stage: 'prestream', media_action: action};
+            if (action !== 'select_next') Object.assign(params, {server_id: stageStatus.server_id, context: stageStatus.context});
+            link.href = `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
+          };
+          addLink('select_next', 'Select for next PRESTREAM');
+          if (stageStatus.stage === 'PRESTREAM' && stageStatus.media?.revision && stageStatus.media.revision !== job.media_revision) addLink('replace_now', 'Review Replace PRESTREAM now');
+          if (stageStatus.return_stage === 'PRESTREAM' && stageStatus.return_media?.revision && stageStatus.return_media.revision !== job.media_revision) addLink('replace_on_return', 'Review Replace PRESTREAM on return');
+          row.append(actions);
+        }
       }
       $('generation-jobs').append(row);
     }
@@ -473,8 +490,8 @@
     if (jobsFetching) return;
     jobsFetching = true;
     try {
-      const [nextJobs, selections, stage] = await Promise.all(['/api/generator/jobs', '/api/stage-media', '/api/stage'].map(async path => (await request(path)).json()));
-      jobs = nextJobs; stageSelections = selections; onAirRevision = stage.media?.revision || '';
+      const [nextJobs, selections, stage, catalog] = await Promise.all(['/api/generator/jobs', '/api/stage-media', '/api/stage', '/api/library'].map(async path => (await request(path)).json()));
+      jobs = nextJobs; stageSelections = selections; stageStatus = stage; mediaRevisions = catalog.revisions || [];
       if ($('generation-error').textContent.startsWith('Generation status unavailable:')) generationError('');
       renderJobs();
     } catch (error) { generationError(`Generation status unavailable: ${error.message}`); }

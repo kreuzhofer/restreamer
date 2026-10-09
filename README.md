@@ -935,6 +935,17 @@ destination continued delivery with no new drops or reconnects while another
 destination disconnected. These fixture measurements do not promise production
 throughput or memory limits; deployment and larger-profile loads still vary.
 
+Ready PRESTREAM results offer **Select for next PRESTREAM**, **Review Replace
+PRESTREAM now**, and **Review Replace PRESTREAM on return** when applicable.
+These open live control in another tab, preserving the editor. Opening a result
+only loads its exact candidate; **Use for next PRESTREAM** stages a settings edit
+that still requires **Save selections**. Replacement requires preview and a
+confirmation against the observed broadcast. A stale request retains its
+candidate for a fresh explicit choice and cannot become an action on another
+stage. Generated results are also listed under **All prepared revisions** in
+the video library. The generator shows saved selections, actual on-air/rehearsal
+media, and suspended return revisions separately from captured jobs and drafts.
+
 Job snapshots and outcomes persist beneath `<library_directory>/generator/jobs`;
 a restart marks unfinished jobs interrupted and removes incomplete workspace
 files. **Retry captured revision** explicitly creates a new job at the back of

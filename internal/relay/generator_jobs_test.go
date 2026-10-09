@@ -200,6 +200,8 @@ func TestGeneratorCancellationAndFailurePreserveReadyRevision(t *testing.T) {
 	if ready.State != "ready" {
 		t.Fatal(ready)
 	}
+	startReplacementPrestream(t, s, ready.MediaRevision)
+	active := readStage(t, s)
 	previewURL := "/api/library/revisions/" + ready.MediaRevision + "/preview"
 	before := dashboardRequest(s, "GET", previewURL, "").Body.Bytes()
 	// A long real encode provides time to cancel through the public API. This
@@ -235,8 +237,13 @@ func TestGeneratorCancellationAndFailurePreserveReadyRevision(t *testing.T) {
 	if after.Code != 200 || !bytes.Equal(before, after.Body.Bytes()) {
 		t.Fatal("cancel/failure changed prior exact media")
 	}
-	if stage := readStage(t, s); stage.Stage != "OFF" {
-		t.Fatal("generation failure affected stage", stage.Stage)
+	if stage := readStage(t, s); stage.Stage != "PRESTREAM" || stage.Media.Revision != ready.MediaRevision || stage.Playback.Epoch != active.Playback.Epoch || stage.Context != active.Context {
+		t.Fatal("generation failure affected active prestream", stage)
+	}
+	var selections StageMediaSelections
+	w = dashboardRequest(s, "GET", "/api/stage-media", "")
+	if json.Unmarshal(w.Body.Bytes(), &selections) != nil || selections.Prestream != ready.MediaRevision {
+		t.Fatal("generation failure changed selected revision", w.Body.String())
 	}
 }
 

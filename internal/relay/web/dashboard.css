@@ -26,3 +26,5 @@
 #brb-theme-settings { margin-top: 18px; }
 #brb-theme-settings .brb-fields { margin-top: 16px; }
 #brb-theme-video { width: 100%; max-height: 50vh; background: #080b12; border-radius: 8px; }
+
+.media-intent{border:1px solid var(--cyan);border-radius:8px;padding:16px;margin-top:20px;scroll-margin-top:20px}.media-intent h3{margin:0;font-size:16px}
