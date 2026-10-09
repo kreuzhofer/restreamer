@@ -54,7 +54,7 @@ func (s *Server) assembleTransitions(ctx context.Context, plan mediaauthor.Seque
 				return errors.New("A transition segment is incomplete. Shorten the design or check storage.")
 			}
 			used += info.Size()
-			fmt.Fprintf(&manifest, "file '%s'\n", name)
+			fmt.Fprintf(&manifest, "file '%s'\nduration %.9f\n", name, float64(frames)/float64(p.FPS))
 			return nil
 		}
 		bodyFrames := timing.Frames - timing.Incoming - timing.Outgoing

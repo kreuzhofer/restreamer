@@ -130,7 +130,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 		if segmentBytes >= maxGeneratorOutputBytes {
 			return "", errors.New("Normalized scenes reached their combined 512 MiB limit. Shorten the design.")
 		}
-		fmt.Fprintf(&concat, "file '%s'\n", name)
+		fmt.Fprintf(&concat, "file '%s'\nduration %.9f\n", name, float64(frames)/float64(p.FPS))
 		completedFrames += frames
 	}
 	if err := pcm.Close(); err != nil {
