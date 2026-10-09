@@ -47,8 +47,6 @@ func (s *Server) stageCommandHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCommandResult(w, 400, CommandResult{State: "rejected", Reason: "Expected one identified stage command"})
 		return
 	}
-	s.controlMu.Lock()
-	defer s.controlMu.Unlock()
 	b := s.broadcast
 	var candidate *clipPlayback
 	var profile config.BRBProfile
@@ -83,9 +81,14 @@ func (s *Server) stageCommandHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Media hashing and indexing can be slow. Serialize only the application
+	// of the command; commandLocked rechecks identity and reviewed context after
+	// validation, including any Stop now accepted while storage was busy.
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if candidate != nil && (b.media == nil || profile != b.media.settings.Profile) {
+	if candidate != nil && b.control.commands[cmd.ID] == nil && (b.media == nil || profile != b.media.settings.Profile) {
 		candidate.reader.close()
 		writeCommandResult(w, 409, CommandResult{ID: cmd.ID, State: "rejected", Reason: "Prepare compatible fallback BRB before selecting prepared media"})
 		return
@@ -222,15 +225,8 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 		if c.stage != "OFF" && mode != c.mode {
 			return reject("Stop this session before starting a different delivery mode")
 		}
-		if mode == "real" && c.stage == "OFF" {
-			ready := false
-			for _, o := range b.server.outputs {
-				target := o.snapshot()
-				ready = ready || target.Enabled && target.CanEnable
-			}
-			if !ready {
-				return reject("Select a destination or explicitly start a preview-only rehearsal")
-			}
+		if mode == "real" && c.stage == "OFF" && !b.hasEligibleDestination() {
+			return reject("Select a destination or explicitly start a preview-only rehearsal")
 		}
 		if cmd.Action == "prestream" {
 			if candidate == nil || b.media == nil {

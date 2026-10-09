@@ -347,3 +347,43 @@ func TestDestinationCommandsRequireEffectSpecificConfirmation(t *testing.T) {
 		t.Fatal("idempotent destination action invalidated confirmations")
 	}
 }
+
+func TestPendingRealStartRequiresDestinationsAtCommit(t *testing.T) {
+	destination := newSink(t)
+	s, address := startRelayWithLogger(t, []config.Target{destination.target("one")}, slog.New(slog.NewTextHandler(io.Discard, nil)), true)
+	if w := stageRequest(t, s, "go_live", map[string]any{"id": "pending-real-start"}); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "one", "enabled": false, "confirmed": false}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, videoConfig())
+	writePacket(t, publisher, audioConfig())
+	writePacket(t, publisher, packet(rtmp.Audio, 0, 0xaf, 1, 1))
+	writePacket(t, publisher, keyframe(0))
+	eventually(t, func() bool { return readStage(t, s).Pending == nil })
+	state := readStage(t, s)
+	if state.Stage != "OFF" || state.Pending != nil || readTargetDashboard(t, s).Forwarding || destination.count() != 0 {
+		t.Fatal("pending real start committed without selected destinations", state)
+	}
+	var outcome CommandResult
+	w := dashboardRequest(s, "GET", "/api/stage/commands/pending-real-start", "")
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &outcome) != nil || outcome.State != "cancelled" || outcome.Reason == "" {
+		t.Fatal("missing actionable cancellation outcome", w.Code, w.Body.String())
+	}
+	// Restoring the preference and sending another keyframe must not replay the start.
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "one", "enabled": true, "confirmed": false}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	writePacket(t, publisher, keyframe(time.Second))
+	eventually(t, func() bool { return readTargetDashboard(t, s).InputFrames > 1 })
+	if state := readStage(t, s); state.Stage != "OFF" || state.Pending != nil || destination.count() != 0 {
+		t.Fatal("cancelled real start replayed after restoring a destination", state)
+	}
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	writePacket(t, publisher, keyframe(2*time.Second))
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" && destination.count() == 1 })
+}

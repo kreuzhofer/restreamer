@@ -282,9 +282,11 @@ func (s *Server) stageMediaSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 409)
 		return
 	}
-	s.controlMu.Lock()
-	defer s.controlMu.Unlock()
-	changed, err := l.saveSelections(settings)
+	// Library validation and persistence must not hold the command lock: an
+	// operator must still be able to stop the show while storage is busy.
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	changed, err := l.persistSelectionsLocked(settings)
 	if err != nil {
 		code := 409
 		if errors.Is(err, errStageMediaPersistence) {
@@ -293,23 +295,29 @@ func (s *Server) stageMediaSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	if changed && s.broadcast != nil {
-		s.broadcast.invalidateStageContext()
+	// Publish the selections and their review context together, after the save
+	// succeeds. Stage commands never acquire the library lock while holding the
+	// broadcast lock, and recheck context after opening their candidate.
+	s.broadcast.mu.Lock()
+	l.selected = settings
+	if changed {
+		s.broadcast.control.version++
 	}
+	s.broadcast.mu.Unlock()
 	w.WriteHeader(204)
 }
 
 var errStageMediaPersistence = errors.New("Cannot save stage media; selections unchanged")
 
-func (l *videoLibrary) saveSelections(settings StageMediaSelections) (bool, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+// Caller holds l.mu through persistence and publication of the new selections.
+func (l *videoLibrary) persistSelectionsLocked(settings StageMediaSelections) (bool, error) {
 	ids := []string{settings.Prestream, settings.Ending}
 	for _, shortcut := range settings.Shortcuts {
 		ids = append(ids, shortcut.Revision)
 	}
+	validated := make(map[string]bool)
 	for _, id := range ids {
-		if id == "" {
+		if id == "" || validated[id] {
 			continue
 		}
 		clip, _, err := l.openRevisionLocked(id)
@@ -317,12 +325,12 @@ func (l *videoLibrary) saveSelections(settings StageMediaSelections) (bool, erro
 			return false, err
 		}
 		clip.reader.close()
+		validated[id] = true
 	}
 	if err := writeState(filepath.Join(l.root, "stage-media.json"), savedStageMedia{Version: 1, Selections: settings}); err != nil {
 		return false, errStageMediaPersistence
 	}
 	changed := settings.Prestream != l.selected.Prestream || settings.Ending != l.selected.Ending || !slices.Equal(settings.Shortcuts, l.selected.Shortcuts)
-	l.selected = settings
 	return changed, nil
 }
 

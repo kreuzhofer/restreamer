@@ -139,12 +139,6 @@ func (s *Server) stageStatusHTTP(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.broadcast.stageStatus(time.Now()))
 }
 
-func (b *broadcast) invalidateStageContext() {
-	b.mu.Lock()
-	b.control.version++
-	b.mu.Unlock()
-}
-
 func (b *broadcast) finishCommand(id, state, reason string) {
 	if record := b.control.commands[id]; record != nil {
 		record.result.State, record.result.Reason = state, reason
@@ -215,6 +209,10 @@ func (b *broadcast) commitLive(now time.Time) {
 	if p == nil {
 		return
 	}
+	if b.control.stage == "OFF" && p.Mode == "real" && !b.hasEligibleDestination() {
+		b.cancelPending("cancelled", "No selected destination remains; select a destination and Go live again, or explicitly start a preview-only rehearsal")
+		return
+	}
 	b.stopClip("")
 	b.clearReturn()
 	b.control.failed = false
@@ -224,6 +222,16 @@ func (b *broadcast) commitLive(now time.Time) {
 	b.finishCommand(p.ID, "completed", "")
 	b.control.pending = nil
 	b.setDeliveryLocked(p.Mode == "real")
+}
+
+func (b *broadcast) hasEligibleDestination() bool {
+	for _, output := range b.server.outputs {
+		status := output.snapshot()
+		if status.Enabled && status.CanEnable {
+			return true
+		}
+	}
+	return false
 }
 
 func commandFingerprint(cmd StageCommand) [32]byte {

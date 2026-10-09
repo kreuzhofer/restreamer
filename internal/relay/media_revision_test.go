@@ -370,3 +370,74 @@ func TestStageMediaSelectionsRetainExactRevisionAcrossSourceChangesAndRestart(t 
 		t.Fatal("saving or restoring stage media started playback")
 	}
 }
+
+func TestSlowMediaValidationDoesNotDelayStopNow(t *testing.T) {
+	for _, operation := range []string{"command", "settings"} {
+		t.Run(operation, func(t *testing.T) {
+			s, revision := preparedRevisionServer(t)
+			settings := `{"prestream":"` + revision + `","shortcuts":[]}`
+			if w := dashboardRequest(s, "PUT", "/api/stage-media", settings); w.Code != 204 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			if w := stageRequest(t, s, "prestream", map[string]any{"mode": "preview_only"}); w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			before := readStage(t, s)
+			command, err := json.Marshal(StageCommand{ID: "slow-media", ServerID: before.ServerID, Context: before.Context, Action: "play_clip", Revision: revision, Confirmed: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			method, path, body := "POST", "/api/stage/commands", string(command)
+			if operation == "settings" {
+				method, path, body = "PUT", "/api/stage-media", `{"ending":"`+revision+`","shortcuts":[]}`
+			}
+			stop, err := json.Marshal(StageCommand{ID: "stop-during-validation", ServerID: before.ServerID, Context: before.Context, Action: "stop_now", Confirmed: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Hold the library fixture busy to model a storage validation that cannot
+			// finish yet. Observe responsiveness and stale-command rejection only
+			// through the authenticated service boundary, without large timing-sensitive files.
+			s.library.mu.Lock()
+			released := false
+			defer func() {
+				if !released {
+					s.library.mu.Unlock()
+				}
+			}()
+			mediaDone := make(chan *httptest.ResponseRecorder, 1)
+			started := make(chan struct{})
+			go func() { close(started); mediaDone <- dashboardRequest(s, method, path, body) }()
+			<-started
+			// Allow the media request to reach its blocked dependency before stopping.
+			time.Sleep(50 * time.Millisecond)
+			stopDone := make(chan *httptest.ResponseRecorder, 1)
+			go func() { stopDone <- dashboardRequest(s, "POST", "/api/stage/commands", string(stop)) }()
+			var stopped *httptest.ResponseRecorder
+			select {
+			case stopped = <-stopDone:
+			case <-time.After(time.Second):
+				t.Error("Stop now waited for unrelated media validation")
+			}
+			s.library.mu.Unlock()
+			released = true
+			if stopped == nil {
+				stopped = <-stopDone
+			}
+			media := <-mediaDone
+			if stopped.Code != 200 {
+				t.Error("Stop now failed", stopped.Code, stopped.Body.String())
+			}
+			if state := readStage(t, s); state.Stage != "OFF" || state.Pending != nil {
+				t.Error("media validation restarted the stopped show", state)
+			}
+			if operation == "command" && media.Code != 409 {
+				t.Error("command reviewed before Stop now was not rejected", media.Code, media.Body.String())
+			}
+			if operation == "settings" && media.Code != 204 {
+				t.Error("media settings were not saved after validation", media.Code, media.Body.String())
+			}
+		})
+	}
+}
