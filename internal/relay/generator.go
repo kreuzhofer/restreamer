@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,9 +18,14 @@ const maxDesignBytes = 64 << 10
 const maxDesigns = 200
 
 type generatorStore struct {
-	mu        sync.Mutex
-	previewMu sync.Mutex
-	root      string
+	mu                 sync.Mutex
+	previewMu          sync.Mutex
+	root               string
+	jobsMu             sync.Mutex
+	jobsRoot, workRoot string
+	jobs               map[string]*GenerationJob
+	wake               chan struct{}
+	cancel             context.CancelFunc
 }
 
 func (s *Server) initializeGenerator() error {
@@ -30,7 +36,16 @@ func (s *Server) initializeGenerator() error {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return errors.New("cannot create generator draft storage")
 	}
-	s.generator = &generatorStore{root: root}
+	g := &generatorStore{root: root, jobsRoot: filepath.Join(filepath.Dir(root), "jobs"), workRoot: filepath.Join(filepath.Dir(root), "work"), jobs: make(map[string]*GenerationJob), wake: make(chan struct{}, 1)}
+	for _, dir := range []string{g.jobsRoot, g.workRoot} {
+		if os.MkdirAll(dir, 0700) != nil {
+			return errors.New("cannot create generator job storage")
+		}
+	}
+	if err := g.loadJobs(); err != nil {
+		return err
+	}
+	s.generator = g
 	return nil
 }
 

@@ -752,3 +752,57 @@ correction; preview validation uses the current streaming profile (up to 4K).
 Only one quick preview or validation runs at a time per server. Preview requires
 the existing dashboard authentication and same-origin control header, and uses
 untrusted text strictly as raster data.
+
+### Generate and review exact media
+
+Choose **Generate saved draft** after autosave finishes. The server captures that
+acknowledged draft version, its exact theme revision and active streaming profile
+as an immutable design revision. Closing the browser does not stop generation;
+editing the draft creates newer work without changing the captured input. The
+editor shows queued/running progress, cancellation, failures and retained ready
+results separately from the editable draft, saved stage selections and on-air
+media. **Preview exact revision** plays the actual prepared H.264/AAC content.
+Generation and preview never select a stage or replace media already playing.
+
+The renderer reuses the quick-preview Go PNG raster and bundled Go fonts, then
+runs the existing FFmpeg dependency with libx264 and AAC. No browser runtime,
+Node, CGO or system fonts are needed. Native builds require `ffmpeg` and `ffprobe`
+on PATH; Alpine containers already install them. Both Linux architectures use
+the same static Go renderer and packaged FFmpeg. Third-party font and module
+licenses are included in `THIRD_PARTY_NOTICES`.
+
+Generation currently accepts one title scene, one active job, and at most 200
+retained job records. Another job is rejected as busy until the active job ends
+or cancellation finishes. Output is limited to 512 MiB per job, with a 15-minute
+render/validation deadline. A scene raster uses at most 1920 × 1080 pixels; the
+single temporary workspace holds that PNG and the bounded output, and is removed
+on success, cancellation or failure. Prepared revisions remain retained in the
+existing library. Keep enough persistent disk space for retained revisions;
+200 maximum-size generated outputs can occupy 100 GiB before library media.
+
+Supported generation profiles are the active even-sized 320 × 180 through
+1920 × 1080 profile at 24, 25 or 30 fps, with stereo 44.1 or 48 kHz audio. Higher
+profiles remain available for other media and quick previews, but generation
+rejects them explicitly instead of silently downscaling. Generation supports up
+to 600 seconds; durations round to the nearest complete video frame and must
+contain at least one frame. The displayed generated duration reflects that
+rounding. Complete frame counts and audiovisual timing are checked before a
+revision becomes ready, including detection of output-limit truncation.
+
+These bounds are admission limits, not throughput or resource guarantees. Native
+FFmpeg 4.4 probes at 1080p30 measured a 600-second still in 27.6 seconds with about
+436 MiB peak memory, and 20 seconds of moving test media in 1.4 seconds with about
+390 MiB, using the ultrafast preset. Production uses veryfast; timings differ by
+hardware, version and workload. Encoding uses two threads and filter processing
+one thread. This bounds concurrency inside the process, not system-wide CPU or
+memory use. Ordinary library preparation currently has its own worker; avoid
+starting a large conversion alongside generation on a constrained host.
+
+Job snapshots and outcomes persist beneath `<library_directory>/generator/jobs`;
+a restart marks unfinished jobs interrupted and removes incomplete workspace
+files. Generate the saved draft again explicitly to retry. Missing dependencies,
+storage failures, cancellation and profile changes leave prior ready and on-air
+revisions intact. A profile change during generation fails that job rather than
+substituting a different profile. Authenticated APIs expose jobs at
+`/api/generator/jobs`, individual outcomes at `/api/generator/jobs/{id}`, and
+cancellation at `/api/generator/jobs/{id}/cancel`.

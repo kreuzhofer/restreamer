@@ -24,3 +24,10 @@
 #scene-preview { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid #30374b; }
 #scene-preview[hidden], [hidden] { display: none !important; }
 @media (max-width: 850px) { .generator-grid { grid-template-columns: 1fr; } #design-list { max-height: 220px; } .generator-fields { grid-template-columns: 1fr; } .generator-editor, .generator-sidebar { padding: 18px; } .generator-back { font-size: 12px; } }
+
+.generator-generation { margin-top: 28px; border-top: 1px solid #30374b; }
+.generator-job { margin: 12px 0; padding: 14px; border: 1px solid #30374b; border-radius: 8px; overflow-wrap: anywhere; }
+.generator-job p { margin: 6px 0; font-size: 13px; color: #bfc7dc; }
+.generator-job progress { width: 100%; accent-color: #4de0c5; }
+#generated-video { width: 100%; max-height: 65vh; background: #080b12; border-radius: 8px; }
+#generated-identity { overflow-wrap: anywhere; }

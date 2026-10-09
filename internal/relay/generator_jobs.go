@@ -1,0 +1,215 @@
+package relay
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"math"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"time"
+
+	"github.com/kreuzhofer/restreamer/internal/config"
+	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
+)
+
+const maxGeneratorJobs = 200
+const maxGeneratorSeconds = 600
+const maxGeneratorOutputBytes = 512 << 20
+const generatorTimeout = 15 * time.Minute
+
+// GenerationJob captures immutable inputs. Only state, progress, error and the
+// resulting media identity change after acceptance; drafts are never reread.
+type GenerationJob struct {
+	ID             string             `json:"id"`
+	State          string             `json:"state"`
+	Progress       int                `json:"progress"`
+	Error          string             `json:"error,omitempty"`
+	DesignRevision string             `json:"design_revision"`
+	Design         mediaauthor.Design `json:"design_snapshot"`
+	Profile        config.BRBProfile  `json:"profile"`
+	Renderer       string             `json:"renderer"`
+	Duration       float64            `json:"duration"`
+	MediaRevision  string             `json:"media_revision,omitempty"`
+	CreatedAt      string             `json:"created_at"`
+}
+
+func (g *generatorStore) jobPath(id string) string       { return filepath.Join(g.jobsRoot, id+".json") }
+func (g *generatorStore) saveJob(j *GenerationJob) error { return writeState(g.jobPath(j.ID), j) }
+func (g *generatorStore) loadJobs() error {
+	files, err := os.ReadDir(g.jobsRoot)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if filepath.Ext(f.Name()) != ".json" {
+			continue
+		}
+		if len(g.jobs) >= maxGeneratorJobs {
+			return errors.New("generator job history limit exceeded")
+		}
+		var j GenerationJob
+		if readGeneratorJob(filepath.Join(g.jobsRoot, f.Name()), &j) != nil || !validDesignID(j.ID) || f.Name() != j.ID+".json" || !designBounds(j.Design) || j.Profile.Validate() != nil {
+			return errors.New("invalid saved generator job")
+		}
+		switch j.State {
+		case "queued", "running", "cancelling":
+			j.State = "interrupted"
+			j.Error = "Server stopped during generation. Generate the saved design again when ready."
+			if g.saveJob(&j) != nil {
+				return errors.New("cannot record interrupted generation")
+			}
+		case "ready", "failed", "cancelled", "interrupted":
+		default:
+			return errors.New("invalid saved generator state")
+		}
+		g.jobs[j.ID] = &j
+	}
+	// Only scratch directories are disposable. Captured metadata and retained
+	// revisions survive restart; interrupted output can never become ready.
+	entries, err := os.ReadDir(g.workRoot)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if validDesignID(entry.Name()) {
+			if os.RemoveAll(filepath.Join(g.workRoot, entry.Name())) != nil {
+				return errors.New("cannot clear interrupted generator output")
+			}
+		}
+	}
+	return nil
+}
+func (g *generatorStore) jobList() []GenerationJob {
+	g.jobsMu.Lock()
+	defer g.jobsMu.Unlock()
+	out := make([]GenerationJob, 0, len(g.jobs))
+	for _, j := range g.jobs {
+		out = append(out, *j)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt > out[j].CreatedAt })
+	return out
+}
+func generationIssues(d mediaauthor.Design, p config.BRBProfile) []mediaauthor.Issue {
+	issues := mediaauthor.Validate(d, p.Width, p.Height)
+	if p.Validate() != nil || p.Width > 1920 || p.Height > 1080 || p.FPS > 30 {
+		issues = append(issues, mediaauthor.Issue{Field: "profile", Message: "Generation supports active profiles up to 1920 × 1080 at 24, 25 or 30 fps. Change the profile explicitly before generating."})
+	}
+	for i, scene := range d.Scenes {
+		if scene.DurationSeconds > maxGeneratorSeconds || math.Round(scene.DurationSeconds*float64(p.FPS)) < 1 {
+			issues = append(issues, mediaauthor.Issue{Field: fmtSceneField(i, "duration_seconds"), Message: "Generation needs at least one video frame and at most 600 seconds."})
+		}
+	}
+	return issues
+}
+func fmtSceneField(i int, field string) string { return "scenes." + strconv.Itoa(i) + "." + field }
+func (s *Server) runGenerator(ctx context.Context) {
+	g := s.generator
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-g.wake:
+		}
+		g.jobsMu.Lock()
+		var job *GenerationJob
+		for _, j := range g.jobs {
+			if j.State == "queued" {
+				job = j
+				break
+			}
+		}
+		if job == nil {
+			g.jobsMu.Unlock()
+			continue
+		}
+		jobCtx, cancel := context.WithTimeout(ctx, generatorTimeout)
+		g.cancel = cancel
+		job.State = "running"
+		if g.saveJob(job) != nil {
+			job.State = "failed"
+			job.Error = "Cannot save generation state; check storage."
+			g.cancel = nil
+			cancel()
+			g.jobsMu.Unlock()
+			continue
+		}
+		snapshot := *job
+		g.jobsMu.Unlock()
+		revision, err := s.renderGenerator(jobCtx, snapshot, func(percent int) {
+			g.jobsMu.Lock()
+			defer g.jobsMu.Unlock()
+			if job.State == "running" {
+				job.Progress = percent
+			}
+		})
+		g.jobsMu.Lock()
+		switch {
+		case job.State == "cancelling":
+			job.State = "cancelled"
+			job.Error = "Generation cancelled; previous media is unchanged."
+		case ctx.Err() != nil:
+			job.State = "interrupted"
+			job.Error = "Server stopped during generation. Generate again when ready."
+		case errors.Is(jobCtx.Err(), context.DeadlineExceeded):
+			job.State = "failed"
+			job.Error = "Generation exceeded its 15 minute time limit. Shorten the design or reduce the active profile."
+		case err != nil:
+			job.State = "failed"
+			job.Error = err.Error()
+			job.MediaRevision = revision
+		default:
+			job.State = "ready"
+			job.Progress = 100
+			job.MediaRevision = revision
+		}
+		cancel()
+		g.cancel = nil
+		if g.saveJob(job) != nil {
+			job.State = "failed"
+			job.Error = "Cannot save completed generation state; check storage. Prepared revisions remain in the media library."
+		}
+		g.jobsMu.Unlock()
+	}
+}
+func newGenerationJob(d mediaauthor.Design, p config.BRBProfile) (GenerationJob, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return GenerationJob{}, err
+	}
+	j := GenerationJob{ID: hex.EncodeToString(id[:]), State: "queued", Design: d, Profile: p, Renderer: "go-png-ffmpeg-v1", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	j.Duration = math.Round(d.Scenes[0].DurationSeconds*float64(p.FPS)) / float64(p.FPS)
+	encoded, _ := json.Marshal(struct {
+		Design   mediaauthor.Design
+		Profile  config.BRBProfile
+		Renderer string
+	}{d, p, j.Renderer})
+	hash := sha256.Sum256(encoded)
+	j.DesignRevision = hex.EncodeToString(hash[:])
+	return j, nil
+}
+
+// Jobs wrap a draft with captured profile/revision metadata. Keep a separate
+// bound so every admitted 64 KiB draft can be recovered without truncation.
+func readGeneratorJob(path string, dst *GenerationJob) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	dec := json.NewDecoder(io.LimitReader(f, maxDesignBytes+(16<<10)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	if dec.Decode(new(any)) != io.EOF {
+		return errors.New("invalid generation metadata")
+	}
+	return nil
+}

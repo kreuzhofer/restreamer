@@ -126,31 +126,42 @@ func (l *videoLibrary) loadRevisions() error {
 
 // Called with l.mu held only once a complete, validated conversion exists.
 func (l *videoLibrary) retainRevision(e *LibraryEntry) error {
-	id, err := mediaDigest(e.path)
+	revision, err := l.prepareRetainedRevision(e)
 	if err != nil {
 		return err
 	}
 	if l.revisions == nil {
 		l.revisions = make(map[string]*MediaRevision)
 	}
+	l.revisions[revision.ID] = revision
+	e.Revision = revision.ID
+	return nil
+}
+
+// prepareRetainedRevision performs bounded file IO without accessing the catalog.
+// Callers publish its result under l.mu; generators need not hold that lock while
+// hashing their completed output.
+func (l *videoLibrary) prepareRetainedRevision(e *LibraryEntry) (*MediaRevision, error) {
+	id, err := mediaDigest(e.path)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Join(l.root, "revisions"), 0700); err != nil {
-		return err
+		return nil, err
 	}
 	path := l.revisionPath(id)
 	if err := os.Link(e.path, path); err != nil && !errors.Is(err, os.ErrExist) {
-		return err
+		return nil, err
 	}
 	// A pre-existing revision must still contain the bytes its identity promises.
 	if existing, err := mediaDigest(path); err != nil || existing != id {
-		return errors.New("Retained media revision changed")
+		return nil, errors.New("Retained media revision changed")
 	}
 	revision := &MediaRevision{ID: id, LibraryID: e.ID, Name: e.Name, State: "ready", Duration: e.Duration, Bytes: e.index.Size, Profile: e.Profile, index: e.index}
 	if err := writeState(filepath.Join(l.root, "revisions", id+".json"), revision); err != nil {
-		return err
+		return nil, err
 	}
-	l.revisions[id] = revision
-	e.Revision = id
-	return nil
+	return revision, nil
 }
 
 func (l *videoLibrary) selectionsLocked() StageMediaSelections {

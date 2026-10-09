@@ -10,6 +10,12 @@
   let saveTimer;
   let previewTimer;
   let previewAbort;
+  let jobs = [];
+  let jobRequest = false;
+  let jobsFetching = false;
+  let reviewedRevision = '';
+  let stageSelections = {};
+  let onAirRevision = '';
   const fields = {
     name: ['design-name', 'name-error'],
     'scenes.0.text': ['scene-text', 'text-error'],
@@ -24,7 +30,7 @@
     if (!response.ok) {
       const text = await response.text();
       let message = text;
-      try { message = JSON.parse(text).error || text; } catch (_) { /* Plain server error. */ }
+      try { const data = JSON.parse(text); message = data.issues?.map(issue => `${issue.field}: ${issue.message}`).join('\n') || data.error || text; } catch (_) { /* Plain server error. */ }
       const error = new Error(message || `Request failed (${response.status})`);
       error.status = response.status;
       throw error;
@@ -38,6 +44,7 @@
     $('save-error').hidden = !error;
     $('save-actions').hidden = !error;
     $('save-retry').hidden = conflict;
+    renderJobs();
   }
   function canLeave() {
     if (saving) { notify('A save is in progress. Wait for its acknowledgement before opening another draft.'); return false; }
@@ -82,6 +89,7 @@
     history.replaceState(null, '', `/generator?id=${encodeURIComponent(draft.id)}`);
     listDesigns().catch(error => notify(error.message));
     schedulePreview();
+    loadJobs();
   }
   function captureFields() {
     draft.name = $('design-name').value;
@@ -150,6 +158,7 @@
       saveState(conflict ? 'Save conflict · local edits retained' : 'Not saved · local edits retained', error.message);
     } finally {
       saving = false;
+      renderJobs();
       if (dirty && !conflict && editSequence !== sequence) saveTimer = setTimeout(() => saveDraft(), 700);
     }
   }
@@ -182,6 +191,70 @@
     } catch (error) { notify(error.message); }
     finally { button.disabled = false; }
   });
+
+  function renderJobs() {
+    if (!draft) return;
+    const busy = jobs.some(job => ['queued', 'running', 'cancelling'].includes(job.state));
+    $('generate-design').disabled = dirty || saving || conflict || jobRequest || busy;
+    $('generation-save-hint').textContent = dirty || saving || conflict
+      ? 'Save and resolve conflicts before generating. Your local edits are retained.'
+      : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
+    const active = jobs.find(job => ['queued', 'running', 'cancelling'].includes(job.state));
+    $('generation-status').textContent = active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available · one job at a time';
+    const relevant = jobs.filter(job => job.design_snapshot.id === draft.id);
+    $('generation-jobs').replaceChildren();
+    for (const job of relevant) {
+      const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id;
+      const title = document.createElement('strong'); title.textContent = `${job.state} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
+      const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps`;
+      row.append(title, identity);
+      if (job.error) { const error = document.createElement('p'); error.textContent = job.error; row.append(error); }
+      if (['queued', 'running', 'cancelling'].includes(job.state)) {
+        const progress = document.createElement('progress'); progress.max = 100; progress.value = job.progress; progress.setAttribute('aria-label', 'Generation progress'); row.append(progress);
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = job.state === 'cancelling';
+        cancel.addEventListener('click', async () => { cancel.disabled = true; try { await request(`/api/generator/jobs/${job.id}/cancel`, 'POST', {}); await loadJobs(); } catch (error) { generationError(error.message); cancel.disabled = false; } }); row.append(cancel);
+      }
+      if (job.state === 'ready') {
+        const detail = document.createElement('p');
+        const selected = Object.values(stageSelections).some(value => value === job.media_revision);
+        detail.textContent = `Media ${job.media_revision.slice(0, 12)} · ${selected ? 'selected for a stage' : 'not selected for a stage'} · ${onAirRevision === job.media_revision ? 'on air' : 'not on air'}${job.design_snapshot.version !== draft.version ? ' · newer editable draft exists' : ''}`;
+        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+      }
+      $('generation-jobs').append(row);
+    }
+  }
+  function generationError(message) { $('generation-error').textContent = message; $('generation-error').hidden = !message; }
+  async function loadJobs() {
+    if (jobsFetching) return;
+    jobsFetching = true;
+    try {
+      const [nextJobs, selections, stage] = await Promise.all(['/api/generator/jobs', '/api/stage-media', '/api/stage'].map(async path => (await request(path)).json()));
+      jobs = nextJobs; stageSelections = selections; onAirRevision = stage.media?.revision || '';
+      if ($('generation-error').textContent.startsWith('Generation status unavailable:')) generationError('');
+      renderJobs();
+    } catch (error) { generationError(`Generation status unavailable: ${error.message}`); }
+    finally { jobsFetching = false; }
+  }
+  function previewGenerated(job) {
+    reviewedRevision = job.media_revision;
+    $('generated-preview').hidden = false;
+    $('generated-identity').textContent = `Captured draft v${job.design_snapshot.version} · media revision ${reviewedRevision}. Preview does not change the broadcast.`;
+    const video = $('generated-video');
+    video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview`;
+    $('generated-playback-status').textContent = 'Loading exact prepared output…';
+    video.play().catch(() => { $('generated-playback-status').textContent = 'Press Play to review the exact prepared output.'; });
+  }
+  $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${reviewedRevision.slice(0, 12)}.`; });
+  $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
+  $('generate-design').addEventListener('click', async () => {
+    if (!draft || dirty || saving || conflict || jobRequest) return;
+    jobRequest = true; generationError(''); renderJobs();
+    try { await request('/api/generator/jobs', 'POST', {design_id: draft.id, version: draft.version}); await loadJobs(); }
+    catch (error) { generationError(error.message); }
+    finally { jobRequest = false; renderJobs(); }
+  });
+  setInterval(loadJobs, 2000);
+
   window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {
     try {

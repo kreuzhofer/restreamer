@@ -102,6 +102,10 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 		wg.Add(1)
 		go func() { defer wg.Done(); s.library.run(ctx) }()
 	}
+	if s.generator != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.runGenerator(ctx) }()
+	}
 	if s.broadcast != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); s.broadcast.run(ctx) }()
