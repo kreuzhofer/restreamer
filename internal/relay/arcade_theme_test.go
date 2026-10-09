@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"os"
 	"os/exec"
@@ -187,4 +188,98 @@ func TestArcadeBackgroundContinuesBehindRepeatingInsetVideo(t *testing.T) {
 	}
 	preview := dashboardRequest(s, "GET", "/api/library/revisions/"+job.MediaRevision+"/preview", "")
 	assertArcadeFrames(t, preview.Body.Bytes(), expected)
+}
+
+func TestSmallArcadeTextKeepsSeparateLineShadows(t *testing.T) {
+	s := arcadeThemeServer(t)
+	style := mediaauthor.RetroTheme(1).Style
+	style.Font = "arcade-pixel"
+	style.FontSize = 24
+	style.BorderStyle = "none"
+	style.BackgroundColor = "#000000"
+	payload, _ := json.Marshal(map[string]any{"name": "Small pixels", "base": mediaauthor.ThemeRef{ID: "retro", Revision: 1}, "style": style})
+	w := dashboardRequest(s, "POST", "/api/generator/themes", string(payload))
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var theme mediaauthor.Theme
+	json.Unmarshal(w.Body.Bytes(), &theme)
+	d := generatorDraft(t, s, 1)
+	d.Theme = mediaauthor.ThemeRef{ID: theme.ID, Revision: 1}
+	d.Scenes[0].Text = "HI\nHI"
+	raw, _ := json.Marshal(d)
+	w = dashboardRequest(s, "POST", "/api/generator/preview", string(raw))
+	img, err := png.Decode(w.Body)
+	if err != nil {
+		t.Fatal(w.Code, err)
+	}
+	runs := 0
+	previous := false
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		ink := false
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			ink = ink || r+g+b > 0
+		}
+		if ink && !previous {
+			runs++
+		}
+		previous = ink
+	}
+	if runs != 2 {
+		t.Fatalf("two text lines and their shadows overlap: got %d ink bands", runs)
+	}
+}
+
+func TestArcadeCustomBorderStaysBehindFullFrameVideo(t *testing.T) {
+	s := arcadeThemeServer(t)
+	w := dashboardRequest(s, "GET", "/api/generator/themes/arcade-after-hours/revisions/1", "")
+	var theme mediaauthor.Theme
+	json.Unmarshal(w.Body.Bytes(), &theme)
+	theme.Style.BorderStyle = "line"
+	theme.Style.BorderWidth = 12
+	theme.Style.AccentColor = "#ff0000"
+	raw, _ := json.Marshal(map[string]any{"name": "Bordered arcade", "base": mediaauthor.ThemeRef{ID: theme.ID, Revision: 1}, "style": theme.Style})
+	w = dashboardRequest(s, "POST", "/api/generator/themes", string(raw))
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	json.Unmarshal(w.Body.Bytes(), &theme)
+	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=video", "source.mp4", generatorVideoFixture(t, false)))
+	body := fmt.Sprintf(`{"name":"Full frame","stage":"ending","ending_fade_seconds":0,"theme":{"id":%q,"revision":1},"scenes":[{"id":"video","layout":"media","media_kind":"video","text":"","duration_seconds":1,"video":{"asset":{"id":%q,"revision":1}}}]}`, theme.ID, a.ID)
+	w = dashboardRequest(s, "POST", "/api/generator/designs", body)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var d mediaauthor.Design
+	json.Unmarshal(w.Body.Bytes(), &d)
+	preview := dashboardRequest(s, "POST", "/api/generator/preview", w.Body.String())
+	expected, err := png.Decode(preview.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generatorServe(t, s)
+	job := waitGeneratorJob(t, s, submitGenerator(t, s, d).ID)
+	if job.State != "ready" {
+		t.Fatal(job)
+	}
+	media := dashboardRequest(s, "GET", "/api/library/revisions/"+job.MediaRevision+"/preview", "")
+	path := filepath.Join(t.TempDir(), "full.mp4")
+	os.WriteFile(path, media.Body.Bytes(), 0600)
+	data, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-frames:v", "1", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "-").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	band := func(src image.Image) image.Image {
+		out := image.NewRGBA(image.Rect(0, 0, 600, 2))
+		draw.Draw(out, out.Bounds(), src, image.Pt(20, 16), draw.Src)
+		return out
+	}
+	if delta := scenePixelDifference(band(actual), band(expected)); delta > 10 {
+		t.Fatalf("border overlays full-frame video only in prepared output: %.2f", delta)
+	}
 }

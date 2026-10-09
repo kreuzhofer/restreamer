@@ -307,8 +307,8 @@ func RenderSceneStyled(scene Scene, width, height int, style Style, inputs Rende
 			drawer.DrawString("•")
 		}
 		dot := fixed.Point26_6{X: x, Y: baseline + line.y}
-		if _, pixel := layout.face.(*pixelFace); pixel {
-			step := max(1, height/180)
+		if pixel, ok := layout.face.(*pixelFace); ok {
+			step := pixel.shadowStep()
 			for _, layer := range []struct {
 				offset int
 				color  string

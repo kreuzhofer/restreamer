@@ -34,8 +34,10 @@ func newPixelFace(size float64) *pixelFace {
 }
 func (f *pixelFace) Close() error                 { return nil }
 func (f *pixelFace) Kern(_, _ rune) fixed.Int26_6 { return 0 }
+func (f *pixelFace) shadowStep() int              { return max(1, f.step*2/5) }
 func (f *pixelFace) Metrics() font.Metrics {
-	return font.Metrics{Height: fixed.I(8 * f.step), Ascent: fixed.I(7 * f.step), Descent: fixed.I(f.step), XHeight: fixed.I(7 * f.step), CapHeight: fixed.I(7 * f.step)}
+	descent := f.step/2 + 3*f.shadowStep()
+	return font.Metrics{Height: fixed.I(7*f.step + descent), Ascent: fixed.I(7 * f.step), Descent: fixed.I(descent), XHeight: fixed.I(7 * f.step), CapHeight: fixed.I(7 * f.step)}
 }
 func pixelRune(r rune) rune {
 	if r == 'ß' {
@@ -49,7 +51,7 @@ func (f *pixelFace) GlyphAdvance(r rune) (fixed.Int26_6, bool) {
 }
 func (f *pixelFace) GlyphBounds(r rune) (fixed.Rectangle26_6, fixed.Int26_6, bool) {
 	advance, ok := f.GlyphAdvance(r)
-	return fixed.Rectangle26_6{Min: fixed.P(0, -7*f.step), Max: fixed.P(5*f.step+f.step/2, f.step/2)}, advance, ok
+	return fixed.Rectangle26_6{Min: fixed.P(0, -7*f.step), Max: fixed.P(5*f.step+f.step/2+f.shadowStep(), f.step/2+3*f.shadowStep())}, advance, ok
 }
 func (f *pixelFace) Glyph(dot fixed.Point26_6, r rune) (image.Rectangle, image.Image, image.Point, fixed.Int26_6, bool) {
 	r = pixelRune(r)

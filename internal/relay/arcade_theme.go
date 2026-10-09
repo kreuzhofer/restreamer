@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/draw"
 	"image/png"
 	"math"
 	"os"
@@ -110,8 +109,12 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 		return errors.New("Cannot save arcade preparation master.")
 	}
 	inputs.TransparentBackdrop = true
-	overlay := mediaauthor.ThemeBackdrop(p.Width, p.Height, style, inputs)
-	draw.Draw(overlay, overlay.Bounds(), mediaauthor.ThemeForeground(p.Width, p.Height, style, inputs), image.Point{}, draw.Over)
+	border := filepath.Join(dir, "arcade-video-border.png")
+	defer os.Remove(border)
+	if err := saveGeneratorRaster(border, mediaauthor.ThemeBackdrop(p.Width, p.Height, style, inputs)); err != nil {
+		return err
+	}
+	overlay := mediaauthor.ThemeForeground(p.Width, p.Height, style, inputs)
 	foreground := filepath.Join(dir, "arcade-video-foreground.png")
 	defer os.Remove(foreground)
 	if err := saveGeneratorRaster(foreground, overlay); err != nil {
@@ -121,8 +124,8 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 	if frames > rangeFrames {
 		args = append(args, "-stream_loop", "-1")
 	}
-	args = append(args, "-threads", "2", "-i", normalized, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
-	filter = fmt.Sprintf("[0:v]fps=%d,scale=%d:%d:flags=area,format=rgb24,setsar=1[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][2:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, p.Width, p.Height, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
+	args = append(args, "-threads", "2", "-i", normalized, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", border, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
+	filter = fmt.Sprintf("[0:v]fps=%d,scale=%d:%d:flags=area,format=rgb24,setsar=1[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, p.Width, p.Height, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
 	args = append(args, "-filter_complex", filter, "-map", "[v]", "-an", "-frames:v", strconv.Itoa(frames))
 	args = append(args, videoEncodingArgs(p)...)
 	args = append(args, "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)
