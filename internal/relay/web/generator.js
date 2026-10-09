@@ -29,6 +29,11 @@
   let assetsFetching = false;
   let assetUploading = false;
   const fields = {
+    'soundtrack.asset': ['soundtrack-asset', 'soundtrack-asset-error'],
+    'soundtrack.mode': ['soundtrack-mode', 'soundtrack-mode-error'],
+    'soundtrack.volume_percent': ['soundtrack-volume', 'soundtrack-volume-error'],
+    'soundtrack.fade_in_seconds': ['soundtrack-fade-in', 'soundtrack-fade-in-error'],
+    'soundtrack.fade_out_seconds': ['soundtrack-fade-out', 'soundtrack-fade-out-error'],
     name: ['design-name', 'name-error'], text: ['scene-text', 'text-error'],
     font: ['scene-font', 'font-error'], font_size: ['scene-size', 'size-error'],
     duration_seconds: ['scene-duration', 'duration-error'], content_region: ['region-width', 'region-error'],
@@ -90,7 +95,7 @@
     draft = value; dirty = false; conflict = false; editSequence++;
     selectedScene = 0; validationIssues = [];
     $('design-name').value = draft.name;
-    renderScenes(); renderSelectedScene(); renderDesignTheme();
+    renderScenes(); renderSelectedScene(); renderMusicPicker(); renderDesignTheme();
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
     $('design-editor').hidden = false; $('generator-empty').hidden = true;
     notify(''); saveState(`Saved · version ${draft.version}`);
@@ -154,6 +159,11 @@
   }
   function captureFields() {
     draft.name = $('design-name').value;
+    const musicValue = $('soundtrack-asset').value;
+    if (musicValue) {
+      const [id, revision] = musicValue.split(':');
+      draft.soundtrack = {asset: {id, revision: Number(revision)}, mode: $('soundtrack-mode').value, volume_percent: Number($('soundtrack-volume').value), fade_in_seconds: Number($('soundtrack-fade-in').value), fade_out_seconds: Number($('soundtrack-fade-out').value)};
+    } else delete draft.soundtrack;
     const scene = draft.scenes[selectedScene]; if (!scene) return;
     scene.layout = $('scene-layout').value;
     scene.media_kind = $('scene-media-kind').value;
@@ -287,6 +297,7 @@
     captureFields();
     if (event.target.id === 'scene-layout' || event.target.id === 'scene-media-kind') renderSelectedScene();
     if (event.target.id === 'scene-image') renderImagePicker();
+    if (event.target.id === 'soundtrack-asset' || event.target.id === 'soundtrack-mode') renderMusicPicker();
     changed();
   });
   $('save-retry').addEventListener('click', () => saveDraft());
@@ -404,6 +415,11 @@
       const title = document.createElement('strong'); title.textContent = `${job.design_snapshot.name} · ${job.design_snapshot.stage.toUpperCase()} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
       const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps`;
       row.append(title, identity);
+      if (job.mix_gain != null) {
+        const gain = document.createElement('p');
+        gain.textContent = `Whole-mix gain: ${(job.mix_gain * 100).toFixed(2)}%${job.mix_gain < 1 ? ' · fixed peak protection; relative levels preserved' : ' · requested levels retained'}`;
+        row.append(gain);
+      }
       if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
       if (['failed', 'interrupted', 'cancelled'].includes(job.state)) {
         const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'preview-button'; retry.textContent = 'Retry captured revision'; retry.disabled = busy;
@@ -477,7 +493,7 @@
     for (const asset of assets) {
       const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id;
       const summary = document.createElement('summary'); summary.textContent = `${asset.name} · revision ${asset.revision} · ${asset.uses.length} use(s)`;
-      const img = document.createElement(asset.kind === 'video' ? 'video' : 'img'); if (asset.kind === 'video') { img.controls = true; img.muted = true; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
+      const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       const list = document.createElement('ul');
       for (const use of asset.uses) { const item = document.createElement('li'); item.textContent = `${use.kind}: ${use.name} · revision ${use.revision}`; list.append(item); }
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = `Delete unused ${asset.kind}`; remove.disabled = asset.uses.length > 0;
@@ -489,7 +505,7 @@
       });
       card.append(summary, img, list, remove); $('asset-list').append(card);
     }
-    renderImagePicker(); renderVideoPicker(); renderThemeAssets();
+    renderImagePicker(); renderVideoPicker(); renderMusicPicker(); renderThemeAssets();
   }
   async function loadAssets() {
     if (assetsFetching) return;
@@ -498,6 +514,26 @@
     catch (error) { assetError(`Asset library unavailable: ${error.message}`); }
     finally { assetsFetching = false; }
   }
+  function renderMusicPicker() {
+    if (!draft) return;
+    const track = draft.soundtrack;
+    const value = track ? `${track.asset.id}:${track.asset.revision}` : '';
+    const options = [new Option('No soundtrack', '')];
+    for (const asset of assets.filter(asset => asset.kind === 'audio')) for (const revision of asset.revisions) options.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
+    if (value && !options.some(option => option.value === value)) options.push(new Option('Unavailable selected music', value));
+    $('soundtrack-asset').replaceChildren(...options); $('soundtrack-asset').value = value;
+    $('soundtrack-settings').hidden = !track;
+    $('soundtrack-mode').value = track?.mode || 'end'; $('soundtrack-volume').value = track?.volume_percent ?? 100;
+    $('soundtrack-fade-in').value = track?.fade_in_seconds || 0; $('soundtrack-fade-out').value = track?.fade_out_seconds || 0;
+    const asset = assets.find(asset => asset.id === track?.asset.id);
+    const meta = asset?.revisions.find(revision => revision.revision === track.asset.revision);
+    $('soundtrack-info').textContent = meta ? `Track: ${meta.duration_seconds.toFixed(3)} seconds · pinned revision ${track.asset.revision}` : 'Select an available music revision.';
+    $('adopt-music-revision').hidden = !asset || asset.revision === track.asset.revision;
+  }
+  $('adopt-music-revision').addEventListener('click', () => {
+    const track = draft?.soundtrack, asset = assets.find(asset => asset.id === track?.asset.id);
+    if (!asset) return; track.asset.revision = asset.revision; renderMusicPicker(); changed();
+  });
   function selectedVideoMeta() {
     const ref = draft?.scenes[selectedScene]?.video?.asset;
     return assets.find(asset => asset.id === ref?.id)?.revisions.find(revision => revision.revision === ref.revision);
@@ -565,14 +601,16 @@
     const frame = () => { advanceSourcePreview(); $('source-video').requestVideoFrameCallback(frame); }; $('source-video').requestVideoFrameCallback(frame);
   }
   $('asset-kind').addEventListener('change', () => {
-    const video = $('asset-kind').value === 'video'; $('asset-file').accept = video ? 'video/mp4,.mp4' : 'image/png,image/jpeg';
-    $('asset-file-label').textContent = video ? 'H.264/AAC MP4 video' : 'PNG or JPEG'; $('asset-file').value = ''; renderAssets();
+    const kind = $('asset-kind').value;
+    $('asset-file').accept = kind === 'video' ? 'video/mp4,.mp4' : kind === 'audio' ? 'audio/mpeg,audio/wav,.mp3,.wav' : 'image/png,image/jpeg';
+    $('asset-file-label').textContent = kind === 'video' ? 'H.264/AAC MP4 video' : kind === 'audio' ? 'MP3 or PCM WAV · up to 32 MiB and 10 minutes' : 'PNG or JPEG';
+    $('asset-file').value = ''; renderAssets();
   });
   $('asset-upload').addEventListener('submit', async event => {
     event.preventDefault(); if (assetUploading) return;
     const file = $('asset-file').files[0]; if (!file) return;
     const kind = $('asset-kind').value;
-    if (file.size > (kind === 'video' ? 512 : 10) * 1048576) { assetError(`Choose a ${kind} up to ${kind === 'video' ? 512 : 10} MiB.`); return; }
+    if (file.size > (kind === 'video' ? 512 : kind === 'audio' ? 32 : 10) * 1048576) { assetError(`Choose a ${kind} up to ${kind === 'video' ? 512 : kind === 'audio' ? 32 : 10} MiB.`); return; }
     const target = assets.find(asset => asset.id === $('asset-upload-target').value);
     const data = new FormData(); data.append('file', file);
     assetUploading = true; $('asset-upload-button').disabled = true; assetError(''); $('asset-status').textContent = 'Uploading asset; preparation waits for current media work…';
@@ -581,7 +619,7 @@
       const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'X-Restreamer-Control': '1'}, body: data});
       if (!response.ok) throw new Error(await response.text());
       const asset = await response.json(); $('asset-file').value = '';
-      $('asset-status').textContent = `${asset.name} saved as revision ${asset.revision}. Choose its revision in a scene to use it.`;
+      $('asset-status').textContent = `${asset.name} saved as revision ${asset.revision}. Choose its revision in a scene or soundtrack to use it.`;
       await loadAssets();
     } catch (error) { assetError(error.message); $('asset-status').textContent = 'Asset was not acknowledged as saved; previous revisions remain unchanged.'; }
     finally { assetUploading = false; $('asset-upload-button').disabled = false; }

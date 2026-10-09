@@ -60,3 +60,5 @@
 #source-video, .generator-asset video { display: block; max-width: 100%; width: 100%; margin: 10px 0; background: #000; }
 #source-video { max-height: 360px; }
 #scene-video-controls input[type="checkbox"] { width: auto; margin-right: 8px; }
+.generator-soundtrack { margin: 20px 0; padding: 16px 0; border-block: 1px solid #30374b; }
+.generator-asset audio { display: block; width: 100%; margin-block: 12px; }

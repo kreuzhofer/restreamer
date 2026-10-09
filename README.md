@@ -964,3 +964,43 @@ Video assets follow the same immutable revision, explicit adoption, reuse,
 template, retry and deletion protections as images. Switching media kind or
 layout retains inactive references and settings. Choose **No video selected** to
 remove a reference. Replacing an asset never changes captured jobs or outputs.
+
+### Continuous background soundtrack
+
+Upload reusable **Music** assets as MP3 or PCM WAV: up to 32 MiB, one mono/stereo
+track at 8–192 kHz, and 0.04–600 seconds of decoded audio. Files with extra tracks
+(including embedded video artwork) are rejected explicitly. Upload preparation
+normalizes audio to stereo 48 kHz signed 16-bit PCM WAV, with exact sample counts;
+it performs no additional lossy encoding. A revision holds at most 115,200,044
+bytes. Audio shares the 200-revision asset limit, immutable replacement/adoption,
+usage reporting and deletion protection with images and video. Uploads share the
+preparation slot and have a five-minute deadline; staged input plus normalized
+PCM/WAV requires at most about 252 MiB before publication.
+
+Select one **Continuous soundtrack** per design. Music starts at the beginning
+and never restarts at scene boundaries. **End at track end** stops at the earlier
+track/design end, with silence afterwards. **Repeat to design end** repeats the
+whole track until the design ends; it does not change scene duration. Repetition
+does not promise a seamless musical join between a track's tail and head.
+Music volume is independent of each video's source-audio controls; video remains
+muted by default. Zero music volume retains the selected revision.
+
+Fade-in starts at the design beginning. Fade-out finishes at the actual audible
+track end in End mode, or at the design end in Repeat mode. Fades round to audio
+samples and must fit the audible interval without overlapping; zero disables a
+fade. Quick scene preview remains visual; generate and play the exact prepared
+output to review the complete audio mix.
+
+The renderer assembles continuous scene PCM, resamples/repeats the soundtrack,
+and mixes them using bounded streaming buffers. When the combined peak exceeds
+full scale, it applies one fixed gain to the entire mix, preserving relative
+source levels. The job's `mix_gain` and displayed **Whole-mix gain** disclose this
+adjustment; 100% means requested levels were retained. There is no adaptive
+normalization or lookahead delay. AAC is encoded once after the complete mix.
+PCM intermediates share the existing 512 MiB workspace cap; the final output has
+its separate 512 MiB cap. Container/AAC packet padding retains the existing
+preview timing tolerance; scene timing comes from video frames.
+
+Soundtrack revision, mode, level and fades are saved in designs and templates,
+and captured immutably by jobs and retries. New uploads or draft edits never
+change an existing generated revision, stage selection, or on-air result.

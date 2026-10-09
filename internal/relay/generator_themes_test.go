@@ -169,6 +169,9 @@ func TestGeneratorThemeAssetsOverridesAndTemplateCopies(t *testing.T) {
 	d := generatorDraft(t, s, 1)
 	d.Theme = mediaauthor.ThemeRef{ID: theme.ID, Revision: 1}
 	d.Stage = "ending"
+	music := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "music.wav", musicFixture(t, "sine=frequency=440:sample_rate=48000", 1)))
+	volume := 40.0
+	d.Soundtrack = &mediaauthor.Soundtrack{Asset: mediaauthor.AssetRef{ID: music.ID, Revision: 1}, Mode: "repeat", VolumePercent: &volume, FadeInSeconds: 0.1, FadeOutSeconds: 0.2}
 	d.Scenes[0].Font = "go-mono"
 	d.Scenes[0].FontSize = 30
 	d.Scenes[0].Text = "Mixed Case\ncafé"
@@ -191,6 +194,16 @@ func TestGeneratorThemeAssetsOverridesAndTemplateCopies(t *testing.T) {
 	if response := dashboardRequest(s, "DELETE", "/api/generator/assets/"+a.ID, `{}`); response.Code != 409 || !bytes.Contains(response.Body.Bytes(), []byte(`"kind":"theme"`)) || !bytes.Contains(response.Body.Bytes(), []byte(`"kind":"design"`)) {
 		t.Fatal("theme asset retention", response.Code, response.Body.String())
 	}
+	other := d
+	other.Stage = "prestream"
+	other.Name = "Same brand prestream"
+	raw, _ = json.Marshal(other)
+	sibling := dashboardRequest(s, "POST", "/api/generator/designs", string(raw))
+	if sibling.Code != 201 {
+		t.Fatal(sibling.Code, sibling.Body.String())
+	}
+	json.Unmarshal(sibling.Body.Bytes(), &other)
+	oldMusic, _ := json.Marshal(d.Soundtrack)
 	oldScenes, _ := json.Marshal(d.Scenes)
 	theme.Style.FontSize = 120
 	theme.Style.LineSpacingPercent = 180
@@ -207,6 +220,17 @@ func TestGeneratorThemeAssetsOverridesAndTemplateCopies(t *testing.T) {
 	}
 	json.Unmarshal(w.Body.Bytes(), &d)
 	newScenes, _ := json.Marshal(d.Scenes)
+	newMusic, _ := json.Marshal(d.Soundtrack)
+	if !bytes.Equal(oldMusic, newMusic) {
+		t.Fatal("theme adoption changed continuous soundtrack")
+	}
+	sibling = dashboardRequest(s, "GET", "/api/generator/designs/"+other.ID, "")
+	var unchanged mediaauthor.Design
+	json.Unmarshal(sibling.Body.Bytes(), &unchanged)
+	if unchanged.Theme.Revision != 1 || unchanged.Stage != "prestream" {
+		t.Fatal("shared theme edit changed another stage's draft")
+	}
+
 	if !bytes.Equal(oldScenes, newScenes) {
 		t.Fatal("adoption changed content, timing or overrides")
 	}

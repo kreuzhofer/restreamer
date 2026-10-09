@@ -42,7 +42,12 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	profile := s.library.profile
 	s.library.mu.Unlock()
 	theme, _ := g.resolveTheme(draft.Theme)
-	if issues := append(append(generationIssues(draft, profile, theme), g.assetIssues(draft)...), append(g.themeIssues(draft.Theme), g.videoIssues(draft, profile.FPS)...)...); len(issues) > 0 {
+	issues := generationIssues(draft, profile, theme)
+	issues = append(issues, g.assetIssues(draft)...)
+	issues = append(issues, g.videoIssues(draft, profile.FPS)...)
+	issues = append(issues, g.musicIssues(draft, profile.FPS, profile.SampleRate)...)
+	issues = append(issues, g.themeIssues(draft.Theme)...)
+	if len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"error": "Resolve design validation before generating.", "issues": issues})
 		return
 	}
@@ -195,6 +200,7 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 	job.Error = ""
 	job.Message = ""
 	job.MediaRevision = ""
+	job.MixGain = nil
 	job.QueuePosition = 0
 	job.RetryOf = previous.ID
 	g.admitJob(w, job)

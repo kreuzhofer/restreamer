@@ -195,6 +195,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	issues = append(issues, s.generator.assetIssues(draft)...)
 	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
 	issues = append(issues, s.generator.videoIssues(draft, profile.FPS)...)
+	issues = append(issues, s.generator.musicIssues(draft, profile.FPS, profile.SampleRate)...)
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
 		generatorJSON(w, 200, map[string]any{"issues": issues, "profile": profile, "duration_seconds": mediaauthor.CutDuration(draft, profile.FPS)})
