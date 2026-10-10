@@ -60,7 +60,14 @@ func newDrainDestination(t *testing.T) drainDestination {
 		stop := context.AfterFunc(ctx, func() { n.Close() })
 		defer stop()
 		tcp := n.(*net.TCPConn)
-		tcp.SetReadBuffer(1024)
+		// Keep the receive window stable. Shrinking it to 1 KiB before
+		// withholding reads can make Linux's zero-window recovery dominate
+		// the time needed to consume the first frame. The 8 MiB packets
+		// still exceed this buffer and block until the fixture reads.
+		if err := tcp.SetReadBuffer(1 << 20); err != nil {
+			t.Error(err)
+			return
+		}
 		c, err := rtmp.Accept(n, func(app, key string) bool { return app == "app" && key == "target-key" })
 		if err != nil {
 			return
@@ -71,7 +78,6 @@ func newDrainDestination(t *testing.T) drainDestination {
 		case <-ctx.Done():
 			return
 		}
-		tcp.SetReadBuffer(1 << 20)
 		for {
 			message, err := c.Read()
 			if err != nil {
@@ -81,7 +87,6 @@ func newDrainDestination(t *testing.T) drainDestination {
 				break
 			}
 		}
-		tcp.SetReadBuffer(1024)
 		close(firstRead)
 		<-ctx.Done()
 	}()
