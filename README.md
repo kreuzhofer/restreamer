@@ -810,10 +810,18 @@ Built-in starters are immutable sources; their copied scenes are fully editable.
 
 The generator's **Style theme library** offers Retro revision 1 (the original
 static appearance), Retro revision 2 (pixel corners and an animated pixel
-trail), **Arcade After Hours · revision 1** (the illustrated arcade city,
+trail), **Arcade After Hours · revision 2** (the illustrated arcade city,
 vivid stars, chasing lights, cabinet highlights and animated canal reflections),
-and **Neon Night · revision 1** (a neon skyline, rooftop cat, shimmering river,
+and **Neon Night · revision 2** (a neon skyline, rooftop cat, shimmering river,
 changing window lights, cyan/magenta trims and vivid stars).
+Revision 2 of both illustrated themes keeps the 120-point title lettering and
+uses a separate 64-point default for list scenes, so the agenda and follow-up
+starters fit without manual changes. For existing revision-1 designs, click
+**Apply updated theme**, then regenerate. Revision 1 remains available; already
+prepared media is unchanged. Explicit scene font sizes still override the theme.
+The theme editor exposes **List font size**; leaving it blank inherits the
+normal default. Whitespace-only titles render empty, and validation identifies
+the affected scene and list item rather than leaving stale errors while editing.
 Duplicate any built-in into a named theme. Supported settings include Go Sans,
 Go Mono or the embedded uppercase Arcade Pixel alphabet, 24–120 point type at 1080p, three palette colors, an optional pixel text edge color, exact background
 and logo image revisions, logo corner and size, content dimensions and vertical

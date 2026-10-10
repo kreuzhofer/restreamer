@@ -162,6 +162,7 @@
       $('list-items').append(row); itemEditors.push({input: textarea, error});
     }
     $('add-list-item').disabled = (scene.items || []).length >= 20;
+    renderDesignTheme();
   }
   function renderTransitionControls() {
     const last = selectedScene === draft.scenes.length - 1;
@@ -230,10 +231,18 @@
     if (scene.items.length >= 20) return;
     scene.items.push('New list item'); renderSelectedScene(); changed();
   });
+  function clearValidation() {
+    for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
+    for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
+    $('scene-issues').replaceChildren();
+  }
   function schedulePreview() {
     clearTimeout(previewTimer);
     previewSequence++;
     previewAbort?.abort();
+    validationIssues = [];
+    clearValidation();
+    if (draft) renderScenes();
     $('preview-state').textContent = 'Validating the current scene…';
     $('scene-preview').hidden = true;
     stopSourcePreview();
@@ -253,9 +262,7 @@
         const fade = Math.round((draft.ending_fade_seconds ?? 1) * result.profile.fps) / result.profile.fps;
         $('ending-fade-effective').textContent = fade === 0 ? 'Final fade disabled: the final image and audio are preserved.' : `Final ${fade.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds fade to black and silence after rounding to video frames, within the total above.`;
       }
-      for (const [input, output] of Object.values(fields)) { $(input).removeAttribute('aria-invalid'); $(output).textContent = ''; }
-      for (const editor of itemEditors) { editor.input.removeAttribute('aria-invalid'); editor.error.textContent = ''; }
-      $('scene-issues').replaceChildren();
+      clearValidation();
       for (const issue of result.issues) {
         const match = /^scenes\.(\d+)\.(.+)$/.exec(issue.field);
         const sceneIndex = match ? Number(match[1]) : null;
@@ -270,7 +277,9 @@
           }
         }
         const entry = document.createElement(sceneIndex === null ? 'p' : 'button');
-        entry.textContent = `${sceneIndex === null ? 'Composition' : `Scene ${sceneIndex + 1}`} · ${issue.message}`;
+        const sceneName = sceneIndex === null ? '' : snapshot.scenes[sceneIndex]?.text.trim().split('\n')[0];
+        const fieldLabel = fieldName.startsWith('items.') ? `List item ${Number(fieldName.split('.')[1]) + 1}` : fieldName === 'text' ? 'Title text' : fieldName === 'items' ? 'List items' : fieldName.replaceAll('_', ' ');
+        entry.textContent = `${sceneIndex === null ? 'Composition' : `Scene ${sceneIndex + 1}${sceneName ? ` · ${sceneName}` : ''}`} · ${fieldLabel}: ${issue.message}`;
         if (sceneIndex !== null) { entry.type = 'button'; entry.addEventListener('click', () => selectScene(sceneIndex)); }
         $('scene-issues').append(entry);
       }
@@ -682,7 +691,7 @@
 
 
   const themeFields = [
-    ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel']], ['font_size', 'Font size at 1080p', 24, 120],
+    ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel']], ['font_size', 'Title/default font size at 1080p', 24, 120], ['list_font_size', 'List font size at 1080p (blank inherits default)', 'optional-size'],
     ['background_color', 'Background color', 'color'], ['text_color', 'Text color', 'color'], ['text_edge_color', 'Pixel text edge color (blank for warm default)', 'text'], ['accent_color', 'Accent color', 'color'],
     ['artwork', 'Built-in background artwork', ['', 'arcade-after-hours', 'neon-night']], ['background', 'Background image revision (clear built-in artwork first)', 'asset'], ['logo', 'Logo image revision', 'asset'],
     ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8],
@@ -696,6 +705,7 @@
     const input = document.createElement(Array.isArray(kind) || kind === 'asset' ? 'select' : 'input'); input.id = `theme-${key}`;
     if (Array.isArray(kind)) input.replaceChildren(...kind.map(value => new Option(value ? value.replaceAll('-', ' ') : 'None', value)));
     else if (typeof kind === 'number') { input.type = 'number'; input.min = kind; input.max = maximum; input.step = '1'; input.required = true; }
+    else if (kind === 'optional-size') { input.type = 'number'; input.min = 24; input.max = 120; input.step = '1'; }
     else if (kind === 'color') input.type = 'color';
     label.append(input); $('theme-fields').append(label);
   }
@@ -723,7 +733,8 @@
     $('preview-time-control').hidden = !['pixel-trail', 'arcade-palette', 'neon-palette'].includes(selected?.style.effect);
     if (selected) {
       $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
-      $('scene-size').placeholder = `Theme default · ${selected.style.font_size}`;
+      const defaultSize = draft.scenes[selectedScene]?.layout === 'list' && selected.style.list_font_size ? selected.style.list_font_size : selected.style.font_size;
+      $('scene-size').placeholder = `Theme default · ${defaultSize}`;
       $('region-width').placeholder = `Theme default · ${selected.style.content_region.width_percent}`;
       $('region-height').placeholder = `Theme default · ${selected.style.content_region.height_percent}`;
     }
@@ -746,6 +757,7 @@
       const value = $(`theme-${key}`).value;
       if (['width_percent','height_percent'].includes(key)) theme.style.content_region[key] = Number(value);
       else if (kind === 'asset') { if (value) theme.style[key] = themeRef(value); else delete theme.style[key]; }
+      else if (kind === 'optional-size') { if (value) theme.style[key] = Number(value); else delete theme.style[key]; }
       else theme.style[key] = typeof kind === 'number' ? Number(value) : value;
     }
     return theme;

@@ -25,6 +25,7 @@ type Style struct {
 	Artwork               string        `json:"artwork,omitempty"`
 	ContentOffsetYPercent float64       `json:"content_offset_y_percent,omitempty"`
 	Font                  string        `json:"font"`
+	ListFontSize          float64       `json:"list_font_size,omitempty"`
 	FontSize              float64       `json:"font_size"`
 	BackgroundColor       string        `json:"background_color"`
 	TextEdgeColor         string        `json:"text_edge_color,omitempty"`
@@ -85,7 +86,11 @@ func NeonNightTheme() Theme {
 	return Theme{ID: "neon-night", Revision: 1, Name: "Neon Night", Builtin: true, Style: s}
 }
 func BuiltinThemes() []Theme {
-	return []Theme{RetroTheme(1), RetroTheme(2), ArcadeAfterHoursTheme(), NeonNightTheme()}
+	arcade, neon := ArcadeAfterHoursTheme(), NeonNightTheme()
+	arcadeList, neonList := arcade, neon
+	arcadeList.Revision, neonList.Revision = 2, 2
+	arcadeList.Style.ListFontSize, neonList.Style.ListFontSize = 64, 64
+	return []Theme{RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList}
 }
 func IsBuiltinTheme(id string) bool {
 	for _, t := range BuiltinThemes() {
@@ -152,6 +157,9 @@ func ValidateStyle(s Style) []Issue {
 			add(field, "Use a six-digit #RRGGBB color.")
 		}
 	}
+	if s.ListFontSize != 0 && !validRange(s.ListFontSize, 24, 120) {
+		add("list_font_size", "Use 24–120 at 1080p, or leave blank to inherit the default font size.")
+	}
 	if !validRange(s.FontSize, 24, 120) {
 		add("font_size", "Use 24–120 at 1080p.")
 	}
@@ -190,6 +198,9 @@ func resolveSceneStyle(scene Scene, s Style) Scene {
 	}
 	if scene.FontSize == 0 {
 		scene.FontSize = s.FontSize
+		if scene.Layout == "list" && s.ListFontSize != 0 {
+			scene.FontSize = s.ListFontSize
+		}
 	}
 	// A full-screen media layout remains full-screen unless explicitly inset.
 	if scene.Layout != "media" {

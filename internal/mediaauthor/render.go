@@ -218,7 +218,7 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 		}
 		return "", ""
 	}
-	if scene.Layout == "title" || scene.Text != "" {
+	if strings.TrimSpace(scene.Text) != "" {
 		if field, message := appendText(scene.Text, "text", 0, false); message != "" {
 			return fail(field, message)
 		}
