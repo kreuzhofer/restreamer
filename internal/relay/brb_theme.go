@@ -115,7 +115,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 		scene.Image = &mediaauthor.AssetRef{ID: settings.Generation, Revision: 1}
 		scene.Text = ""
 	}
-	inputs.TransparentBackdrop = animatedArcade(settings.Theme.Style)
+	inputs.TransparentBackdrop = animatedArtwork(settings.Theme.Style)
 	raster, err := mediaauthor.RenderSceneStyled(scene, p.Width, p.Height, settings.Theme.Style, inputs, -1, p.FPS)
 	if err != nil {
 		return nil, fmt.Errorf("BRB layout: %s", err.Error())
@@ -126,8 +126,8 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 		return nil, err
 	}
 	inputs.TransparentBackdrop = false
-	if animatedArcade(settings.Theme.Style) {
-		inputs.Background, err = arcadePreviewFrame(ctx, p, 0, settings.Theme.Style)
+	if animatedArtwork(settings.Theme.Style) {
+		inputs.Background, err = artworkPreviewFrame(ctx, p, 0, settings.Theme.Style)
 		if err != nil {
 			return nil, err
 		}
@@ -141,8 +141,8 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	}
 	args := []string{"-filter_threads", "1", "-filter_complex_threads", "1", "-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", filepath.Join(dir, "base.png")}
 	style := settings.Theme.Style
-	if animatedArcade(style) {
-		args, err = arcadeOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style)
+	if animatedArtwork(style) {
+		args, err = artworkOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style)
 		if err != nil {
 			return nil, err
 		}

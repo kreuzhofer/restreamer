@@ -1,4 +1,4 @@
-.PHONY: build test check check-web cross-build brb-artwork check-brb-artwork check-arcade-artwork
+.PHONY: build test check check-web cross-build brb-artwork check-brb-artwork check-arcade-artwork check-neon-artwork
 brb-artwork:
 	node artwork/brb/render.mjs
 check-brb-artwork:
@@ -6,11 +6,13 @@ check-brb-artwork:
 	node artwork/brb/render.mjs --check
 check-arcade-artwork:
 	node artwork/arcade-after-hours/verify.mjs
+check-neon-artwork:
+	node artwork/neon-night/verify.mjs
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/restreamer ./cmd/restreamer
 test:
 	go test -race ./...
-check: test check-web check-arcade-artwork
+check: test check-web check-arcade-artwork check-neon-artwork
 	go vet ./...
 check-web:
 	node --test tests/*.test.mjs

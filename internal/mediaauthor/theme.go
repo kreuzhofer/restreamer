@@ -27,6 +27,7 @@ type Style struct {
 	Font                  string        `json:"font"`
 	FontSize              float64       `json:"font_size"`
 	BackgroundColor       string        `json:"background_color"`
+	TextEdgeColor         string        `json:"text_edge_color,omitempty"`
 	TextColor             string        `json:"text_color"`
 	AccentColor           string        `json:"accent_color"`
 	Background            *AssetRef     `json:"background,omitempty"`
@@ -72,7 +73,20 @@ func ArcadeAfterHoursTheme() Theme {
 	s.ContentOffsetYPercent = -15
 	return Theme{ID: "arcade-after-hours", Revision: 1, Name: "Arcade After Hours", Builtin: true, Style: s}
 }
-func BuiltinThemes() []Theme { return []Theme{RetroTheme(1), RetroTheme(2), ArcadeAfterHoursTheme()} }
+
+// NeonNightTheme pins its own city artwork and cool pixel lettering.
+func NeonNightTheme() Theme {
+	s := ArcadeAfterHoursTheme().Style
+	s.BackgroundColor, s.TextColor, s.AccentColor = "#030522", "#c8fff4", "#4815d9"
+	s.TextEdgeColor = "#ef38ce"
+	s.Artwork, s.Effect = "neon-night", "neon-palette"
+	s.ContentRegion = ContentRegion{62, 36}
+	s.ContentOffsetYPercent = -17
+	return Theme{ID: "neon-night", Revision: 1, Name: "Neon Night", Builtin: true, Style: s}
+}
+func BuiltinThemes() []Theme {
+	return []Theme{RetroTheme(1), RetroTheme(2), ArcadeAfterHoursTheme(), NeonNightTheme()}
+}
 func IsBuiltinTheme(id string) bool {
 	for _, t := range BuiltinThemes() {
 		if t.ID == id {
@@ -107,7 +121,7 @@ func ParseColor(value string) (color.RGBA, error) {
 func ValidateStyle(s Style) []Issue {
 	issues := make([]Issue, 0)
 	add := func(field, message string) { issues = append(issues, Issue{"style." + field, message}) }
-	if s.Artwork != "" && s.Artwork != "arcade-after-hours" {
+	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" {
 		add("artwork", "Choose an available built-in artwork.")
 	}
 	if s.Artwork != "" && s.Background != nil {
@@ -115,6 +129,14 @@ func ValidateStyle(s Style) []Issue {
 	}
 	if s.Effect == "arcade-palette" && s.Artwork != "arcade-after-hours" {
 		add("effect", "Arcade palette animation requires Arcade After Hours artwork.")
+	}
+	if s.Effect == "neon-palette" && s.Artwork != "neon-night" {
+		add("effect", "Neon palette animation requires Neon Night artwork.")
+	}
+	if s.TextEdgeColor != "" {
+		if _, err := ParseColor(s.TextEdgeColor); err != nil {
+			add("text_edge_color", "Use a six-digit #RRGGBB color.")
+		}
 	}
 	if !validRange(s.ContentOffsetYPercent, -20, 20) {
 		add("content_offset_y_percent", "Use a vertical offset from −20 to 20%.")
@@ -148,8 +170,8 @@ func ValidateStyle(s Style) []Issue {
 	if !validRange(s.BorderWidth, 1, 12) {
 		add("border_width", "Use 1–12 at 1080p.")
 	}
-	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" {
-		add("effect", "Choose none, pixel-trail or arcade-palette.")
+	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" && s.Effect != "neon-palette" {
+		add("effect", "Choose none, pixel-trail, arcade-palette or neon-palette.")
 	}
 	if s.EffectSpeed < 1 || s.EffectSpeed > 12 {
 		add("effect_speed", "Use 1–12 pixel steps per second.")

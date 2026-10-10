@@ -28,8 +28,8 @@ func sampleBoundary(frames, sampleRate, fps int) int64 {
 
 // The caller already holds preparation admission. No helper reacquires it.
 func (s *Server) renderVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
-	if animatedArcade(style) {
-		return s.renderArcadeVideoSegment(ctx, scene, p, dst, dir, budget, progress, style, inputs)
+	if animatedArtwork(style) {
+		return s.renderArtworkVideoSegment(ctx, scene, p, dst, dir, budget, progress, style, inputs)
 	}
 	source, meta, err := s.openVideoAsset(scene)
 	if err != nil {

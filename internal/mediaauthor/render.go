@@ -309,10 +309,14 @@ func RenderSceneStyled(scene Scene, width, height int, style Style, inputs Rende
 		dot := fixed.Point26_6{X: x, Y: baseline + line.y}
 		if pixel, ok := layout.face.(*pixelFace); ok {
 			step := pixel.shadowStep()
+			edgeColor := style.TextEdgeColor
+			if edgeColor == "" {
+				edgeColor = "#c3663c"
+			}
 			for _, layer := range []struct {
 				offset int
 				color  string
-			}{{3 * step, "#031632"}, {2 * step, style.AccentColor}, {step, "#c3663c"}} {
+			}{{3 * step, "#031632"}, {2 * step, style.AccentColor}, {step, edgeColor}} {
 				c, _ := ParseColor(layer.color)
 				drawer.Src = image.NewUniform(c)
 				drawer.Dot = dot.Add(fixed.P(step, layer.offset))

@@ -1,0 +1,10 @@
+index.html
+*.mp4
+poster.png
+frame-04.png
+original-still.png
+desktop-player.png
+mobile-player.png
+validation*.json
+mask-validation.json
+debug/

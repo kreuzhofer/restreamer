@@ -107,12 +107,12 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 			args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "268435456", "-filter_threads", "1", "-filter_complex_threads", "1",
 				"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
 			}
-			if animatedArcade(theme.Style) {
-				arcadeArgs, err := arcadeOverlayArgs(dir, still, p, theme.Style)
+			if animatedArtwork(theme.Style) {
+				artworkArgs, err := artworkOverlayArgs(dir, still, p, theme.Style)
 				if err != nil {
 					return "", err
 				}
-				args = append(generatorBaseArgs(), arcadeArgs...)
+				args = append(generatorBaseArgs(), artworkArgs...)
 			} else if theme.Style.Effect == "none" {
 				args = append(args, "-map", "0:v:0", "-vf", "setsar=1,format=yuv420p")
 			} else {
@@ -266,7 +266,7 @@ func (s *Server) writeSceneRaster(scene mediaauthor.Scene, width, height int, pa
 		return err
 	}
 	inputs.Image = asset
-	inputs.TransparentBackdrop = animatedArcade(style)
+	inputs.TransparentBackdrop = animatedArtwork(style)
 	img, err := mediaauthor.RenderSceneStyled(scene, width, height, style, inputs, -1, 0)
 	if err != nil {
 		return errors.New("A captured scene cannot be rendered; check its typography and layout.")

@@ -222,7 +222,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": selectedIssues})
 		return
 	}
-	if draft.Scenes[sceneIndex].IsVideo() || animatedArcade(theme.Style) {
+	if draft.Scenes[sceneIndex].IsVideo() || animatedArtwork(theme.Style) {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(35 * time.Second))
 	}
 	asset, err := s.loadScenePreview(r.Context(), draft.Scenes[sceneIndex])
@@ -244,8 +244,8 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if animatedArcade(theme.Style) {
-		inputs.Background, err = arcadePreviewFrame(r.Context(), profile, frame, theme.Style)
+	if animatedArtwork(theme.Style) {
+		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, frame, theme.Style)
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

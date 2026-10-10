@@ -26,55 +26,87 @@ var afterHoursLoop []byte
 //go:embed artwork/after-hours/poster.png
 var afterHoursPoster []byte
 
-func animatedArcade(style mediaauthor.Style) bool {
-	return style.Artwork == "arcade-after-hours" && style.Effect == "arcade-palette"
+//go:embed artwork/neon-night/loop.mp4
+var neonNightLoop []byte
+
+//go:embed artwork/neon-night/poster.png
+var neonNightPoster []byte
+
+type preparedArtwork struct {
+	loop, poster []byte
+	effect       string
+	seconds      int
+}
+
+func themeArtwork(id string) (preparedArtwork, bool) {
+	switch id {
+	case "arcade-after-hours":
+		return preparedArtwork{afterHoursLoop, afterHoursPoster, "arcade-palette", 16}, true
+	case "neon-night":
+		return preparedArtwork{neonNightLoop, neonNightPoster, "neon-palette", 16}, true
+	default:
+		return preparedArtwork{}, false
+	}
+}
+func animatedArtwork(style mediaauthor.Style) bool {
+	art, ok := themeArtwork(style.Artwork)
+	return ok && style.Effect == art.effect
 }
 func themedBRBSeconds(style mediaauthor.Style) int {
-	if animatedArcade(style) {
-		return 16
+	if animatedArtwork(style) {
+		art, _ := themeArtwork(style.Artwork)
+		return art.seconds
 	}
 	return 4
 }
 
 // Contain the illustration just like static ThemeBackdrop, including non-16:9
 // profiles. Colors have already passed six-digit validation before rendering.
-func arcadeBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string {
+func artworkBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string {
 	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=area,format=rgb24,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x%s,setsar=1", p.Width, p.Height, p.Width, p.Height, strings.TrimPrefix(style.BackgroundColor, "#"))
 }
 
 // Preview uses the same prepared master, frame-rate conversion and sizing as encoding.
 // The existing preview admission lock bounds concurrent decoder memory.
-func arcadePreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style) (image.Image, error) {
+func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style) (image.Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),%s", p.FPS, frame%(16*p.FPS), arcadeBackdropFilter(p, style))
+	art, ok := themeArtwork(style.Artwork)
+	if !ok {
+		return nil, errors.New("The selected artwork is unavailable.")
+	}
+	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),%s", p.FPS, frame%(art.seconds*p.FPS), artworkBackdropFilter(p, style))
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-filter_threads", "1", "-i", "pipe:0", "-vf", filter, "-frames:v", "1", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "pipe:1")
-	cmd.Stdin = bytes.NewReader(afterHoursLoop)
+	cmd.Stdin = bytes.NewReader(art.loop)
 	data, err := cmd.Output()
 	if err != nil {
-		return nil, errors.New("Cannot decode Arcade After Hours preview; check FFmpeg installation.")
+		return nil, errors.New("Cannot decode animated artwork preview; check FFmpeg installation.")
 	}
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.New("Cannot read Arcade After Hours preview.")
+		return nil, errors.New("Cannot read animated artwork preview.")
 	}
 	return img, nil
 }
 
-// arcadeOverlayArgs composes transparent content over the immutable artwork loop.
+// artworkOverlayArgs composes transparent content over the immutable artwork loop.
 // It only writes into the caller-owned, bounded preparation workspace.
-func arcadeOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style) ([]string, error) {
-	master := filepath.Join(dir, "arcade-master.mp4")
-	if err := os.WriteFile(master, afterHoursLoop, 0600); err != nil {
-		return nil, errors.New("Cannot save arcade preparation master; check storage.")
+func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style) ([]string, error) {
+	art, ok := themeArtwork(style.Artwork)
+	if !ok {
+		return nil, errors.New("The selected artwork is unavailable.")
 	}
-	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, arcadeBackdropFilter(p, style))
+	master := filepath.Join(dir, "artwork-master.mp4")
+	if err := os.WriteFile(master, art.loop, 0600); err != nil {
+		return nil, errors.New("Cannot save artwork preparation master; check storage.")
+	}
+	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, artworkBackdropFilter(p, style))
 	return []string{"-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground, "-threads", "2", "-stream_loop", "-1", "-i", master, "-filter_complex", filter, "-map", "[v]"}, nil
 }
 
 // Normalize only the clip range first, then repeat it over the full background
 // cycle. Repeating a one-second inset must not restart the sixteen-second sky.
-func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
+func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
 	source, meta, err := s.openVideoAsset(scene)
 	if err != nil {
 		return err
@@ -93,7 +125,7 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 	}
 	scale := math.Min(float64(region.Dx())/float64(meta.Width), float64(region.Dy())/float64(meta.Height))
 	width, height := max(2, int(float64(meta.Width)*scale)/2*2), max(2, int(float64(meta.Height)*scale)/2*2)
-	normalized := filepath.Join(dir, "arcade-video-range.mp4")
+	normalized := filepath.Join(dir, "artwork-video-range.mp4")
 	defer os.Remove(normalized)
 	args := append(generatorBaseArgs(), "-ss", decimal(start))
 	args = append(args, videoInputArgs(source.Name())...)
@@ -109,20 +141,24 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 	}
 	info, err := os.Stat(normalized)
 	if err != nil || info.Size() >= budget {
-		return errors.New("Arcade video normalization reached its workspace limit.")
+		return errors.New("Artwork video normalization reached its workspace limit.")
 	}
-	master := filepath.Join(dir, "arcade-master.mp4")
-	if err := os.WriteFile(master, afterHoursLoop, 0600); err != nil {
-		return errors.New("Cannot save arcade preparation master.")
+	art, ok := themeArtwork(style.Artwork)
+	if !ok {
+		return errors.New("The selected artwork is unavailable.")
+	}
+	master := filepath.Join(dir, "artwork-master.mp4")
+	if err := os.WriteFile(master, art.loop, 0600); err != nil {
+		return errors.New("Cannot save artwork preparation master.")
 	}
 	inputs.TransparentBackdrop = true
-	border := filepath.Join(dir, "arcade-video-border.png")
+	border := filepath.Join(dir, "artwork-video-border.png")
 	defer os.Remove(border)
 	if err := saveGeneratorRaster(border, mediaauthor.ThemeBackdrop(p.Width, p.Height, style, inputs)); err != nil {
 		return err
 	}
 	overlay := mediaauthor.ThemeForeground(p.Width, p.Height, style, inputs)
-	foreground := filepath.Join(dir, "arcade-video-foreground.png")
+	foreground := filepath.Join(dir, "artwork-video-foreground.png")
 	defer os.Remove(foreground)
 	if err := saveGeneratorRaster(foreground, overlay); err != nil {
 		return err
@@ -132,7 +168,7 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 		args = append(args, "-stream_loop", "-1")
 	}
 	args = append(args, "-threads", "2", "-i", normalized, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", border, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
-	filter = fmt.Sprintf("[0:v]fps=%d,%s[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, arcadeBackdropFilter(p, style), region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
+	filter = fmt.Sprintf("[0:v]fps=%d,%s[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, artworkBackdropFilter(p, style), region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
 	args = append(args, "-filter_complex", filter, "-map", "[v]", "-an", "-frames:v", strconv.Itoa(frames))
 	args = append(args, videoEncodingArgs(p)...)
 	args = append(args, "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)
@@ -141,7 +177,7 @@ func (s *Server) renderArcadeVideoSegment(ctx context.Context, scene mediaauthor
 	}
 	out, err := os.Stat(dst)
 	if err != nil || out.Size()+info.Size() >= budget {
-		return errors.New("Arcade video composition reached its workspace limit.")
+		return errors.New("Artwork video composition reached its workspace limit.")
 	}
 	return videoSourceUnchanged(source, meta)
 }

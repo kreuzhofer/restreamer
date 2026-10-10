@@ -810,10 +810,12 @@ Built-in starters are immutable sources; their copied scenes are fully editable.
 
 The generator's **Style theme library** offers Retro revision 1 (the original
 static appearance), Retro revision 2 (pixel corners and an animated pixel
-trail), and **Arcade After Hours · revision 1** (the illustrated arcade city,
-vivid stars, chasing lights, cabinet highlights and animated canal reflections).
+trail), **Arcade After Hours · revision 1** (the illustrated arcade city,
+vivid stars, chasing lights, cabinet highlights and animated canal reflections),
+and **Neon Night · revision 1** (a neon skyline, rooftop cat, shimmering river,
+changing window lights, cyan/magenta trims and vivid stars).
 Duplicate any built-in into a named theme. Supported settings include Go Sans,
-Go Mono or the embedded uppercase Arcade Pixel alphabet, 24–120 point type at 1080p, three palette colors, exact background
+Go Mono or the embedded uppercase Arcade Pixel alphabet, 24–120 point type at 1080p, three palette colors, an optional pixel text edge color, exact background
 and logo image revisions, logo corner and size, content dimensions and vertical
 offset, line/list
 spacing, borders, and a deterministic four-square decorative trail. Logo boxes
@@ -833,10 +835,10 @@ limit of 200 custom revisions. Referenced image revisions remain protected from
 deletion and appear in asset uses. Jobs capture the full resolved theme alongside
 the pinned design and streaming profile. Theme images are verified and decoded
 sequentially, then bounded to the output dimensions (logos to 20% width and 10%
-height). Retro animation uses a small sprite; Arcade After Hours decodes an
-embedded background master. Neither needs a frame cache or browser/Node runtime. Generation remains sequential with bounded scene files.
+height). Retro animation uses a small sprite; Arcade After Hours and Neon Night decode
+embedded background masters. Neither needs a frame cache or browser/Node runtime. Generation remains sequential with bounded scene files.
 
-Arcade After Hours keeps all text editable. Its default large headline uses a
+Both illustrated themes keep all text editable. Their default large headline uses a
 quiet upper-center region; use explicit line breaks for a two-line title and a
 smaller scene font size for lists or longer copy. The pixel alphabet intentionally
 renders lowercase as uppercase and supports A–Z, digits, German umlauts, ß and
@@ -849,10 +851,13 @@ uploaded background, and select **none** to freeze decorative animation.
 The palette-style background repeats every **16 seconds** and restarts per scene.
 For a seamless prestream use scene durations in multiples of 16 seconds, or scene
 and end-to-start crossfades. BRB prepares the full 16-second loop and retains its
-independent music duration. Select Arcade After Hours in **BRB → Shared theme**,
+independent music duration. Select either illustrated theme in **BRB → Shared theme**,
 prepare, preview, then explicitly activate it. Existing designs, prepared media
 and Retro revisions do not change automatically. The source, production edit
-prompt and rebuild instructions are in [artwork/arcade-after-hours](artwork/arcade-after-hours/README.md).
+prompts and rebuild instructions are in [Arcade After Hours](artwork/arcade-after-hours/README.md)
+and [Neon Night](artwork/neon-night/README.md).
+Neon Night uses pale aqua lettering with magenta edges and purple shadows;
+its artwork and animation remain independent of Arcade After Hours.
 
 ### Media generator drafts
 

@@ -223,10 +223,14 @@ func (s *Server) generatorThemeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int) (mediaauthor.RenderInputs, error) {
 	inputs := mediaauthor.RenderInputs{}
 	var err error
-	if theme.Style.Artwork == "arcade-after-hours" {
-		inputs.Background, err = png.Decode(bytes.NewReader(afterHoursPoster))
+	if theme.Style.Artwork != "" {
+		art, ok := themeArtwork(theme.Style.Artwork)
+		if !ok {
+			return inputs, errors.New("The selected artwork is unavailable.")
+		}
+		inputs.Background, err = png.Decode(bytes.NewReader(art.poster))
 		if err != nil {
-			return inputs, errors.New("Cannot decode Arcade After Hours artwork.")
+			return inputs, errors.New("Cannot decode the selected built-in artwork.")
 		}
 	}
 	if theme.Style.Background != nil {
