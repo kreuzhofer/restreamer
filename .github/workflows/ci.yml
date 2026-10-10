@@ -22,7 +22,9 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: go test -race ./...
+      # The real-media race suite can exceed Go's default package-wide 10m limit.
+      # Keep a bounded deadline and individual test timings for diagnosis.
+      - run: go test -race -v -timeout 20m ./...
         env:
           REQUIRE_FFMPEG_TESTS: '1'
       - run: go vet ./...
