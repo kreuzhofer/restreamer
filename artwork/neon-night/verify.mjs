@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
 const root=new URL('../../',import.meta.url);
 const manifestURL=new URL('internal/relay/artwork/neon-night/manifest.json',root);
-const files=['artwork/neon-night/background.png','artwork/neon-night/player.template.html','artwork/neon-night/build.mjs','artwork/neon-night/render.mjs','artwork/neon-night/check-masks.mjs','internal/relay/artwork/neon-night/loop.mp4','internal/relay/artwork/neon-night/poster.png','internal/mediaauthor/pixel-font.json'];
+const files=['artwork/shared/build-palette-player.mjs','artwork/shared/render-palette-loop.mjs','artwork/neon-night/background.png','artwork/neon-night/player.template.html','artwork/neon-night/build.mjs','artwork/neon-night/render.mjs','artwork/neon-night/check-masks.mjs','internal/relay/artwork/neon-night/loop.mp4','internal/relay/artwork/neon-night/poster.png','internal/mediaauthor/pixel-font.json'];
 const hashes={};
 for(const file of files) hashes[file]=createHash('sha256').update(await readFile(new URL(file,root))).digest('hex');
 if(process.argv.includes('--record')) {
