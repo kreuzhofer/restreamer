@@ -683,6 +683,8 @@
     video.focus({preventScroll: true});
   }
   $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${reviewedRevision.slice(0, 12)}.`; });
+  $('generated-video').addEventListener('ended', () => { $('generated-playback-status').textContent = `Finished exact revision ${reviewedRevision.slice(0, 12)}. Playback and selected broadcast media are unchanged.`; });
+  $('generated-video').addEventListener('pause', () => { if (reviewedRevision && !$('generated-video').ended) $('generated-playback-status').textContent = `Preview paused · exact revision ${reviewedRevision.slice(0, 12)}. Broadcast playback is unchanged.`; });
   $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
   $('generate-design').addEventListener('click', async () => {
     if (!draft || deleting || dirty || saving || conflict || jobRequest) return;
