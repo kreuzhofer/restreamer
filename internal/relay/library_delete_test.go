@@ -125,3 +125,52 @@ func TestDeleteLibraryUploadStorageFailureKeepsOriginalAndRevision(t *testing.T)
 		t.Fatal("failed transaction removed catalog entry")
 	}
 }
+
+func TestDeleteLibraryUploadRejectsHostReplacementWithoutRescan(t *testing.T) {
+	for _, mode := range []string{"in-place", "replacement", "identical replacement"} {
+		replace := mode != "in-place"
+		t.Run(mode, func(t *testing.T) {
+			s := libraryServer(t)
+			if w := videoUpload(t, s, "reviewed.mp4", []byte("first-invalid-video")); w.Code != 202 {
+				t.Fatal(w.Code)
+			}
+			file := libraryHTTPStatus(t, s)["files"].([]any)[0].(map[string]any)
+			body, _ := json.Marshal(map[string]any{"version": file["version"]})
+			path := filepath.Join(s.library.root, "originals", "reviewed.mp4")
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			changed := []byte("other-invalid-video")
+			if mode == "identical replacement" {
+				changed = []byte("first-invalid-video")
+			}
+			target := path
+			if replace {
+				target += ".replacement"
+			}
+			if err := os.WriteFile(target, changed, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chtimes(target, info.ModTime(), info.ModTime()); err != nil {
+				t.Fatal(err)
+			}
+			if replace {
+				if err := os.Rename(target, path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Do not refresh the catalog: this is the interval between host edits and discovery.
+			w := dashboardRequest(s, "DELETE", "/api/library/files/"+file["id"].(string), string(body))
+			if w.Code != 409 {
+				t.Fatal("unreviewed replacement deleted", w.Code, w.Body.String())
+			}
+			if data, err := os.ReadFile(path); err != nil || !bytes.Equal(data, changed) {
+				t.Fatal("replacement was not restored", string(data), err)
+			}
+			if len(libraryHTTPStatus(t, s)["files"].([]any)) != 1 {
+				t.Fatal("rejected deletion removed catalog entry")
+			}
+		})
+	}
+}

@@ -15,6 +15,38 @@ type savedState struct {
 	Targets map[string]bool `json:"targets"`
 }
 
+// Resolve the existing ancestor before appending missing path components. Store
+// files (and their containing directories) need not exist on first startup.
+func persistentStoragePath(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	var missing []string
+	for {
+		_, err := os.Lstat(path)
+		if err == nil {
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return "", err
+			}
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return resolved, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(path))
+		parent := filepath.Dir(path)
+		if parent == path {
+			return "", err
+		}
+		path = parent
+	}
+}
+
 func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
@@ -25,7 +57,7 @@ func (s *Server) initialize() error {
 			if path == "" {
 				continue
 			}
-			abs, err := filepath.Abs(path)
+			abs, err := persistentStoragePath(path)
 			if err != nil {
 				s.initErr = errors.New("cannot resolve persistent storage path")
 				return

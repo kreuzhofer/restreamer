@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -243,8 +244,14 @@ func (t Target) ReadyError() error {
 	if err != nil || u == nil || (u.Scheme != "rtmp" && u.Scheme != "rtmps") || u.Hostname() == "" || u.User != nil || u.Fragment != "" || u.Opaque != "" || strings.Trim(u.Path, "/") == "" {
 		return errors.New("needs an rtmp(s) server URL with an application path, without userinfo or fragment")
 	}
-	if u.Port() == "0" {
+	if strings.HasSuffix(u.Host, ":") {
 		return errors.New("invalid port")
+	}
+	if port := u.Port(); port != "" {
+		value, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || value == 0 {
+			return errors.New("invalid port")
+		}
 	}
 	return nil
 }

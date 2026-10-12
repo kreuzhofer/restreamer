@@ -30,6 +30,7 @@ type LibraryEntry struct {
 	Message                    string            `json:"message,omitempty"`
 	Profile                    config.BRBProfile `json:"profile"`
 	stamp, key, path, identity string
+	sourceInfo                 os.FileInfo
 	index                      *clipIndex
 }
 type LibraryStatus struct {
@@ -196,6 +197,7 @@ func (l *videoLibrary) scan() {
 			e.Message = ""
 			e.State = "queued"
 		}
+		e.sourceInfo = info
 		if info.Size() > l.limit || info.Size() == 0 {
 			e.Message = ""
 			e.State = "failed"

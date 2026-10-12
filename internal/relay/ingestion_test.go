@@ -294,3 +294,41 @@ func TestCredentialPathsCannotCreateSecretsInSwitchState(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialPathsRejectSymlinkAncestorsBeforeCreatingFiles(t *testing.T) {
+	for _, pair := range []string{"ingestion-state", "destinations-state", "destinations-ingestion"} {
+		t.Run(pair, func(t *testing.T) {
+			root := t.TempDir()
+			real := filepath.Join(root, "real")
+			alias := filepath.Join(root, "alias")
+			if err := os.Mkdir(real, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(real, alias); err != nil {
+				t.Fatal(err)
+			}
+			s := dashboardServer(t)
+			s.cfg.StateFile = filepath.Join(real, "state.json")
+			s.cfg.IngestionKeyFile = filepath.Join(real, "ingestion.json")
+			s.cfg.DestinationsFile = filepath.Join(real, "destinations.json")
+			switch pair {
+			case "ingestion-state":
+				s.cfg.IngestionKeyFile = filepath.Join(alias, "state.json")
+			case "destinations-state":
+				s.cfg.DestinationsFile = filepath.Join(alias, "state.json")
+			case "destinations-ingestion":
+				s.cfg.DestinationsFile = filepath.Join(alias, "ingestion.json")
+			}
+			if w := dashboardRequest(s, "GET", "/api/dashboard", ""); w.Code != 503 {
+				t.Fatal("aliased stores accepted", w.Code)
+			}
+			entries, err := os.ReadDir(real)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Fatal("aliased credential configuration wrote files before rejection", entries)
+			}
+		})
+	}
+}

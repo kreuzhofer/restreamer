@@ -237,3 +237,31 @@ func TestDestinationManagementDuringRehearsalAndEnding(t *testing.T) {
 		t.Fatal("management erased ending result")
 	}
 }
+
+func TestDestinationRejectsInvalidPortsWithoutChangingSavedConfiguration(t *testing.T) {
+	s := New(config.Config{DashboardUsername: "test", DashboardPassword: "test", StateFile: filepath.Join(t.TempDir(), "state.json")}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if w := dashboardRequest(s, "POST", "/api/destinations", `{"version":0,"name":"local","url":"rtmp://localhost:1935/live","stream_key":"dummy-key"}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	before := dashboardRequest(s, "GET", "/api/destinations", "").Body.String()
+	for _, port := range []string{"65536", "999999999999999999999", "0", "0000", ""} {
+		for _, method := range []string{"POST", "PUT"} {
+			path, name := "/api/destinations", "extra"
+			if method == "PUT" {
+				path += "/local"
+				name = "local"
+			}
+			body, _ := json.Marshal(map[string]any{"version": 1, "name": name, "url": "rtmp://localhost:" + port + "/live", "stream_key": "dummy-key"})
+			if w := dashboardRequest(s, method, path, string(body)); w.Code != 400 {
+				t.Fatalf("%s port %s: %d %s", method, port, w.Code, w.Body.String())
+			}
+			if after := dashboardRequest(s, "GET", "/api/destinations", "").Body.String(); after != before {
+				t.Fatal("rejected port changed saved configuration", after)
+			}
+		}
+	}
+	restarted := New(s.cfg, s.log)
+	if after := dashboardRequest(restarted, "GET", "/api/destinations", "").Body.String(); after != before {
+		t.Fatal("rejected port changed persisted configuration", after)
+	}
+}
