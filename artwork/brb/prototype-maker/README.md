@@ -1,90 +1,54 @@
-# THROWAWAY — maker BRB motion prototype
+# THROWAWAY — animated maker BRB styles
 
-## Follow-up: distinguish authoring tool from visual style
+## Selected direction: #1, high-fidelity flat pixel art
 
-The user's clarification is that Blender can be the authoring tool for every option:
+The user chose **option 1, with higher illustration fidelity**. The current pass combines a detailed illustrated workshop plate with independently animated sprite parts in Blender. Options 2 and 3 remain as references. Nothing in this directory is served by the production dashboard or merged into main.
 
-1. Flat illustrated pixel sprites and backgrounds, animated as 2D layers in Blender.
-2. Fully modeled 3D miniature scenery and actors (the initial proof).
-3. Fully modeled 3D with pixel textures, stepped shading and a low-resolution render.
-
-The primary `index.html?variant=1|2|3` now compares **all three approaches**, preserving inspection time when switching. Options 2 and 3 share the same camera and geometry; option 1 uses a fully frontal sprite scene. This replaces the earlier proposed illustrated-background/rendered-actor hybrid as the current experiment. Option 1 is now implemented by `build_flat.py` and `F.mp4`. The original A/B/C camera proof remains at `camera-study.html?variant=A|B|C`.
-
-`P.mp4` is the pixel-styled version: the same geometry and 12-second animation as A, with deterministic 32×32 pixel texture tiles, nearest filtering, four discrete shading levels and a 512×288 source render enlarged to 2048×1152 for the downloadable MP4. The pixel preview samples that video back to the 512×288 source grid and draws it without smoothing at an integer device-pixel scale. The `.blend` file packs those generated texture images. This is a stylization experiment, not a claim that pixel textures automatically reproduce hand-drawn sprite art. The approved illustration is not used as a background in either video.
-
-Rebuild the pixel variant:
-
-```sh
-/Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build.py -- --variant A --style pixel --save
-ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A-pixel/%04d.png -vf scale=2048:1152:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/P.mp4
-```
-
-The user confirmed that corrected option 3 looks much sharper. The final style choice remains open while option 1 joins the comparison.
-
-The initial follow-up P video contained exactly 288 frames at 24 fps and 1536×864. Chrome decoded it at readyState 4 and advanced playback. Switching 3 → 2 → 3 retained the 5.8-second assembly inspection point. At 390px the page width remained 390px with working decoded media. Desktop and phone comparison screenshots are retained. The first prototype capture (`813ecae`) passed repository CI; the follow-up capture requires its own branch CI result, recorded on issue #52 rather than modifying the captured commit after verification.
-
-## Initial camera experiment
-
-Question: can a short printer → conveyor → robot assembly sequence read clearly, and is a Blender-rendered miniature set a promising direction for the maker BRB?
-
-This is the visual branch of the prototype skill, adapted to an animation rather than an application UI. Three structurally different camera compositions share one route (`?variant=A`, `B`, `C`) and the same 12-second choreography. A is a fixed arcade elevation, B is an isometric workshop diorama, C follows the build as an inspection shot. The floating switcher is isolated in this standalone prototype; the embedded production dashboard does not serve this directory.
-
-Run from the repository root:
+Run from this worktree's repository root:
 
 ```sh
 python3 -m http.server 18861 --bind 127.0.0.1 --directory artwork/brb/prototype-maker
 ```
 
-Open http://127.0.0.1:18861/. Videos are ordinary local MP4 files; no installation, server state, real stream or credentials are needed. Play, pause, scrub, jump to a beat, slow playback, or switch compositions. The status below the video exposes phase, time and camera choice.
+Open `http://127.0.0.1:18861/?variant=1`. The arrows cycle 1/2/3 while retaining inspection time. Play, seek, jump to a story beat, or choose **Expand view** to inspect the artwork. In the expanded view, Space toggles playback and Escape returns. Pixel views use integer device-pixel scaling; small low-density windows can scroll inside the picture instead of blurring it.
 
-## Method
+| Option | Method | Source grid | Download |
+| --- | --- | --- | --- |
+| 1 · Illustrated pixel art | Separate flat illustrated sprites and animated pixel geometry, composed in Blender | 1024×576 | `F.mp4`, 4096×2304 |
+| 2 · 3D miniature | Modeled objects with soft lighting | 768×432 | `A.mp4`, 1536×864 |
+| 3 · Pixel-styled 3D | Same 3D geometry as 2, pixel textures and stepped shading | 512×288 | `P.mp4`, 2048×1152 |
 
-All animation geometry is created by `build.py` in Blender 5.2.2 LTS. The AI-generated concept is included only as a reference image in the page. It is not used as a backdrop or as moving cutouts. Materials, machinery, pixel lettering and robot components are modeled in the script. Motion is deterministic from time: print reveal, nozzle travel, belt slats, robot transfer, two-link arm positioning, gripper release and first steps. The scene uses a fixed orthographic camera for A and B; C follows the body.
+All are 12 seconds, 288 frames at 24 fps, with no audio. The original illustration is only a reference; option 1 has a newly generated stationary plate and a separate transparent component atlas, not an animation of that original finished illustration.
 
-`maker-prototype.blend` retains the editable set at the beginning of the sequence. The Python script is the animation source; motion is not baked into Blender timeline keyframes in this throwaway.
+## Option 1 authoring
 
-Regenerate a variant (requires local Blender and FFmpeg):
+`build_flat.py` is the animation source. The built-in imagegen tool created `assets/workshop-plate.png` and `assets/robot-parts.png`; the exact prompts are retained in `assets/prompts.json`. `assets/sprite-bounds.json` records the opaque component bounds within the six-cell atlas. No runtime image generation is involved.
 
-```sh
-/Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build.py -- --variant A --save
-ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A/%04d.png -vf scale=1536:864:flags=neighbor -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/A.mp4
-```
+Blender rigs the robot head, torso, arms, legs, extruder and spool as separate nearest-filtered flat quads. The atlas alpha is clipped to avoid blurred halos. The arm linkage, flexible hose, conveyor, gears, printer gantry, CAD drawing, facial expressions, print supports, transfer carriage and delivery shuttle are independent animated geometry. Emission materials and a frontal orthographic camera preserve the flat illustrated treatment; no lit 3D props are used in this option.
 
-Repeat with B and C. Rendering uses 768×432 source frames at 24 fps, enlarged to 1536×864. No audio is baked in. The saved message is a prototype constant rather than the production editable overlay.
-
-## Provisional finding
-
-Blender makes the mechanical action controllable and gives real object depth. The result reads as a low-resolution miniature 3D set, not the rich hand-drawn pixel illustration. Matching that concept would need more asset detailing and a deliberate sprite/pixel treatment. This is a motion and camera proof, not a final theme or a fidelity claim. The user's aesthetic verdict is still pending. No decision is promoted to main.
-
-Limitations: robot walking is a simple pose cycle; printing reveals solid component geometry rather than simulating extrusion paths; the next head is restaged between cycles; C crops the BRB sign; there is no editable BRB text or Restreamer activation integration here.
-
-## Manual verification
-
-All three videos rendered successfully. A contains 288 frames at 24 fps, 1536×864 and exactly 12 seconds. In Chrome, playback decoded at `readyState=4` and advanced; the assembly button sought to exactly 5.8 seconds; switching A → B → C retained that inspection time and decoded each video. The local static server does not provide seekable byte ranges, so the page loads each small video as an in-memory Blob before playback. At 390×844, page width was 390px and the video, controls and readout remained available. Temporary viewport override was reset. Desktop and mobile screenshots are included. No automated tests were added for this throwaway visual experiment.
-
-## Pixel sharpness correction
-
-The user preferred style 2 but identified blur in style 3, rather than rejecting pixel art. A fixed-frame comparison at frame 139 isolated the source rendering from browser/video scaling. Rendering that frame independently reproduced the softness seen in the sequence; it was not a motion-blur setting (motion blur was already off). The pixel scene inherited Blender's 1.5-pixel reconstruction filter. Narrowing only that filter to 0.01 made silhouettes, lettering and texture clusters visibly crisp. Render sample count stays at 64 to retain stable lighting. Pixel-style font cells fill their complete grid square so removal of smoothing does not reveal subpixel cracks in the lettering. This does not turn the 3D scene into hand-drawn pixel art.
-
-The previous responsive video fit was also fractional: at the tested desktop size, each source pixel occupied about 2.68 physical screen pixels. The new canvas view reconstructs the 512×288 grid with smoothing disabled and displays it at the largest whole-number device-pixel scale that fits. A screen too small for 1× can scroll the image rather than silently shrinking it. Resize, seeking, paused-frame inspection and style switches redraw the canvas. The scale is shown below the picture.
-
-The MP4 uses a 4× enlargement and CRF 12 instead of 3×/CRF 18: source-pixel boundaries align with the 4:2:0 chroma grid, and the preview samples pixel centers before enlargement. Standard H.264 playback and downloads remain available. No 4:4:4-only codec dependency is introduced.
-
-This is a visual differential check, not a perceptual unit test: the prototype skill explicitly skips new tests. Existing web and artwork checks, Python/JavaScript syntax checks, decoded-video checks and desktop/mobile browser checks are used instead. Final verification and exact-SHA CI evidence are recorded on #52.
-
-Corrected-video verification: 288 decoded frames, 24 fps, 12 seconds, 2048×1152 H.264/yuv420p, no FFmpeg decode errors. Chrome reached readyState 4 and advanced playback; switching 3 → 2 → 3 retained 5.8 seconds. At desktop DPR 2, the canvas is 1024×576 pixels displayed at 512×288 CSS pixels (2× source pixels); at 390px/DPR 1 it uses 1× with internal scrolling and no page overflow. Both screenshots are updated. Existing web tests (27), original BRB tests (3), and all three artwork verification commands passed locally.
-
-## Option 1: flat animated pixel art
-
-`build_flat.py` creates actual flat, code-drawn pixel sprites in Blender: integer rectangle meshes, a small fixed palette, emission colors and a frontal orthographic camera. There are no volumetric props, lit 3D surfaces, perspective or image-generated backdrop. Separate sprite layers animate the rotating CAD sketch, AI activity, filament spool, extruder and gantry, printed body reveal, conveyor, articulated assembly arm, head attachment and alternating walking poses. The story uses the same 12-second beat timings as 2/3. This tests the flat-art direction rather than reproducing all the detail of the approved illustration.
-
-Regenerate the editable flat set and animation:
+The loop shows body printing, transfer to the conveyor, head attachment, eye boot-up and walking. A maintenance robot waves in the foreground. A spare head arrives on a shuttle before the loop boundary, and the printer returns to its starting pose. Geometry and sprite positions are deterministic from time.
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build_flat.py -- --save
-ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/flat/%04d.png -vf scale=2048:1152:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/F.mp4
+ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/flat/%04d.png -frames:v 288 -vf scale=4096:2304:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/F.mp4
 ```
 
-`maker-flat-prototype.blend` saves the editable sprite set at the start; the Python script is the animation source, including changing sprite meshes. Timeline keyframes are not baked into the saved set. `--still 139` renders a single inspection frame. Pixel styles 1 and 3 share the unsmoothed, integer-scaled preview; style 2 retains the normal video view. The experiment remains on `prototype/maker-brb`, outside the production dashboard and main release.
+Use `--still 139` for one inspection frame. `maker-flat-prototype.blend` saves the editable sprite set at the start and packs its images. The Python script drives changing sprite meshes and poses; animation is not baked into timeline keyframes in the saved set.
 
-Flat-option verification: 288 frames at 24 fps, 12 seconds, 2048×1152, clean FFmpeg decode; Python/JavaScript syntax and existing web/artwork checks passed. Chrome decoded F.mp4 at readyState 4, advanced during playback, retained 5.8 seconds through 1 → 2 → 3 → 1, and showed no page overflow at 390px. Console warnings/errors were empty. Flat desktop/mobile screenshots are included. Full local `make check` passed during this prototype update; final branch CI is recorded on #52.
+The 4× MP4 enlargement aligns source pixels with the 4:2:0 chroma grid. The preview samples pixel centers back onto the native grid and then enlarges without smoothing. This preserves normal H.264 compatibility.
+
+## Reference options and sharpness correction
+
+`build.py --variant A --style pixel --save` regenerates option 3. Encode its `renders/A-pixel/%04d.png` frames with the same command, using `scale=2048:1152:flags=neighbor` and destination `P.mp4`. Omitting `--style pixel` renders the miniature; encode `renders/A/%04d.png` at 1536×864 into `A.mp4`.
+
+The earlier blur in option 3 was reproduced at fixed frame 139. Blender's inherited 1.5-pixel reconstruction filter softened edges; narrowing it to 0.01 made the render crisp while retaining 64 lighting samples. Solid glyph cells removed subpixel cracks in the lettering. The old browser fit also used a fractional scale (about 2.68 device pixels per source pixel in the measured desktop viewport). Both pixel options now use the unsmoothed integer-scaled canvas. The user confirmed the improvement.
+
+The original A/B/C camera study remains at `camera-study.html?variant=A|B|C`. The original low-detail option 1 is captured in commit `44c024b`.
+
+## Scope and verification
+
+This is an art and motion prototype. There is no configurable text, production BRB generation or Restreamer activation integration yet. Final timing and illustration direction remain open to user feedback; the selected style is option 1.
+
+The prototype skill skips new automated tests. Validation uses Python/JavaScript syntax checks, existing web/artwork checks, decoded frame count/duration, selected rendered-frame inspection and desktop/phone browser checks. Full local `make check` passed during this prototype sequence. Exact final-SHA CI and the design verdict are recorded on GitHub issue #52. Captures `flat-comparison-desktop.png` and `flat-comparison-mobile.png` show the current page.
+
+Detailed-pass verification: the rendered MP4 decodes without errors and contains exactly 288 frames at 24 fps / 12 seconds / 4096×2304. Selected source frames show partial printing and the assembled walking character. Chrome decodes at readyState 4; expanded view renders a 2048×1152 canvas at integer scale, Space advances playback, and Escape restores the page. At 390px the page remains 390px wide and overflow stays inside the preview. Existing web/artwork and source syntax checks passed. The expanded screenshot is `flat-expanded-desktop.png`.
