@@ -141,6 +141,16 @@
     el('stage-rehearsal').disabled = !usable || !!stage.pending;
     el('stage-help').textContent = ending ? 'Ending in progress. Only confirmed Stop now or a ready media replacement can interrupt playback. Destinations can be disabled, but additional destinations cannot join.' : rehearsal ? 'Destination switches only save preferences during rehearsal. Stop rehearsal, then explicitly start real Prestream or Go live to broadcast.' : stage.stage === 'OFF' ? 'Only Prestream and Go live can start. Choose at least one eligible destination, or explicitly select preview-only rehearsal.' : 'Stage describes intent; on-air source shows the selected feed. Platform-side public availability is not confirmed by the relay.';
     el('command-status').textContent = message;
+    el('live-readiness').hidden = stage.stage !== 'OFF';
+    const readyRevision = revision => revisions.some(item => item.id === revision && item.state === 'ready');
+    el('readiness-input').textContent = !online ? 'Unknown · status disconnected' : snapshot.publishing ? 'Receiving OBS' : 'Waiting for OBS';
+    el('readiness-media').textContent = !online ? 'Unknown · status disconnected' : [
+      `Prestream: ${readyRevision(selections.prestream) ? 'ready' : 'unavailable'}`,
+      `BRB: ${snapshot.brb?.ready ? 'ready' : 'not ready'}`,
+      `Ending: ${readyRevision(selections.ending) ? 'ready' : 'unavailable'}`
+    ].join(' · ');
+    const eligible = (snapshot.outputs || []).filter(output => output.enabled && output.can_enable).length;
+    el('readiness-destinations').textContent = !online ? 'Unknown · status disconnected' : eligible ? `${eligible} enabled and configured · connection starts with broadcast` : 'None enabled · select a destination or rehearse';
     const buttons = selections.shortcuts.map(shortcut => {
       const button = document.createElement('button');
       button.className = 'preview-button'; button.type = 'button';
