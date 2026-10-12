@@ -182,6 +182,16 @@ never starts or stops a broadcast. Profile drafts survive Live/Settings switches
 leaving a page with unsaved edits prompts before discarding them. Streaming-profile
 setup requires a desktop window and an OFF broadcast, including no rehearsal.
 
+Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Create or
+open a design to use its scene list, quick preview, and properties. Properties
+switch between the selected **Scene**, whole **Design** settings (including exact
+theme revision, soundtrack, loop or ending fade), and reusable **Template** actions.
+**Results & queue** retains generation, exact-result review, activation links, and
+cleanup. Returning to a collection keeps the open draft and autosave active; use
+**Return to open design** to resume. Narrow desktop windows expose the preview and
+properties through panel buttons. Phones can browse designs and review prepared
+results; authoring, uploads, theme changes and generation require desktop.
+
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
 dedicated hostname at `/` (subpath hosting is not supported). A proxy on the same

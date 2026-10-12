@@ -29,6 +29,47 @@
   let assets = [];
   let assetsFetching = false;
   let assetUploading = false;
+  function showCollection(name, focus = false) {
+    document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = panel.dataset.collectionPanel !== name; });
+    $('design-editor').hidden = true;
+    $('resume-design').hidden = !draft;
+    document.querySelectorAll('[data-studio-collection]').forEach(button => {
+      if (button.dataset.studioCollection === name) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    if (focus) document.querySelector(`[data-studio-collection="${name}"]`).focus();
+  }
+  function showEditor() {
+    document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = true; });
+    $('design-editor').hidden = false;
+    $('resume-design').hidden = true;
+    document.querySelectorAll('[data-studio-collection]').forEach(button => button.removeAttribute('aria-current'));
+  }
+  function showInspector(name) {
+    document.querySelectorAll('[data-inspector-panel]').forEach(panel => { panel.hidden = panel.dataset.inspectorPanel !== name; });
+    document.querySelectorAll('[data-inspector]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.inspector === name)));
+  }
+  function showEditorPanel(name) {
+    document.querySelector('.studio-editor-grid').dataset.panel = name;
+    document.querySelectorAll('[data-editor-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editorPanel === name)));
+  }
+  function showPreviewPanel(name) {
+    $('studio-scene-preview').hidden = name !== 'scene';
+    $('studio-results').hidden = name !== 'results';
+    document.querySelectorAll('[data-preview-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.previewPanel === name)));
+  }
+  document.querySelectorAll('[data-studio-collection]').forEach(button => button.addEventListener('click', () => showCollection(button.dataset.studioCollection)));
+  document.querySelectorAll('[data-inspector]').forEach(button => button.addEventListener('click', () => showInspector(button.dataset.inspector)));
+  document.querySelectorAll('[data-editor-panel]').forEach(button => button.addEventListener('click', () => showEditorPanel(button.dataset.editorPanel)));
+  document.querySelectorAll('[data-preview-panel]').forEach(button => button.addEventListener('click', () => showPreviewPanel(button.dataset.previewPanel)));
+  $('back-to-designs').addEventListener('click', () => showCollection('designs', true));
+  $('resume-design').addEventListener('click', () => { showEditor(); $('editor-heading').focus(); });
+  const mobileStudio = matchMedia('(max-width: 600px)');
+  function updateStudioDevice() {
+    showPreviewPanel(mobileStudio.matches ? 'results' : 'scene');
+  }
+  mobileStudio.addEventListener('change', updateStudioDevice);
+  updateStudioDevice();
   const fields = {
     ending_fade_seconds: ['ending-fade', 'ending-fade-error'],
     'soundtrack.asset': ['soundtrack-asset', 'soundtrack-asset-error'],
@@ -73,6 +114,7 @@
   }
   async function listDesigns() {
     const designs = await (await request('/api/generator/designs')).json();
+    $('design-list-state').textContent = designs.length ? `${designs.length} saved design${designs.length === 1 ? '' : 's'}` : 'No saved designs yet. Create your first design below.';
     $('design-list').replaceChildren();
     for (const design of designs) {
       const button = document.createElement('button');
@@ -112,8 +154,8 @@
       if (current) {
         clearTimeout(previewTimer); previewSequence++; previewAbort?.abort();
         draft = null; dirty = false; conflict = false; editSequence++;
-        $('design-editor').hidden = true; $('generator-empty').hidden = false;
-        history.replaceState(null, '', '/generator');
+        showCollection('designs');
+        history.replaceState(null, '', '/studio');
       }
       stopGeneratedPreview();
       await listDesigns(); await loadJobs(); await loadAssets();
@@ -138,9 +180,10 @@
     $('ending-finish').hidden = draft.stage !== 'ending';
     $('ending-fade').value = draft.ending_fade_seconds ?? 1;
     $('design-stage').textContent = `${draft.stage.toUpperCase()} · EDITABLE DRAFT`;
-    $('design-editor').hidden = false; $('generator-empty').hidden = true;
+    showEditor(); showInspector('scene'); showEditorPanel('preview');
+    $('editor-heading').focus();
     notify(''); saveState(`Saved · version ${draft.version}`);
-    history.replaceState(null, '', `/generator?id=${encodeURIComponent(draft.id)}`);
+    history.replaceState(null, '', `/studio?id=${encodeURIComponent(draft.id)}`);
     listDesigns().catch(error => notify(error.message));
     schedulePreview();
     loadJobs();
@@ -162,7 +205,7 @@
   function renderSelectedScene() {
     const scene = draft.scenes[selectedScene]; itemEditors = [];
     $('selected-scene-fields').hidden = !scene;
-    $('editor-heading').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'}`;
+    $('editor-heading').textContent = draft.name || 'Untitled design';
     if (!scene) return;
     $('selected-scene-heading').textContent = `Scene ${selectedScene + 1} · ${scene.layout}`;
     $('scene-layout').value = scene.layout;
@@ -201,7 +244,7 @@
     $('transition-duration-controls').hidden = $('scene-transition').value !== 'crossfade';
     $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Overlaps shorten the total duration. Generate to inspect the exact transition; the quick preview shows one scene.';
   }
-  function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); schedulePreview(); }
+  function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); showInspector('scene'); schedulePreview(); }
   function changed() {
     dirty = true; editSequence++;
     if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
@@ -209,6 +252,7 @@
   }
   function captureFields() {
     draft.name = $('design-name').value;
+    $('editor-heading').textContent = draft.name || 'Untitled design';
     if (draft.stage === 'prestream') {
       draft.loop_transition = $('loop-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('loop-duration').value)} : {kind: 'cut'};
       $('loop-duration-controls').hidden = $('loop-transition').value !== 'crossfade';
@@ -312,7 +356,7 @@
         const sceneName = sceneIndex === null ? '' : snapshot.scenes[sceneIndex]?.text.trim().split('\n')[0];
         const fieldLabel = fieldName.startsWith('items.') ? `List item ${Number(fieldName.split('.')[1]) + 1}` : fieldName === 'text' ? 'Title text' : fieldName === 'items' ? 'List items' : fieldName.replaceAll('_', ' ');
         entry.textContent = `${sceneIndex === null ? 'Composition' : `Scene ${sceneIndex + 1}${sceneName ? ` · ${sceneName}` : ''}`} · ${fieldLabel}: ${issue.message}`;
-        if (sceneIndex !== null) { entry.type = 'button'; entry.addEventListener('click', () => selectScene(sceneIndex)); }
+        if (sceneIndex !== null) { entry.type = 'button'; entry.addEventListener('click', () => { selectScene(sceneIndex); showEditorPanel('properties'); $('selected-scene-heading').scrollIntoView({block: 'nearest'}); }); }
         $('scene-issues').append(entry);
       }
       $('preview-profile').textContent = `${result.profile.width} × ${result.profile.height} · ${result.profile.fps} fps`;
@@ -348,7 +392,7 @@
       draft.id = saved.id; draft.version = saved.version; draft.updated_at = saved.updated_at;
       conflict = false; dirty = editSequence !== sequence;
       saveState(dirty ? 'Unsaved local changes' : `Saved · version ${draft.version}`);
-      history.replaceState(null, '', `/generator?id=${encodeURIComponent(draft.id)}`);
+      history.replaceState(null, '', `/studio?id=${encodeURIComponent(draft.id)}`);
       listDesigns().catch(error => notify(error.message));
       loadAssets();
     } catch (error) {
@@ -495,6 +539,9 @@
     $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
     const relevant = jobs;
     $('generation-jobs').replaceChildren();
+    if (!relevant.length) {
+      const empty = document.createElement('p'); empty.className = 'stage-help'; empty.textContent = 'No generated results yet. Generate a saved design on desktop, then review its exact prepared output here.'; $('generation-jobs').append(empty);
+    }
     for (const job of relevant) {
       const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id;
       const title = document.createElement('strong'); title.textContent = `${job.design_snapshot.name} · ${job.design_snapshot.stage.toUpperCase()} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
@@ -507,13 +554,13 @@
       }
       if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
       if (['failed', 'interrupted', 'cancelled'].includes(job.state)) {
-        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'preview-button'; retry.textContent = 'Retry captured revision'; retry.disabled = busy;
+        const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'preview-button studio-authoring'; retry.textContent = 'Retry captured revision'; retry.disabled = busy;
         retry.addEventListener('click', async () => { retry.disabled = true; try { await request(`/api/generator/jobs/${job.id}/retry`, 'POST', {}); await loadJobs(); } catch (error) { generationError(error.message); retry.disabled = false; } }); row.append(retry);
       }
       if (job.error) { const error = document.createElement('p'); error.textContent = job.error; row.append(error); }
       if (['queued', 'running', 'cancelling'].includes(job.state)) {
         const progress = document.createElement('progress'); progress.max = 100; progress.value = job.progress; progress.setAttribute('aria-label', 'Generation progress'); row.append(progress);
-        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = job.state === 'cancelling';
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button studio-authoring'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = job.state === 'cancelling';
         cancel.addEventListener('click', async () => { cancel.disabled = true; try { await request(`/api/generator/jobs/${job.id}/cancel`, 'POST', {}); await loadJobs(); } catch (error) { generationError(error.message); cancel.disabled = false; } }); row.append(cancel);
       }
       if (job.state === 'ready') {
@@ -540,7 +587,7 @@
           row.append(actions);
         }
       }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete result';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button studio-authoring'; remove.textContent = 'Delete result';
       remove.disabled = ['running', 'cancelling'].includes(job.state);
       remove.addEventListener('click', async () => {
         if (!window.confirm(`Permanently delete this result for “${job.design_snapshot.name}” and its generated file? The editable design and uploaded assets stay. Output shared with another result is kept. Selected or playing output blocks deletion.`)) return;
@@ -887,6 +934,6 @@
       await loadThemes();
       const id = new URLSearchParams(location.search).get('id');
       if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
-    } catch (error) { notify(error.message); }
+    } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
   })();
 })();
