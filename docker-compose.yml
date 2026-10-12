@@ -15,12 +15,6 @@ services:
       BRB_ENABLED: "${BRB_ENABLED:-false}"
       BRB_DIRECTORY: /data/brb
       LIBRARY_DIRECTORY: /data/videos
-      TWITCH_ENABLED: "${TWITCH_ENABLED:-true}"
-      TWITCH_SERVER: ${TWITCH_SERVER:-rtmp://live.twitch.tv/app}
-      TWITCH_STREAM_KEY: ${TWITCH_STREAM_KEY:-}
-      YOUTUBE_ENABLED: "${YOUTUBE_ENABLED:-true}"
-      YOUTUBE_SERVER: ${YOUTUBE_SERVER:-rtmps://a.rtmps.youtube.com/live2}
-      YOUTUBE_STREAM_KEY: ${YOUTUBE_STREAM_KEY:-}
     volumes:
       - restreamer-state:/data
     read_only: true

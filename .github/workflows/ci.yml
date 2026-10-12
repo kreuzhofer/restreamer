@@ -31,13 +31,12 @@ jobs:
       - run: make cross-build
       - run: |
           docker compose config --quiet
-          TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose config --quiet
-          TWITCH_SERVER=rtmp://localhost/app TWITCH_STREAM_KEY=test YOUTUBE_STREAM_KEY=test docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
       - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
-          env_args=(-e INGEST_STREAM_KEY=ci-test-key-123456 -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test)
+          env_args=(-e INGEST_STREAM_KEY=ci-test-key-123456)
           docker run --rm restreamer:test -config /etc/restreamer/config.json -check-config
           docker run --rm "${env_args[@]}" restreamer:test -config /etc/restreamer/config.json -check-config
           docker volume create restreamer-smoke-state
@@ -94,6 +93,11 @@ jobs:
             cat /tmp/stage-status.json
             return 1
           }
+          # Configure the first destination through the authenticated management API.
+          api -X POST http://127.0.0.1:18080/api/destinations \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+            --data '{"version":0,"name":"twitch","url":"rtmp://localhost/app","stream_key":"ci-dummy-key"}' | jq -e '.destinations[0].has_key == true'
+          stage_command set_target '{"target":"twitch","enabled":true}'
           stage_status
           jq -e '.stage == "OFF" and .mode == "off" and .pending == null' /tmp/stage-status.json
           api http://127.0.0.1:18080/status | jq -e '.forwarding == false and .brb.ready == true'
@@ -207,8 +211,7 @@ jobs:
               -e INGEST_STREAM_KEY=ci-test-key-123456 -e TARGET_STATE_FILE=/data/targets.json \
               -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb \
               -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
-              -e TWITCH_SERVER=rtmp://localhost/app -e TWITCH_STREAM_KEY=test \
-              -e YOUTUBE_SERVER=rtmps://localhost/live2 -e YOUTUBE_STREAM_KEY=test restreamer:arm64-test
+              restreamer:arm64-test
             for attempt in {1..60}; do
               if docker exec restreamer-arm64-smoke /restreamer healthcheck; then return 0; fi
               if [ "$(docker inspect --format '{{.State.Running}}' restreamer-arm64-smoke)" != true ]; then

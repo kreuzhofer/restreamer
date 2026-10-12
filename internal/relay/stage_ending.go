@@ -63,7 +63,7 @@ func (b *broadcast) finishEndingPlayback(now time.Time) {
 	// A rehearsal never opens or drains destination sessions.
 	if b.control.mode == "real" {
 		deadline := now.Add(10 * time.Second)
-		for _, output := range b.server.outputs {
+		for _, output := range b.server.outputSnapshot() {
 			output.beginDrain(deadline)
 		}
 	}
@@ -78,7 +78,7 @@ func (b *broadcast) tickEndingDrain(_ time.Time) bool {
 	results := []EndingDestinationResult{}
 	done := true
 	if b.control.mode == "real" {
-		for _, output := range b.server.outputs {
+		for _, output := range b.server.outputSnapshot() {
 			finished, complete, reason := output.drainStatus()
 			done = done && finished
 			if finished {
@@ -105,7 +105,7 @@ func (b *broadcast) cancelEnding() {
 	// Keep finished destinations' evidence but do not claim completion after
 	// the operator interrupts outstanding writes.
 	results := []EndingDestinationResult{}
-	for _, output := range b.server.outputs {
+	for _, output := range b.server.outputSnapshot() {
 		done, complete, reason := output.drainStatus()
 		if !done {
 			complete, reason = false, "cancelled"

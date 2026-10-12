@@ -3,9 +3,11 @@ package relay
 import (
 	"encoding/json"
 	"errors"
+	"github.com/kreuzhofer/restreamer/internal/config"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type savedState struct {
@@ -17,6 +19,10 @@ func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
 		defer s.controlMu.Unlock()
+		if err := s.initializeDestinations(); err != nil {
+			s.initErr = err
+			return
+		}
 		if err := s.initializeIngestion(); err != nil {
 			s.initErr = err
 			return
@@ -36,7 +42,7 @@ func (s *Server) initialize() error {
 			s.initErr = err
 			return
 		}
-		if s.cfg.StateFile == "" {
+		if s.cfg.StateFile == "" || s.destinationsManaged {
 			return
 		}
 		f, err := os.Open(s.cfg.StateFile)
@@ -55,7 +61,7 @@ func (s *Server) initialize() error {
 			s.initErr = errors.New("invalid target state file")
 			return
 		}
-		for _, o := range s.outputs {
+		for _, o := range s.outputSnapshot() {
 			if enabled, ok := state.Targets[o.config.Name]; ok {
 				o.setEnabled(enabled && o.snapshot().CanEnable)
 			}
@@ -83,7 +89,7 @@ func (s *Server) setTarget(name string, enabled bool) error {
 func (s *Server) setTargetLocked(name string, enabled bool) (bool, error) {
 	var target *output
 	state := savedState{Version: 1, Targets: make(map[string]bool)}
-	for _, o := range s.outputs {
+	for _, o := range s.outputSnapshot() {
 		state.Targets[o.config.Name] = o.snapshot().Enabled
 		if o.config.Name == name {
 			target = o
@@ -96,7 +102,19 @@ func (s *Server) setTargetLocked(name string, enabled bool) (bool, error) {
 		return false, errTargetUnavailable
 	}
 	state.Targets[name] = enabled
-	if s.cfg.StateFile != "" {
+	if s.destinationsManaged {
+		next := s.destinations
+		next.Targets = append([]config.Target{}, next.Targets...)
+		for i := range next.Targets {
+			if next.Targets[i].Name == name {
+				next.Targets[i].Enabled = config.EnableFlag(strconv.FormatBool(enabled))
+			}
+		}
+		if err := writeState(s.destinationsPath(), next); err != nil {
+			return false, errSaveState
+		}
+		s.destinations = next
+	} else if s.cfg.StateFile != "" {
 		if err := writeState(s.cfg.StateFile, state); err != nil {
 			return false, errSaveState
 		}
