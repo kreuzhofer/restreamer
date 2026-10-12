@@ -220,7 +220,7 @@
     if (location.hash === '#stage-selections') el('stage-selections').open = true;
   }
   window.addEventListener('beforeunload', event => {
-    if (draft || saving) { event.preventDefault(); event.returnValue = ''; }
+    if (!window.workspace?.departureApproved && (draft || saving)) { event.preventDefault(); event.returnValue = ''; }
   });
   document.addEventListener('stage-command-state', render);
   window.updateLibrary = (data, online) => {

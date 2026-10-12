@@ -49,7 +49,9 @@ and [Twitch's broadcasting guidelines](https://help.twitch.tv/s/article/broadcas
 
 ## Run with Docker Compose
 
-Requires Docker with the Compose plugin.
+Requires Docker with the Compose plugin. Existing installations using environment-based
+stream keys or destinations should follow the [managed-credential migration](#managing-destinations-in-desktop-settings)
+before replacing their configuration.
 
 ```sh
 cp .env.example .env
@@ -266,7 +268,7 @@ Final drain cancels pending connects and allows no new destination sessions.
 
 - Switch a target off to close its connection and cancel its retries independently.
   Saved target preferences do not start a session by themselves. A missing key or
-  invalid URL prevents enabling that target; update the configuration and redeploy.
+  invalid URL prevents enabling that target; correct it in desktop **Settings → Destinations**.
 - A healthy destination closes as soon as its queued and in-flight writes finish;
   it does not wait for a slow destination's deadline. Ending completion confirms
   **relay writes**, not platform playback or public availability.
@@ -416,7 +418,8 @@ configuration requires no mount; manage destinations in Settings.
 | `listen` | `:1935` |
 | `health_listen` | `:8080`; if changed, also update the port mapping and container healthcheck |
 | `application` | `live`; letters, digits, `_`, `-` |
-| `stream_key` | Required input key, 16–256 letters/digits/`_`/`-` |
+| `ingestion_key_file` | Private managed ingestion credential; bundled path `/data/ingestion-key.json`. First startup imports a legacy key or generates one; later starts retain the stored key |
+| `stream_key` | Optional one-time import for managed ingestion; required only without `ingestion_key_file`. Legacy keys use 16–256 letters/digits/`_`/`-` |
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
 | `dashboard_username`, `dashboard_password` | Both required to enable dashboard and status API; omitted disables access |
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
@@ -434,7 +437,9 @@ configuration requires no mount; manage destinations in Settings.
 | `targets[].url` | RTMP/RTMPS server URL, required only for active outputs |
 
 String values support `$VARIABLE` and `${VARIABLE}` references. Unset or empty
-references fail startup for required input settings and active target URLs.
+references fail startup for required legacy input settings and active target URLs.
+With managed ingestion, an absent legacy `stream_key` generates a key only when
+the managed credential file does not yet exist.
 A missing/empty environment variable referenced in a target key disables that
 target. `enabled` accepts a JSON boolean (`true`/`false`) or a string referencing an
 environment variable, such as `"${TWITCH_ENABLED}"`; an unset/empty switch defaults
@@ -821,7 +826,7 @@ Authenticated APIs (mutations require `X-Restreamer-Control: 1` and same origin)
 
 ### Reusable content templates
 
-In **Media generator**, choose a blank design, the editable welcome/topics/links
+In **Studio → Designs**, choose a blank design, the editable welcome/topics/links
 prestream starter, the thanks/follow-up-links ending starter, or a saved content
 template. Select the style theme separately. Every starter scene can be edited,
 reordered, duplicated, or removed using the normal scene editor.
@@ -955,9 +960,9 @@ Authenticated same-origin JSON deletion endpoints:
 Design/result deletion reports deleted job/media counts and retained shared
 media IDs. A newer draft, template or theme revision rejects a stale deletion.
 
-### Media generator drafts
+### Studio design drafts
 
-Open **Media generator** from the dashboard to create independent prestream or
+Open **Studio → Designs** to create independent prestream or
 ending show designs. Add, remove, reorder or independently duplicate title and
 list scenes. Each defaults to 10 seconds and selects the built-in Retro theme
 revision independently of its

@@ -30,7 +30,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   container.replaceChildren(heading, message, retry, list, form);
   baseline = JSON.stringify([name.value, url.value, key.value]);
   window.addEventListener('beforeunload', event => {
-    if (dirty() || busy) { event.preventDefault(); event.returnValue = ''; }
+    if (!window.workspace?.departureApproved && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; }
   });
   async function request(path, method = 'GET', body) {
     const response = await fetch(location.origin + path, {method, cache: 'no-store', signal: AbortSignal.timeout(10000), headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, ...(body ? {body: JSON.stringify(body)} : {})});

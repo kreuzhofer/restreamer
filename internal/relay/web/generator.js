@@ -1053,7 +1053,7 @@
   });
   $('preview-time').addEventListener('input', schedulePreview);
 
-  window.addEventListener('beforeunload', event => { if (dirty || saving || themeDirty || themeSaving) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || saving || themeDirty || themeSaving)) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {
     try {
       await listDesigns();

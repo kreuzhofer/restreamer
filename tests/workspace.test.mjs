@@ -78,3 +78,25 @@ test('a failed destination remains alerted during reconnect attempts until media
   await ui.receive(base);
   assert.equal(ui.element('workspace-alert').hidden, true);
 });
+
+function navigation(onDashboard) {
+  const events = new EventTarget();
+  let answer = false, prompts = 0, changed = false;
+  const listeners = {}, link = {dataset: {workspace: 'studio'}, href: '/studio', getAttribute() {return '/' + this.dataset.workspace;}, addEventListener(name, fn) {listeners[name] = fn;}, setAttribute() {}, removeAttribute() {}};
+  const element = {textContent:'',classList:{toggle() {}},setAttribute(){}};
+  const window = {addEventListener:events.addEventListener.bind(events),dispatchEvent:events.dispatchEvent.bind(events),confirm(){prompts++;return answer;}};
+  events.addEventListener('beforeunload', event => {if (changed && !window.workspace?.departureApproved) event.preventDefault();});
+  vm.runInNewContext(readFileSync(new URL('../internal/relay/web/workspace.js',import.meta.url),'utf8'),{window,Event,document:{body:{dataset:{}},getElementById:id=>id==='live-workspace'?onDashboard?element:null:element,querySelectorAll:selector=>selector.includes('workspace-nav')?[link]:[],querySelector:()=>null},location:{pathname:onDashboard?'/settings':'/studio'},history:{pushState(){}},setInterval(){},setTimeout(){},fetch:async()=>({ok:false}),AbortSignal});
+  return {dirty(){changed=true;},answer(value){answer=value;},prompts:()=>prompts,click(workspace,modifier=false){link.dataset.workspace=workspace;const event={button:0,ctrlKey:modifier,preventDefault(){this.defaultPrevented=true;}};listeners.click(event);return !!event.defaultPrevented;},unload(){const e=new Event('beforeunload',{cancelable:true});events.dispatchEvent(e);return e.defaultPrevented;}};
+}
+
+test('cross-document workspace departure explicitly reviews dirty forms and keeps them on cancel',()=>{
+ const ui=navigation(true);ui.dirty();assert.equal(ui.click('studio'),true);assert.equal(ui.prompts(),1);assert.equal(ui.unload(),true);
+ ui.answer(true);assert.equal(ui.click('studio'),false);assert.equal(ui.unload(),false);
+});
+test('same-document and new-tab navigation preserve drafts without discard prompts',()=>{
+ const ui=navigation(true);ui.dirty();assert.equal(ui.click('live'),true);assert.equal(ui.prompts(),0);assert.equal(ui.click('studio',true),false);assert.equal(ui.prompts(),0);assert.equal(ui.unload(),true);
+});
+test('Studio drafts are reviewed before leaving for Live or Settings',()=>{
+ for(const view of ['live','settings']){const ui=navigation(false);ui.dirty();assert.equal(ui.click(view),true);assert.equal(ui.prompts(),1);}
+});
