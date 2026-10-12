@@ -217,7 +217,7 @@ func TestIngestionSettingsPageIsAuthenticatedAndAvailableWithoutRevealingKey(t *
 	s := dashboardServer(t)
 	s.cfg.IngestionKeyFile = filepath.Join(t.TempDir(), "key.json")
 	key, _ := ingestionKey(t, s)
-	for _, path := range []string{"/ingestion-settings.html", "/ingestion.js", "/ingestion.css"} {
+	for _, path := range []string{"/settings", "/ingestion.js", "/ingestion.css"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 401 {
@@ -227,5 +227,22 @@ func TestIngestionSettingsPageIsAuthenticatedAndAvailableWithoutRevealingKey(t *
 		if w.Code != 200 || strings.Contains(w.Body.String(), key) {
 			t.Fatalf("unsafe settings %s", path)
 		}
+	}
+}
+
+func TestIngestionManagementLivesInSettingsAndPreservesOldLink(t *testing.T) {
+	s := dashboardServer(t)
+	w := dashboardRequest(s, "GET", "/settings", "")
+	for _, content := range []string{`id="ingestion-settings"`, `data-ingestion-settings`, `src="/ingestion.js"`} {
+		if !strings.Contains(w.Body.String(), content) {
+			t.Errorf("Settings missing ingestion management: %s", content)
+		}
+	}
+	if strings.Contains(w.Body.String(), `href="/ingestion-settings.html"`) {
+		t.Fatal("old header entry remains")
+	}
+	redirect := dashboardRequest(s, "GET", "/ingestion-settings.html", "")
+	if redirect.Code != 307 || redirect.Header().Get("Location") != "/settings#ingestion-settings" {
+		t.Fatal("old ingestion link did not preserve access", redirect.Code)
 	}
 }

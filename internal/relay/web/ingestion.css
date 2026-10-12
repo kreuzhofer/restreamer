@@ -1,3 +1,9 @@
+.settings-ingestion { padding: 24px; margin-bottom: 20px; }
+.settings-ingestion label { display: block; margin-top: 18px; font-weight: 600; }
+.settings-ingestion p { color: var(--muted); line-height: 1.6; }
+.settings-ingestion .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+.settings-ingestion button { min-height: 38px; }
+.ingestion-address { display: block; width: min(100%, 42rem); margin-top: .5rem; }
 .ingestion-key { display: block; width: min(100%, 42rem); margin: .5rem 0 1rem; }
 .ingestion-feedback { min-height: 1.5em; overflow-wrap: anywhere; }
 .ingestion-desktop-notice { display: none; }
@@ -5,3 +11,6 @@
   .ingestion-desktop-controls { display: none; }
   .ingestion-desktop-notice { display: block; }
 }
+
+.settings-ingestion input { border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); padding: 10px 12px; font: 13px ui-monospace, monospace; min-width: 0; }
+.settings-ingestion input:focus-visible, .settings-ingestion button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
