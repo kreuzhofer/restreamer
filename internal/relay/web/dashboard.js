@@ -10,7 +10,6 @@ let connected = false;
 let controlError = '';
 let refreshSequence = 0;
 let graphMetric = 'bitrate';
-let assetsPending = false, assetsDirty = false, assetGeneration;
 const rate = bps => (bps / 1e6).toFixed(2);
 const timeLabel = milliseconds => new Date(milliseconds).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 
@@ -63,7 +62,7 @@ function badge(element, state) {
 function render() {
  if (!snapshot) return;
  window.broadcastStages?.update(snapshot, connected);
- renderBRB();
+ window.streamProfile?.update(snapshot, connected, false);
  window.updatePreview?.(connected && snapshot.publishing);
  window.updateLibrary?.(snapshot, connected);
  const now = snapshot.time;
@@ -153,65 +152,6 @@ async function refresh() {
  }
  render();
 }
-function renderBRB() {
- window.brbThemes?.update(snapshot, connected, assetsPending, assetsDirty);
- const brb = snapshot.brb || {};
- const active = connected && snapshot.stage?.source === 'brb';
- const deliberate = snapshot.stage?.stage === 'BRB';
- $('#brb-badge').textContent = !connected ? 'Unavailable' : active ? deliberate ? 'Deliberate BRB' : 'Fallback BRB' : brb.ready ? 'Protection ready' : 'Not configured';
- $('#brb-badge').className = `badge ${active ? 'warn' : brb.ready ? 'live' : ''}`;
- $('#brb-status').textContent = !connected ? 'Dashboard disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : active ? deliberate ? 'Deliberate break · OBS will not replace it' : 'Fallback media is on air' : brb.ready ? 'Fallback BRB is prepared' : 'Fallback BRB is not ready';
- $('#brb-help').textContent = deliberate ? 'Use Return to resume the recorded stage, or choose a different stage.' : 'Prepared fallback is required for Prestream, clips, deliberate BRB and Ending. Ordinary LIVE can run without BRB.';
- $('#brb-settings').hidden = !brb.ready;
- const profile = snapshot.brb_profile;
- $('#brb-active-profile').hidden = !brb.ready || !profile;
- if (profile) $('#brb-active-profile').textContent = `Shared profile · managed in Settings: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
- $('#brb-unsaved').hidden = !brb.ready || !assetsDirty || assetsPending;
- $('#brb-save').classList.toggle('needs-save', assetsDirty && !assetsPending);
- $('#brb-error').hidden = !brb.error;
- $('#brb-error').textContent = brb.error || '';
- window.streamProfile?.update(snapshot, connected, assetsPending);
- $('#brb-save').disabled = !connected || !brb.ready || assetsPending || !!window.streamProfile?.isPending();
- $('#brb-save').textContent = assetsPending ? 'Preparing…' : 'Prepare & save BRB';
- const assets = snapshot.brb_assets;
- if (brb.ready && assets) {
-  if (assetGeneration !== assets.generation) {
-   assetGeneration = assets.generation;
-   $('#brb-image').src = `/api/brb/image?v=${encodeURIComponent(assetGeneration)}`;
-   $('#brb-image').hidden = false;
-  }
-  $('#brb-asset-status').textContent = `${assets.theme ? `${assets.theme.name} · revision ${assets.theme.revision} · 4-second visual loop` : assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
-  if (!assetsDirty && !assetsPending) {
-   $('#brb-text').value = assets.text ?? 'BE RIGHT BACK';
-   $('#brb-volume').value = assets.volume;
-  }
- }
-}
-async function saveBRB(event) {
- event.preventDefault();
- if (!connected || assetsPending || window.streamProfile?.isPending()) return;
- const form = $('#brb-form');
- const data = new FormData(form);
- for (const name of ['image', 'music']) if (!data.get(name)?.size) data.delete(name);
- assetsPending = true;
- $('#brb-save-status').textContent = 'Preparing video and audio… Your current BRB remains active.';
- render();
- try {
-  const response = await fetch(`${location.origin}/api/brb/assets`, {method: 'POST', headers: {'X-Restreamer-Control': '1'}, body: data, signal: AbortSignal.timeout(180000)});
-  if (!response.ok) throw new Error((await response.text()).trim() || 'Could not prepare BRB.');
-  form.reset(); assetsDirty = false;
-  $('#brb-save-status').textContent = 'Saved · BRB is ready.';
- } catch (error) { $('#brb-save-status').textContent = error.message; }
- finally { assetsPending = false; await refresh(); }
-}
-$('#brb-form').addEventListener('submit', saveBRB);
-function brbFormChanged() {
- assetsDirty = true;
- $('#brb-save-status').textContent = 'Not applied yet. Click Prepare & save BRB to activate your changes.';
- renderBRB();
-}
-$('#brb-form').addEventListener('input', brbFormChanged);
-$('#brb-form').addEventListener('change', brbFormChanged);
 async function poll()
  { await refresh(); setTimeout(poll, 2000); }
 let resizeTimer;
@@ -224,7 +164,3 @@ document.querySelectorAll('[data-metric]').forEach(button => {
 });
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 100); });
 poll();
-
-window.addEventListener('beforeunload', event => {
- if (assetsDirty || assetsPending) { event.preventDefault(); event.returnValue = ''; }
-});

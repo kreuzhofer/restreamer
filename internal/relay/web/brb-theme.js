@@ -1,9 +1,13 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+  const authoring = !!$('brb-theme-select');
+  const desktop = matchMedia('(min-width: 601px)');
+  let candidateCurrent = false, loadFailed = false;
+  const fail = message => { $('brb-theme-error').textContent = message; $('brb-theme-error').hidden = !message; };
   let current, connected = false, otherPending = false, dirty = false;
   let themes = [], candidate = null, reviewed = '', preparing = false, operation = false, fetching = false, preparation = null;
-  async function request(path, method = 'GET', body, signal) {
+  async function request(path, method = 'GET', body, signal = AbortSignal.timeout(10000)) {
     const response = await fetch(new URL(path, location.origin), {method, credentials: 'same-origin', signal, headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: body === undefined ? undefined : JSON.stringify(body)});
     if (!response.ok) throw new Error((await response.text()).trim() || `Request failed (${response.status})`);
     return response;
@@ -14,20 +18,25 @@
     if (!current) return;
     $('brb-theme-current').textContent = current.theme ? `Current BRB: ${current.theme.name} · revision ${current.theme.revision}. Shared edits never update it automatically.` : 'Current BRB: legacy arcade/custom-image styling. Shared themes are opt-in.';
     const unsupportedProfile = current.profile.width > 1920 || current.profile.height > 1080 || current.profile.fps > 30;
-    $('brb-theme-profile-limit').hidden = !unsupportedProfile;
-    $('brb-theme-prepare').disabled = unsupportedProfile || !connected || otherPending || dirty || preparing || operation || !themes.length;
-    $('brb-theme-select').disabled = preparing || operation;
-    $('brb-theme-cancel').hidden = !preparing;
-    $('brb-theme-cancel').disabled = !connected || operation || preparation?.state === 'cancelling';
+    if (authoring) {
+      $('brb-theme-profile-limit').hidden = !unsupportedProfile;
+      $('brb-theme-prepare').disabled = !desktop.matches || unsupportedProfile || !connected || otherPending || dirty || preparing || operation || !themes.length;
+      $('brb-theme-select').disabled = preparing || operation;
+      $('brb-theme-cancel').hidden = !preparing;
+      $('brb-theme-cancel').disabled = !connected || operation || preparation?.state === 'cancelling';
+    }
     $('brb-theme-candidate').hidden = !candidate;
+    $('brb-theme-empty').hidden = !!candidate;
+    $('brb-theme-empty').textContent = candidateCurrent ? 'No prepared candidate. Prepare an exact theme revision in Studio; current BRB remains ready.' : 'Prepared BRB status unavailable or loading.';
     if (!candidate) return;
     const stale = candidate.base_generation !== current.generation;
     $('brb-theme-candidate-detail').textContent = `${candidate.settings.theme.name} · revision ${candidate.settings.theme.revision} · ${candidate.settings.custom_image ? 'saved custom image' : candidate.settings.text} · ${candidate.settings.music ? `music at ${candidate.settings.volume}%` : 'silent audio'}${stale ? ' · BRB settings changed: prepare again before activation.' : ''}`;
-    $('brb-theme-activate').disabled = !connected || stale || preparing || operation || otherPending || reviewed !== candidate.id;
-    $('brb-theme-discard').disabled = !connected || preparing || operation;
-    $('brb-theme-preview').disabled = preparing || operation;
+    $('brb-theme-activate').disabled = !candidateCurrent || !connected || stale || preparing || operation || otherPending || reviewed !== candidate.id;
+    if ($('brb-theme-discard')) $('brb-theme-discard').disabled = !desktop.matches || !connected || !candidateCurrent || preparing || operation;
+    $('brb-theme-preview').disabled = !connected || !candidateCurrent || preparing || operation;
   }
   async function loadThemes() {
+    if (!authoring) return;
     themes = await (await request('/api/generator/themes')).json();
     const previous = $('brb-theme-select').value || (current?.theme ? `${current.theme.id}:${current.theme.revision}` : 'retro:2');
     $('brb-theme-select').replaceChildren();
@@ -51,15 +60,18 @@
       if (preparation && (previous?.id !== preparation.id || previous?.state !== preparation.state)) {
         status(preparing ? (preparation.state === 'cancelling' ? 'Cancelling this preparation…' : 'Preparing captured BRB settings. You can close this page; work continues on the server.') : preparation.state === 'ready' ? 'Prepared, not active. Preview the exact result, then activate explicitly.' : preparation.error || `Preparation ${preparation.state}. Current BRB is unchanged.`);
       }
-      adoptCandidate(await (await request('/api/brb/theme/candidate')).json());
+      const next = await (await request('/api/brb/theme/candidate')).json();
+      if (loadFailed) { fail(''); loadFailed = false; }
+      candidateCurrent = true; adoptCandidate(next);
     }
-    catch (error) { status(error.message); }
+    catch (error) { loadFailed = true; candidateCurrent = false; fail(`Prepared BRB status unavailable. ${error.message}`); render(); }
     finally { fetching = false; }
   }
-  $('brb-theme-refresh').addEventListener('click', () => loadThemes().catch(error => status(error.message)));
-  $('brb-theme-select').addEventListener('change', () => status('Theme choice is not active. Prepare and preview it before activation.'));
-  $('brb-theme-prepare').addEventListener('click', async () => {
-    if (!current || preparing || operation || otherPending || dirty) return;
+  $('brb-theme-refresh')?.addEventListener('click', () => loadThemes().catch(error => status(error.message)));
+  $('brb-theme-select')?.addEventListener('change', () => status('Theme choice is not active. Prepare and preview it before activation.'));
+  $('brb-theme-prepare')?.addEventListener('click', async () => {
+    if (!desktop.matches || !current || preparing || operation || otherPending || dirty) return;
+    fail('');
     const [id, revision] = $('brb-theme-select').value.split(':');
     operation = true;
     status('Accepting captured BRB settings. Current media stays active.'); render();
@@ -68,20 +80,21 @@
       preparing = true;
       status('Preparing on the server. You can close this page and return to the result.');
     }
-    catch (error) { status(error.message); }
+    catch (error) { fail(error.message); }
     finally { operation = false; render(); loadCandidate(); }
   });
-  $('brb-theme-cancel').addEventListener('click', async () => {
-    if (!preparation || !preparing || operation) return;
+  $('brb-theme-cancel')?.addEventListener('click', async () => {
+    if (!desktop.matches || !preparation || !preparing || operation) return;
+    fail('');
     const id = preparation.id;
     operation = true; render();
     try { await request('/api/brb/theme/preparation/cancel', 'POST', {id}); status('Cancelling this preparation. Current BRB and any earlier candidate stay unchanged.'); }
-    catch (error) { status(error.message); }
+    catch (error) { fail(error.message); }
     finally { operation = false; render(); loadCandidate(); }
   });
   $('brb-theme-preview').addEventListener('click', () => {
-    if (!candidate) return;
-    reviewed = '';
+    if (!candidate || !candidateCurrent || !connected) return;
+    fail(''); reviewed = '';
     const video = $('brb-theme-video'); video.dataset.candidate = candidate.id; video.src = `/api/brb/theme/candidate/preview?id=${encodeURIComponent(candidate.id)}`; video.hidden = false;
     video.play().catch(() => status('Use the video controls to review the exact prepared BRB.')); render();
   });
@@ -90,18 +103,19 @@
   });
   $('brb-theme-video').addEventListener('error', () => { if (!candidate) return; reviewed = ''; status('Exact preview unavailable or replaced. Reload the candidate and preview again.'); render(); });
   $('brb-theme-activate').addEventListener('click', async () => {
-    if (!candidate || reviewed !== candidate.id || candidate.base_generation !== current?.generation || operation) return;
+    if (!candidateCurrent || !connected || !candidate || reviewed !== candidate.id || candidate.base_generation !== current?.generation || operation) return;
     if (!window.confirm('Activate this exact prepared BRB? If BRB is on air, its video and music restart from the beginning.')) return;
-    operation = true; render();
+    fail(''); operation = true; render();
     try { await request('/api/brb/theme/activate', 'POST', {id: candidate.id, base_generation: candidate.base_generation}); adoptCandidate(null); status('Activated the reviewed BRB.'); }
-    catch (error) { status(error.message); }
+    catch (error) { fail(error.message); }
     finally { operation = false; render(); loadCandidate(); }
   });
-  $('brb-theme-discard').addEventListener('click', async () => {
-    if (!candidate || operation || preparing) return;
+  $('brb-theme-discard')?.addEventListener('click', async () => {
+    if (!desktop.matches || !candidate || !candidateCurrent || operation || preparing) return;
+    fail('');
     operation = true; render();
     try { await request('/api/brb/theme/candidate', 'DELETE', {id: candidate.id}); adoptCandidate(null); status('Candidate discarded. Current BRB is unchanged.'); }
-    catch (error) { status(error.message); }
+    catch (error) { fail(error.message); }
     finally { operation = false; render(); }
   });
   window.brbThemes = {update(snapshot, online, pending, unsaved) {
@@ -110,5 +124,6 @@
     render();
     if (first && current?.generation) { loadThemes().catch(error => status(error.message)); loadCandidate(); }
   }};
+  desktop.addEventListener('change', render);
   setInterval(loadCandidate, 3000);
 })();
