@@ -911,6 +911,35 @@ and [Neon Night](artwork/neon-night/README.md).
 Neon Night uses pale aqua lettering with magenta edges and purple shadows;
 its artwork and animation remain independent of Arcade After Hours.
 
+### Maker Workshop and seasonal sets
+
+**Maker Workshop**, **Maker Workshop · Halloween**, and **Maker Workshop · Christmas**
+are shared revision-1 themes for BRB, prestream, and ending. Each includes its own
+stage-specific animated pixel-art master: BRB prints and assembles a waving robot;
+prestream opens on the welcoming mascot; ending waves goodbye and settles the
+machinery before the configured final fade. Halloween adds witch hats and a
+floating ghost; Christmas adds Santa hats, scarves and moving parcels.
+
+Choose a theme in **Studio → BRB** and prepare, preview and activate it. For a
+show design, choose the **Maker workshop · starting soon** or **Maker workshop ·
+signing off** content starter, then select any of the three themes separately.
+Headlines, agenda items, links, colors and supported overrides remain editable.
+The sign has a compact content region and a smaller list font; divide longer
+agendas into additional scenes. Content height can now be 12–90%, width 30–90%,
+and vertical offset −40–40%, provided the region stays inside the frame.
+
+BRB and prestream use complete **12-second** cycles. The supplied prestream
+starter uses 12-second scenes; other durations or crossfades remain available.
+Ending holds its settled final frame if a scene exceeds the master duration, then
+the existing ending fade applies. An inset video can keep playing over that held
+background. Ending motion continues across scene changes on one timeline; BRB
+and prestream scenes start their own cycles. The editable sign follows the
+contained artwork on non-widescreen profiles.
+
+The nine masters are embedded and require only the existing FFmpeg runtime.
+Authoring uses Blender; production does not. Pixel artwork uses nearest-neighbor
+scaling in motion and frozen previews. See [source, prompts and rebuild checks](artwork/maker-workshop/README.md).
+
 ### Deleting authored media
 
 Each saved show design has a **Delete** button. After confirmation, deletion

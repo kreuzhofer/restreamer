@@ -39,6 +39,7 @@ func templateContent(d mediaauthor.Design) mediaauthor.Design {
 }
 
 func starterTemplates() []ContentTemplate {
+	workshopFade := 2.0
 	return []ContentTemplate{
 		{ID: "starter-prestream", Name: "Welcome, topics and links", Version: 1, Builtin: true, Content: mediaauthor.Design{Stage: "prestream", Scenes: []mediaauthor.Scene{
 			{ID: "welcome", Layout: "title", Text: "Welcome to the show", DurationSeconds: 10},
@@ -48,6 +49,15 @@ func starterTemplates() []ContentTemplate {
 		{ID: "starter-ending", Name: "Thanks and follow-up links", Version: 1, Builtin: true, Content: mediaauthor.Design{Stage: "ending", Scenes: []mediaauthor.Scene{
 			{ID: "thanks", Layout: "title", Text: "Thanks for watching!", DurationSeconds: 10},
 			{ID: "follow-up", Layout: "list", Text: "See you next time", Items: []string{"Your next show", "Your follow-up link"}, DurationSeconds: 10},
+		}}},
+		{ID: "maker-prestream", Name: "Maker workshop · starting soon", Version: 1, Builtin: true, Content: mediaauthor.Design{Stage: "prestream", Scenes: []mediaauthor.Scene{
+			{ID: "welcome", Layout: "title", Text: "STARTING SOON", DurationSeconds: 12},
+			{ID: "bench", Layout: "list", Text: "ON THE BENCH", Items: []string{"AI experiments", "3D printing"}, DurationSeconds: 12},
+			{ID: "community", Layout: "list", Text: "LET'S BUILD", Items: []string{"Your community link", "Your project page"}, DurationSeconds: 12},
+		}}},
+		{ID: "maker-ending", Name: "Maker workshop · signing off", Version: 1, Builtin: true, Content: mediaauthor.Design{Stage: "ending", EndingFadeSeconds: &workshopFade, Scenes: []mediaauthor.Scene{
+			{ID: "thanks", Layout: "title", Text: "THANK YOU", DurationSeconds: 12},
+			{ID: "next-build", Layout: "list", Text: "SEE YOU SOON", Items: []string{"Your next project", "Your community link"}, DurationSeconds: 12},
 		}}},
 	}
 }

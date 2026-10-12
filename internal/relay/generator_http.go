@@ -230,7 +230,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": []mediaauthor.Issue{{Field: fmtSceneField(sceneIndex, "image"), Message: err.Error()}}})
 		return
 	}
-	inputs, err := s.loadThemeInputs(theme, profile.Width, profile.Height)
+	inputs, err := s.loadThemeInputs(theme, profile.Width, profile.Height, draft.Stage)
 	if err != nil {
 		http.Error(w, err.Error(), 422)
 		return
@@ -245,7 +245,12 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if animatedArtwork(theme.Style) {
-		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, frame, theme.Style)
+		artworkFrame := frame
+		if draft.Stage == "ending" && mediaauthor.IsWorkshopArtwork(theme.Style.Artwork) {
+			plan, _ := mediaauthor.PlanTiming(draft, profile.FPS)
+			artworkFrame += plan.Scenes[sceneIndex].Start
+		}
+		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, artworkFrame, theme.Style, draft.Stage)
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

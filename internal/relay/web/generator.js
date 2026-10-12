@@ -917,12 +917,12 @@
   const themeFields = [
     ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel']], ['font_size', 'Title/default font size at 1080p', 24, 120], ['list_font_size', 'List font size at 1080p (blank inherits default)', 'optional-size'],
     ['background_color', 'Background color', 'color'], ['text_color', 'Text color', 'color'], ['text_edge_color', 'Pixel text edge color (blank for warm default)', 'text'], ['accent_color', 'Accent color', 'color'],
-    ['artwork', 'Built-in background artwork', ['', 'arcade-after-hours', 'neon-night']], ['background', 'Background image revision (clear built-in artwork first)', 'asset'], ['logo', 'Logo image revision', 'asset'],
+    ['artwork', 'Built-in background artwork', ['', 'arcade-after-hours', 'neon-night', 'maker-workshop', 'maker-halloween', 'maker-christmas']], ['background', 'Background image revision (clear built-in artwork first)', 'asset'], ['logo', 'Logo image revision', 'asset'],
     ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8],
-    ['content_offset_y_percent', 'Content vertical offset (%)', -20, 20], ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 30, 90],
+    ['content_offset_y_percent', 'Content vertical offset (%)', -40, 40], ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 12, 90],
     ['line_spacing_percent', 'Line spacing (%)', 100, 180], ['list_spacing_percent', 'List item spacing (%)', 0, 100],
     ['border_style', 'Border', ['none', 'line', 'pixel']], ['border_width', 'Border width at 1080p', 1, 12],
-    ['effect', 'Decorative effect', ['none', 'pixel-trail', 'arcade-palette', 'neon-palette']], ['effect_speed', 'Pixel trail steps per second', 1, 12]
+    ['effect', 'Decorative effect', ['none', 'pixel-trail', 'arcade-palette', 'neon-palette', 'workshop-motion']], ['effect_speed', 'Pixel trail steps per second', 1, 12]
   ];
   for (const [key, title, kind, maximum] of themeFields) {
     const label = document.createElement('label'); label.textContent = title;
@@ -954,7 +954,7 @@
     const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
     $('apply-theme-update').hidden = !latest || latest.revision <= draft.theme.revision;
     $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
-    $('preview-time-control').hidden = !['pixel-trail', 'arcade-palette', 'neon-palette'].includes(selected?.style.effect);
+    $('preview-time-control').hidden = !['pixel-trail', 'arcade-palette', 'neon-palette', 'workshop-motion'].includes(selected?.style.effect);
     if (selected) {
       $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
       const defaultSize = draft.scenes[selectedScene]?.layout === 'list' && selected.style.list_font_size ? selected.style.list_font_size : selected.style.font_size;

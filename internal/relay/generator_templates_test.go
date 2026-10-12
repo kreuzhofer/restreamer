@@ -71,8 +71,8 @@ func TestContentTemplateStartersAreEditableAndUpdatesRequireExplicitVersion(t *t
 	if err := json.Unmarshal(list.Body.Bytes(), &templates); err != nil {
 		t.Fatal(err)
 	}
-	if len(templates) != 2 {
-		t.Fatalf("want two built-in starters: %s", list.Body.String())
+	if len(templates) != 4 {
+		t.Fatalf("want four built-in starters: %s", list.Body.String())
 	}
 	for _, starter := range templates {
 		count := 2
@@ -279,5 +279,27 @@ func TestDesignEncodingLimitIsAnInputErrorAndPreservesSavedDraft(t *testing.T) {
 	}
 	if w := dashboardRequest(s, "GET", "/api/generator/designs/"+d.ID, ""); w.Body.String() != initial.Body.String() {
 		t.Fatal("invalid-size save changed last good draft")
+	}
+}
+
+func TestWorkshopStartersFitEverySeasonAndKeepThemeSelectionSeparate(t *testing.T) {
+	s := arcadeThemeServer(t)
+	for _, templateID := range []string{"maker-prestream", "maker-ending"} {
+		for _, themeID := range []string{"maker-workshop", "maker-halloween", "maker-christmas"} {
+			w := dashboardRequest(s, "POST", "/api/generator/templates/"+templateID+"/designs", fmt.Sprintf(`{"name":"Seasonal show","version":1,"theme":{"id":%q,"revision":1}}`, themeID))
+			if w.Code != 201 {
+				t.Fatalf("%s/%s: %d %s", templateID, themeID, w.Code, w.Body.String())
+			}
+			checked := dashboardRequest(s, "POST", "/api/generator/validate", w.Body.String())
+			var validation struct {
+				Issues []mediaauthor.Issue `json:"issues"`
+			}
+			if err := json.Unmarshal(checked.Body.Bytes(), &validation); err != nil {
+				t.Fatal(err)
+			}
+			if checked.Code != 200 || len(validation.Issues) != 0 {
+				t.Fatalf("starter doesn't fit selected theme: %s", checked.Body.String())
+			}
+		}
 	}
 }

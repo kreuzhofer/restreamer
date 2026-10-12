@@ -85,12 +85,38 @@ func NeonNightTheme() Theme {
 	s.ContentOffsetYPercent = -17
 	return Theme{ID: "neon-night", Revision: 1, Name: "Neon Night", Builtin: true, Style: s}
 }
+
+// Workshop themes share the sign's editable content area and independently
+// versioned artwork. The renderer selects the stage-specific motion master.
+func WorkshopTheme(id string) Theme {
+	s := RetroTheme(1).Style
+	s.Font, s.FontSize, s.ListFontSize = "arcade-pixel", 72, 40
+	s.Artwork, s.Effect = id, "workshop-motion"
+	s.BackgroundColor, s.TextColor, s.AccentColor = "#0d1420", "#fff0cc", "#e8873c"
+	s.BorderStyle = "none"
+	s.ContentRegion = ContentRegion{58, 19}
+	s.ContentOffsetYPercent = -33
+	s.LineSpacingPercent, s.ListSpacingPercent = 100, 0
+	name := "Maker Workshop"
+	switch id {
+	case "maker-halloween":
+		name, s.TextColor, s.TextEdgeColor, s.AccentColor = "Maker Workshop · Halloween", "#fff0b5", "#9d55d6", "#e8873c"
+	case "maker-christmas":
+		name, s.TextColor, s.TextEdgeColor, s.AccentColor = "Maker Workshop · Christmas", "#fff5dd", "#b62e38", "#549769"
+	}
+	return Theme{ID: id, Revision: 1, Name: name, Builtin: true, Style: s}
+}
+
+func IsWorkshopArtwork(id string) bool {
+	return id == "maker-workshop" || id == "maker-halloween" || id == "maker-christmas"
+}
+
 func BuiltinThemes() []Theme {
 	arcade, neon := ArcadeAfterHoursTheme(), NeonNightTheme()
 	arcadeList, neonList := arcade, neon
 	arcadeList.Revision, neonList.Revision = 2, 2
 	arcadeList.Style.ListFontSize, neonList.Style.ListFontSize = 64, 64
-	return []Theme{RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList}
+	return []Theme{RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList, WorkshopTheme("maker-workshop"), WorkshopTheme("maker-halloween"), WorkshopTheme("maker-christmas")}
 }
 func IsBuiltinTheme(id string) bool {
 	for _, t := range BuiltinThemes() {
@@ -126,7 +152,7 @@ func ParseColor(value string) (color.RGBA, error) {
 func ValidateStyle(s Style) []Issue {
 	issues := make([]Issue, 0)
 	add := func(field, message string) { issues = append(issues, Issue{"style." + field, message}) }
-	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" {
+	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" && !IsWorkshopArtwork(s.Artwork) {
 		add("artwork", "Choose an available built-in artwork.")
 	}
 	if s.Artwork != "" && s.Background != nil {
@@ -138,13 +164,16 @@ func ValidateStyle(s Style) []Issue {
 	if s.Effect == "neon-palette" && s.Artwork != "neon-night" {
 		add("effect", "Neon palette animation requires Neon Night artwork.")
 	}
+	if s.Effect == "workshop-motion" && !IsWorkshopArtwork(s.Artwork) {
+		add("effect", "Workshop motion requires workshop artwork.")
+	}
 	if s.TextEdgeColor != "" {
 		if _, err := ParseColor(s.TextEdgeColor); err != nil {
 			add("text_edge_color", "Use a six-digit #RRGGBB color.")
 		}
 	}
-	if !validRange(s.ContentOffsetYPercent, -20, 20) {
-		add("content_offset_y_percent", "Use a vertical offset from −20 to 20%.")
+	if !validRange(s.ContentOffsetYPercent, -40, 40) {
+		add("content_offset_y_percent", "Use a vertical offset from −40 to 40%.")
 	}
 	if s.ContentRegion.HeightPercent/2+math.Abs(s.ContentOffsetYPercent) > 50 {
 		add("content_region", "The content region must remain within the frame.")
@@ -163,8 +192,8 @@ func ValidateStyle(s Style) []Issue {
 	if !validRange(s.FontSize, 24, 120) {
 		add("font_size", "Use 24–120 at 1080p.")
 	}
-	if !validRange(s.ContentRegion.WidthPercent, 30, 90) || !validRange(s.ContentRegion.HeightPercent, 30, 90) {
-		add("content_region", "Content width and height must be 30–90%.")
+	if !validRange(s.ContentRegion.WidthPercent, 30, 90) || !validRange(s.ContentRegion.HeightPercent, 12, 90) {
+		add("content_region", "Content width must be 30–90% and height 12–90%.")
 	}
 	if !validRange(s.LineSpacingPercent, 100, 180) {
 		add("line_spacing_percent", "Use 100–180% line spacing.")
@@ -178,8 +207,8 @@ func ValidateStyle(s Style) []Issue {
 	if !validRange(s.BorderWidth, 1, 12) {
 		add("border_width", "Use 1–12 at 1080p.")
 	}
-	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" && s.Effect != "neon-palette" {
-		add("effect", "Choose none, pixel-trail, arcade-palette or neon-palette.")
+	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" && s.Effect != "neon-palette" && s.Effect != "workshop-motion" {
+		add("effect", "Choose none, pixel-trail, arcade-palette, neon-palette or workshop-motion.")
 	}
 	if s.EffectSpeed < 1 || s.EffectSpeed > 12 {
 		add("effect_speed", "Use 1–12 pixel steps per second.")
@@ -225,6 +254,10 @@ func logoRegion(width, height int, s Style) image.Rectangle {
 	return image.Rect(x, y, x+w, y+h)
 }
 func fitImage(dst draw.Image, region image.Rectangle, src image.Image) {
+	fitImageWithScaler(dst, region, src, xdraw.ApproxBiLinear)
+}
+
+func fitImageWithScaler(dst draw.Image, region image.Rectangle, src image.Image, scaler xdraw.Scaler) {
 	if src == nil || src.Bounds().Empty() || region.Empty() {
 		return
 	}
@@ -232,7 +265,7 @@ func fitImage(dst draw.Image, region image.Rectangle, src image.Image) {
 	scale := math.Min(float64(region.Dx())/float64(bounds.Dx()), float64(region.Dy())/float64(bounds.Dy()))
 	w, h := max(1, int(float64(bounds.Dx())*scale)), max(1, int(float64(bounds.Dy())*scale))
 	target := image.Rect(region.Min.X+(region.Dx()-w)/2, region.Min.Y+(region.Dy()-h)/2, region.Min.X+(region.Dx()+w)/2, region.Min.Y+(region.Dy()+h)/2)
-	xdraw.ApproxBiLinear.Scale(dst, target, src, bounds, draw.Over, nil)
+	scaler.Scale(dst, target, src, bounds, draw.Over, nil)
 }
 
 // ThemeBackdrop and ThemeForeground also compose normalized video/BRB frames.
@@ -242,7 +275,11 @@ func ThemeBackdrop(width, height int, s Style, inputs RenderInputs) *image.RGBA 
 	accent, _ := ParseColor(s.AccentColor)
 	if !inputs.TransparentBackdrop {
 		draw.Draw(img, img.Bounds(), image.NewUniform(bg), image.Point{}, draw.Src)
-		fitImage(img, img.Bounds(), inputs.Background)
+		if IsWorkshopArtwork(s.Artwork) {
+			fitImageWithScaler(img, img.Bounds(), inputs.Background, xdraw.NearestNeighbor)
+		} else {
+			fitImage(img, img.Bounds(), inputs.Background)
+		}
 	}
 	margin := height / 24
 	thickness := max(2, int(s.BorderWidth*float64(height)/1080))
