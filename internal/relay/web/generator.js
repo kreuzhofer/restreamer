@@ -32,6 +32,7 @@
   let assets = [];
   let assetsFetching = false;
   let assetUploading = false;
+  let assetUploadRequest;
   function showCollection(name, focus = false) {
     document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = panel.dataset.collectionPanel !== name; });
     $('design-editor').hidden = true;
@@ -712,21 +713,31 @@
     const target = $('asset-upload-target').value;
     $('asset-upload-target').replaceChildren(new Option(`New independent ${$('asset-kind').value}`, ''), ...assets.filter(asset => asset.kind === $('asset-kind').value).map(asset => new Option(`New revision of ${asset.name}`, asset.id)));
     $('asset-upload-target').value = assets.some(asset => asset.id === target) ? target : '';
+    const opened = new Set([...$('asset-list').querySelectorAll('details[open]')].map(card => card.dataset.assetId));
     $('asset-list').replaceChildren();
+    $('asset-list-state').textContent = assets.length ? `${assets.length} uploaded asset${assets.length === 1 ? '' : 's'} · exact revisions retained` : 'No scene assets uploaded. Add an image, video or music file on desktop to use it in your designs.';
     for (const asset of assets) {
-      const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id;
-      const summary = document.createElement('summary'); summary.textContent = `${asset.name} · revision ${asset.revision} · ${asset.uses.length} use(s)`;
+      const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id; card.open = opened.has(asset.id);
+      const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind} · ready · ${asset.uses.length} reference(s)`;
       const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
+      img.addEventListener('error', () => assetError(`Preview unavailable for ${asset.name}. Refresh assets to check its exact revision.`));
+      const revisionLabel = document.createElement('label'); revisionLabel.textContent = 'Preview exact revision';
+      const revisionPicker = document.createElement('select');
+      revisionPicker.replaceChildren(...asset.revisions.map(revision => new Option(`Revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, revision.revision)));
+      revisionPicker.value = asset.revision;
+      revisionPicker.addEventListener('change', () => { img.src = `/api/generator/assets/${asset.id}/revisions/${revisionPicker.value}`; });
+      revisionLabel.append(revisionPicker);
+      const referenceStatus = document.createElement('p'); referenceStatus.className = 'stage-help'; referenceStatus.textContent = asset.uses.length ? 'Protected while referenced by saved content or generation history.' : 'No saved references. Eligible for separate deletion.';
       const list = document.createElement('ul');
       for (const use of asset.uses) { const item = document.createElement('li'); item.textContent = `${use.kind}: ${use.name} · revision ${use.revision}`; list.append(item); }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = `Delete unused ${asset.kind}`; remove.disabled = asset.uses.length > 0;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button studio-authoring'; remove.textContent = `Delete unused ${asset.kind}`; remove.disabled = asset.uses.length > 0;
       remove.addEventListener('click', async () => {
         if (!window.confirm(`Delete unused asset “${asset.name}” and all its revisions?`)) return;
         remove.disabled = true;
         try { await request(`/api/generator/assets/${asset.id}`, 'DELETE', {}); assetError(''); await loadAssets(); }
         catch (error) { assetError(error.message); await loadAssets(); }
       });
-      card.append(summary, img, list, remove); $('asset-list').append(card);
+      card.append(summary, revisionLabel, img, referenceStatus, list, remove); $('asset-list').append(card);
     }
     renderImagePicker(); renderVideoPicker(); renderMusicPicker(); renderThemeAssets();
   }
@@ -734,7 +745,7 @@
     if (assetsFetching) return;
     assetsFetching = true;
     try { assets = await (await request('/api/generator/assets')).json(); renderAssets(); }
-    catch (error) { assetError(`Asset library unavailable: ${error.message}`); }
+    catch (error) { assetError(`Asset library unavailable: ${error.message}`); $('asset-list-state').textContent = 'Asset status unavailable. Previously loaded references may be stale. Refresh to retry.'; $('asset-list').querySelectorAll('button').forEach(button => { button.disabled = true; }); }
     finally { assetsFetching = false; }
   }
   function renderMusicPicker() {
@@ -829,24 +840,39 @@
     $('asset-file-label').textContent = kind === 'video' ? 'H.264/AAC MP4 video' : kind === 'audio' ? 'MP3 or PCM WAV · up to 32 MiB and 10 minutes' : 'PNG or JPEG';
     $('asset-file').value = ''; renderAssets();
   });
-  $('asset-upload').addEventListener('submit', async event => {
-    event.preventDefault(); if (assetUploading) return;
+  $('asset-upload').addEventListener('submit', event => {
+    event.preventDefault(); if (assetUploading || window.matchMedia('(max-width: 600px)').matches) return;
     const file = $('asset-file').files[0]; if (!file) return;
     const kind = $('asset-kind').value;
     if (file.size > (kind === 'video' ? 512 : kind === 'audio' ? 32 : 10) * 1048576) { assetError(`Choose a ${kind} up to ${kind === 'video' ? 512 : kind === 'audio' ? 32 : 10} MiB.`); return; }
     const target = assets.find(asset => asset.id === $('asset-upload-target').value);
     const data = new FormData(); data.append('file', file);
-    assetUploading = true; $('asset-upload-button').disabled = true; assetError(''); $('asset-status').textContent = 'Uploading asset; preparation waits for current media work…';
-    try {
-      const path = target ? `/api/generator/assets/${target.id}/revisions?version=${target.revision}&kind=${kind}` : `/api/generator/assets?kind=${kind}`;
-      const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'X-Restreamer-Control': '1'}, body: data});
-      if (!response.ok) throw new Error(await response.text());
-      const asset = await response.json(); $('asset-file').value = '';
-      $('asset-status').textContent = `${asset.name} saved as revision ${asset.revision}. Choose its revision in a scene or soundtrack to use it.`;
-      await loadAssets();
-    } catch (error) { assetError(error.message); $('asset-status').textContent = 'Asset was not acknowledged as saved; previous revisions remain unchanged.'; }
-    finally { assetUploading = false; $('asset-upload-button').disabled = false; }
+    assetUploading = true;
+    $('asset-upload').querySelectorAll('input, select, button').forEach(control => { control.disabled = control.id !== 'asset-upload-cancel'; });
+    $('asset-upload-cancel').hidden = false; assetError(''); $('asset-status').textContent = 'Uploading asset…';
+    const path = target ? `/api/generator/assets/${target.id}/revisions?version=${target.revision}&kind=${kind}` : `/api/generator/assets?kind=${kind}`;
+    const xhr = new XMLHttpRequest(); assetUploadRequest = xhr;
+    xhr.open('POST', new URL(path, location.origin)); xhr.setRequestHeader('X-Restreamer-Control', '1'); xhr.timeout = kind === 'video' ? 960000 : kind === 'audio' ? 360000 : 120000;
+    xhr.upload.onprogress = event => { $('asset-status').textContent = event.lengthComputable ? `Uploading asset · ${Math.floor(event.loaded / event.total * 100)}%` : 'Uploading asset…'; };
+    xhr.upload.onload = () => { $('asset-status').textContent = 'Upload transferred. Validating and preparing the exact revision; waiting for current media work if necessary…'; };
+    xhr.onload = () => {
+      if (xhr.status === 201) {
+        try {
+          const asset = JSON.parse(xhr.responseText); $('asset-file').value = '';
+          $('asset-status').textContent = `${asset.name} ready as revision ${asset.revision}. Choose its exact revision in a scene or soundtrack to use it.`;
+        } catch (_) { assetError('Upload response could not be read. Refresh assets to check whether it was saved.'); }
+      } else { assetError(xhr.responseText.trim() || 'Upload failed.'); $('asset-status').textContent = 'Asset was not acknowledged as saved. Previous revisions remain unchanged.'; }
+    };
+    xhr.onerror = () => assetError('Upload connection failed. Refresh assets before retrying; the server may have saved the revision.');
+    xhr.ontimeout = () => assetError('Preparation timed out. Refresh assets before retrying.');
+    xhr.onabort = () => { $('asset-status').textContent = 'Upload cancelled. Refresh assets to check whether the server had already saved it.'; };
+    xhr.onloadend = () => {
+      assetUploading = false; assetUploadRequest = undefined; $('asset-upload-cancel').hidden = true;
+      $('asset-upload').querySelectorAll('input, select, button').forEach(control => { control.disabled = false; }); loadAssets();
+    };
+    xhr.send(data);
   });
+  $('asset-upload-cancel').addEventListener('click', () => assetUploadRequest?.abort());
   $('adopt-image-revision').addEventListener('click', () => {
     const scene = draft?.scenes[selectedScene]; const asset = assets.find(asset => asset.id === scene?.image?.id);
     if (!asset) return; scene.image = {id: asset.id, revision: asset.revision}; renderImagePicker(); changed();

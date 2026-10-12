@@ -177,3 +177,25 @@
  #generation-history > summary { min-height: 44px; }
  #preview-last-ready { min-height: 44px; }
 }
+
+/* Uploaded sources are managed independently from editable designs and results. */
+.studio-media-grid { display: grid; grid-template-columns: minmax(240px, 310px) minmax(0, 1fr); gap: 24px; margin-top: 20px; }
+.studio-media-grid[hidden] { display: none; }
+.media-upload-pane { min-width: 0; padding-right: 24px; border-right: 1px solid var(--border); }
+.media-list-pane { min-width: 0; }
+#media-library-upload { display: grid; gap: 12px; }
+#asset-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; align-items: start; }
+#asset-list .generator-asset { margin: 0; }
+.media-revision-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.media-revision-row > span { width: 100%; font-size: 12px; overflow-wrap: anywhere; color: var(--muted); }
+.media-revision-row a { text-decoration: none; }
+.media-library-item progress { width: 100%; accent-color: #68d4b0; }
+#media-library-preview { width: 100%; max-height: 420px; background: #000; }
+#media-library-preview-label, #asset-error, #media-library-error, #media-library-load-error { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .studio-media-grid { grid-template-columns: minmax(210px, 260px) minmax(0, 1fr); gap: 16px; } .media-upload-pane { padding-right: 16px; } }
+@media (max-width: 600px) {
+  .studio-media-grid { grid-template-columns: minmax(0, 1fr); }
+  .media-upload-pane { border: 0; padding: 0; }
+  .studio-app .media-library-item button:not(.studio-authoring) { display: inline-block !important; }
+  #asset-list .generator-asset select, .media-revision-row .preview-button { min-height: 44px; }
+}

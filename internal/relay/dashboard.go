@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("PUT /api/library/prepare", s.libraryPrepare)
 	private.HandleFunc("GET /api/library/revisions/{revision}/preview", s.libraryRevisionPreview)
 	private.HandleFunc("POST /api/library/upload", s.libraryUpload)
+	private.HandleFunc("DELETE /api/library/files/{id}", s.libraryDelete)
 	private.HandleFunc("POST /api/brb/theme/prepare", s.brbThemePrepare)
 	private.HandleFunc("GET /api/brb/theme/preparation", s.brbThemePreparationHTTP)
 	private.HandleFunc("POST /api/brb/theme/preparation/cancel", s.brbThemePreparationCancelHTTP)

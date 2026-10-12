@@ -28,6 +28,7 @@
  <div id="workspace-status" class="workspace-status" role="status" aria-label="Broadcast status">
   <span>Stage <strong id="workspace-stage">Unknown</strong></span><span>On-air source <strong id="workspace-source">Unknown</strong></span><span id="workspace-mode">Connecting to server</span><span id="workspace-freshness">Awaiting first update</span>
  </div>
+ <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
   <div id="live-workspace" data-workspace-panel="live">
   <h1 class="visually-hidden" tabindex="-1">Live broadcast console</h1>
   <div id="notice" class="notice" role="alert" hidden></div>
@@ -71,7 +72,7 @@
   </section>
    <details id="live-destinations" class="live-disclosure" open><summary>Destination delivery</summary>
   <section class="destinations" aria-labelledby="destinations-title">
-   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
+   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence" class="visually-hidden">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
   </section>
    </details>
@@ -178,17 +179,20 @@
  </dialog>
  <template id="target-template">
   <article class="panel target-panel">
-   <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span></div>
+   <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>
+   <p class="target-brief"></p>
    <details class="target-diagnostics"><summary>Signal details</summary>
    <div class="target-stats"><div><span class="metric target-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong class="target-peak">—</strong><span>Mbps peak · 15 min</span></div></div>
    <div class="frame-stats"><div><strong class="target-fps">—</strong><span>FPS written</span></div><div><strong class="target-drops">—</strong><span>Relay drops · since restart</span></div></div>
    <p class="target-graph-label graph-label">Bitrate · Mbps</p>
    <div class="chart target-chart"></div>
    <details class="frame-details"><summary>Frame counters · since restart</summary><dl><div><dt>Written to target</dt><dd class="frames-sent">—</dd></div><div><dt>Omitted while paused</dt><dd class="frames-paused">—</dd></div><div><dt>Skipped during startup / resync / shutdown</dt><dd class="frames-skipped">—</dd></div></dl><p>Drops count failed writes, discarded queues, and frames omitted during an outage. Written frames are not a playback acknowledgment.</p></details>
-   </details>
+   <div class="target-control"><div><strong class="switch-label">Target enabled</strong><p class="switch-help">Ready when your input goes live.</p></div></div>
    <div class="target-detail"><span class="target-message"></span><span class="attempts"></span></div>
    <div class="issue" hidden></div>
-   <div class="target-control"><div><strong class="switch-label">Target enabled</strong><p class="switch-help">Ready when your input goes live.</p></div><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>
+
+   </details>
+
   </article>
  </template>
 </body>
