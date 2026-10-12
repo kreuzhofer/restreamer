@@ -48,7 +48,7 @@ type broadcast struct {
 }
 
 func newBroadcast(s *Server, media *brbMedia) *broadcast {
-	b := &broadcast{server: s, control: newStageControl(), hub: newHub(s.cfg.QueueBytes, s.outputs...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
+	b := &broadcast{server: s, control: newStageControl(), hub: newHub(s.cfg.QueueBytes, s.outputSnapshot()...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
 	if s.forwarding.Load() {
 		b.control.stage, b.control.mode = "LIVE", "real"
 	}
@@ -238,7 +238,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	}
 	if b.control.stage != "LIVE" || b.manual || b.clip != nil {
 		if isVideoFrame(m) {
-			for _, o := range b.server.outputs {
+			for _, o := range b.server.outputSnapshot() {
 				o.discardFrames(1, true)
 			}
 		}
@@ -247,7 +247,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	if !b.live {
 		if !ready {
 			if isVideoFrame(m) {
-				for _, o := range b.server.outputs {
+				for _, o := range b.server.outputSnapshot() {
 					o.discardFrames(1, true)
 				}
 			}

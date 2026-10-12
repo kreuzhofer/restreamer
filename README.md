@@ -56,13 +56,9 @@ cp .env.example .env
 openssl rand -hex 24
 ```
 
-Edit `.env`: set `INGEST_STREAM_KEY` to the generated value and set the stream key
-for each platform you want to use. Leave a target key empty to disable that output,
-or set `TWITCH_ENABLED=false` / `YOUTUBE_ENABLED=false` to disable it while retaining
-its key. Both switches default to `true` when omitted. Twitch and YouTube server
-URLs have defaults; override them with your platform's ingest URL if needed.
-Server URLs contain the application path,
-**without** the stream key; keys are sent separately and literally.
+Edit `.env` to set your ingestion and dashboard credentials. Configure platform
+server URLs and keys in desktop Settings after startup; enable delivery in Live.
+Server URLs contain the application path without the stream key.
 Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to enable the dashboard.
 Both credentials are needed to operate broadcast stages. Without them,
 RTMP input and health checks still run, but the broadcast remains OFF.
@@ -88,12 +84,6 @@ Create/update a stack from this Git repository, branch `main`, Compose path
 Set these in the stack's **Environment variables** section:
 
 - `INGEST_STREAM_KEY`: your own random key, at least 16 characters.
-- `TWITCH_SERVER`: optional Twitch server URL, without the key; defaults to `rtmp://live.twitch.tv/app`.
-- `TWITCH_STREAM_KEY`: your Twitch key; missing or empty disables Twitch.
-- `TWITCH_ENABLED`: optional `true`/`false`, defaults to `true`.
-- `YOUTUBE_STREAM_KEY`: your YouTube key; missing or empty disables YouTube.
-- `YOUTUBE_ENABLED`: optional `true`/`false`, defaults to `true`.
-- `YOUTUBE_SERVER`: optional; defaults to `rtmps://a.rtmps.youtube.com/live2`.
 - `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`: set both for dashboard access.
 - `STATUS_BIND_ADDRESS`: defaults to `127.0.0.1`; adjust for your proxy's network.
 
@@ -306,16 +296,11 @@ Input drop counts are unavailable: the relay cannot know which frames OBS never
 sent. Successful writes are not acknowledgments of Twitch/YouTube playback.
 OBS rendering/encoding statistics and platform-side drops are not measured.
 
-Compose mounts the named `restreamer-state` volume at `/data`; target switches are
-atomically saved to `/data/targets.json` before a control request succeeds. A write
-failure is shown on the page and leaves the current switch unchanged. Keep the same
-stack/Compose project and volume when redeploying. The target state file contains
-only names and booleans, never stream keys. BRB assets and its profile also live
-in this volume, without credentials. Saved switches override `TWITCH_ENABLED` /
-`YOUTUBE_ENABLED` startup defaults for existing names. A missing key always disables
-the target, even if the saved switch is on. Targets newly added to the configuration
-use their configured defaults. Removing the state file while the container is
-stopped resets all switches to configuration defaults on its next start.
+Compose mounts the named `restreamer-state` volume at `/data`. Managed destinations
+and enabled preferences are saved atomically in the private credentials file.
+Legacy switches use `/data/targets.json`, which contains only names and booleans.
+A write failure leaves the running settings unchanged. Keep the same volume when
+redeploying; a missing key always disables delivery.
 
 For automation, `GET /api/dashboard` returns server time, status, and up to 900
 samples (timestamps in Unix milliseconds). Existing `input` and `outputs` values
@@ -378,11 +363,11 @@ The bundled configuration is loaded once at startup. When environment variables
 change, recreate the container (`docker compose up -d --force-recreate`, or update
 the stack in Portainer).
 
-For custom destinations or listener settings, copy `config.example.json` to
+For custom listener settings, copy `config.example.json` to
 `config.json`, edit it, and mount it read-only over `/etc/restreamer/config.json`.
 For a Portainer stack, use an absolute path to an existing file on the **Docker
 host**, which may be a different machine from Portainer itself. The default
-two-destination configuration requires no mount.
+configuration requires no mount; manage destinations in Settings.
 
 | Field | Default / behavior |
 | --- | --- |
@@ -400,7 +385,8 @@ two-destination configuration requires no mount.
 | `brb.width`, `brb.height` | Initial profile; bundled config uses 1920×1080. Even dimensions, 320×180 through 3840×2160 |
 | `brb.fps` | Initial rate: 30; supports 24, 25, 30, 50, 60 |
 | `brb.sample_rate` | Initial AAC-LC stereo rate: 48000; also supports 44100 |
-| `targets` | 1–16 configured outputs, each with a unique `name` |
+| `destinations_file` | Private persistent managed destinations; bundled path `/data/destinations.json` |
+| `targets` | 0–16 legacy outputs available for explicit import; empty for new installations |
 | `targets[].enabled` | Optional startup default, `true` if omitted; a saved/dashboard switch overrides this |
 | `targets[].stream_key` | Missing, empty, or whitespace-only disables the output regardless of `enabled` |
 | `targets[].url` | RTMP/RTMPS server URL, required only for active outputs |
@@ -421,10 +407,9 @@ are capped at 16. Handshakes and output writes time out after 10 seconds; an inp
 without messages times out after 15 seconds. A second publisher is rejected while
 the first session, including its output cleanup, is active.
 
-Add destinations in your custom configuration by adding entries to `targets` and
-corresponding environment variables to Compose. To run only one platform, leave
-the other platform's key empty or set its enable switch to `false`; no entries need
-to be removed. Only the input key is mandatory in the supplied Compose stack.
+Add destinations and replace platform keys in desktop Settings. No destination
+credentials are required in `.env`. Legacy target JSON remains supported for
+explicit migration; see Managing destinations below.
 No platform keys are built into the
 image, logged, or returned by `/status`. `.env` and `config.json` are Git-ignored.
 Docker administrators can still inspect container environment variables.
@@ -1248,3 +1233,40 @@ the final frame's source audio is silent before the single AAC encode (which can
 have small lossy residuals). No hold frame or second is appended. Destination
 draining remains a later broadcast-controller operation, separate from the media
 duration. Editing, generating and previewing never start or end a broadcast.
+
+### Managing destinations in desktop Settings
+
+New installations start with no destinations. Add the RTMP/RTMPS server URL and
+stream key in desktop **Settings → Destinations**, then enable the prepared
+destination from **Live**. Names use 1–64 letters, digits, underscores, or hyphens.
+Up to 16 destinations are supported. A destination without a key cannot send.
+Saving an edit with an empty key field preserves the stored key; enter a new key
+to replace it. Keys are masked and never returned by the management API or status.
+Mobile provides delivery switches and health; configuration requires desktop.
+
+`destinations_file` identifies the private persistent credentials file (the
+container example uses `/data/destinations.json`). Native deployments must set
+this to a writable private path. When omitted, a configured `state_file` supplies
+its directory and `destinations.json` is used. The file is atomically replaced
+with mode 0600. Back it up as a secret. The older switch-state file remains
+secret-free. Failed validation or writes leave the running configuration intact.
+
+For migration, retain your existing target JSON and environment configuration for
+one start, stop broadcasting/rehearsal, and choose **Import existing destinations**.
+Import preserves names and current enabled preferences, including saved switches.
+After successful import, remove the legacy targets and destination environment
+variables; the managed file is authoritative on future starts and is never
+silently overwritten by legacy settings. The default Compose configuration no
+longer passes Twitch/YouTube keys: existing deployments should import using their
+previous configuration before upgrading, or temporarily mount their old config
+and explicitly pass the required environment variables for this one-time import.
+Keep the persistent volume when upgrading. A restart always begins OFF.
+
+Editing a selected destination during a real broadcast requires confirmation
+against the current broadcast state and reconnects only that destination.
+Removing one also requires confirmation; removing the last leaves the show and
+preview running with no delivery. New destinations start disabled and join only
+through Live's confirmed delivery controls. Rehearsal never opens a destination
+session. Management is locked for the entire ENDING stage, including final drain;
+wait for completion or confirm Stop now. Later edits/removals preserve the
+historical ending completion results and their original destination names.

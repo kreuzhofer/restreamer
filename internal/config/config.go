@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -65,6 +66,7 @@ type BRBConfig struct {
 func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
 
 type Config struct {
+	DestinationsFile  string     `json:"destinations_file,omitempty"`
 	LibraryDirectory  string     `json:"library_directory,omitempty"`
 	LibraryUploadMiB  int        `json:"library_upload_mib,omitempty"`
 	BRB               *BRBConfig `json:"brb,omitempty"`
@@ -106,6 +108,15 @@ func Load(path string) (Config, error) {
 			return c, errors.New("configuration references an unset or empty environment variable")
 		}
 	}
+	// A successfully imported store owns destinations. Legacy environment
+	// values must not prevent startup after the operator removes them.
+	destinationPath := os.ExpandEnv(c.DestinationsFile)
+	if destinationPath == "" && os.ExpandEnv(c.StateFile) != "" {
+		destinationPath = filepath.Join(filepath.Dir(os.ExpandEnv(c.StateFile)), "destinations.json")
+	}
+	if info, err := os.Stat(destinationPath); err == nil && info.Mode().IsRegular() {
+		c.Targets = nil
+	}
 	for i := range c.Targets {
 		t := &c.Targets[i]
 		t.Name = os.ExpandEnv(t.Name)
@@ -131,6 +142,7 @@ func Load(path string) (Config, error) {
 		}
 	}
 	c.StateFile = os.ExpandEnv(c.StateFile)
+	c.DestinationsFile = os.ExpandEnv(c.DestinationsFile)
 	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
 	if c.BRB != nil {
 		c.BRB.Enabled = EnableFlag(os.ExpandEnv(string(c.BRB.Enabled)))
@@ -189,8 +201,8 @@ func (c Config) Validate() error {
 	if c.QueueBytes < 1<<20 || c.QueueBytes > 256<<20 {
 		return errors.New("queue_bytes must be between 1 MiB and 256 MiB")
 	}
-	if len(c.Targets) == 0 || len(c.Targets) > 16 {
-		return errors.New("configure between 1 and 16 targets")
+	if len(c.Targets) > 16 {
+		return errors.New("configure at most 16 targets")
 	}
 	names := make(map[string]bool)
 	for i, t := range c.Targets {

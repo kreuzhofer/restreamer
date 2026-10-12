@@ -10,7 +10,7 @@ func (b *broadcast) applyTargetCommand(cmd StageCommand) (bool, error) {
 	}
 	var target *output
 	enabledCount := 0
-	for _, candidate := range b.server.outputs {
+	for _, candidate := range b.server.outputSnapshot() {
 		status := candidate.snapshot()
 		if status.Enabled {
 			enabledCount++

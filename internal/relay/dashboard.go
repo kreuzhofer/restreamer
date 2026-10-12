@@ -20,6 +20,11 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
+	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
+	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)
+	private.HandleFunc("PUT /api/destinations/{name}", s.destinationsHTTP)
+	private.HandleFunc("DELETE /api/destinations/{name}", s.destinationsHTTP)
 	private.HandleFunc("GET /status", s.dashboardStatus)
 	private.HandleFunc("GET /api/dashboard", s.dashboardStatus)
 	private.HandleFunc("GET /api/stage", s.stageStatusHTTP)
@@ -127,8 +132,8 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 		BRBAssets      brbSettings     `json:"brb_assets"`
 		BRBProfile     any             `json:"brb_profile,omitempty"`
 		Stage          StageStatus     `json:"stage"`
-	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputs)), Persistent: s.cfg.StateFile != ""}
-	for _, o := range s.outputs {
+	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputSnapshot())), Persistent: s.cfg.StateFile != ""}
+	for _, o := range s.outputSnapshot() {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
 	status.Forwarding = s.forwarding.Load()

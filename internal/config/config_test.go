@@ -40,7 +40,6 @@ func TestInvalidConfig(t *testing.T) {
 		"weak input key":                 strings.ReplaceAll(validJSON, "input-key-1234567890", "short"),
 		"unsupported scheme":             strings.ReplaceAll(validJSON, "rtmps://", "https://"),
 		"URL userinfo":                   strings.ReplaceAll(validJSON, "example.com", "username:secret-not-for-logs@example.com"),
-		"no targets":                     `{"stream_key":"input-key-1234567890"}`,
 		"null":                           "null",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -161,5 +160,24 @@ func TestBRBConfigurationValidation(t *testing.T) {
 	c, err = loadText(t, base)
 	if err != nil || c.BRB.IsEnabled() {
 		t.Fatal("unset flag should leave BRB disabled")
+	}
+}
+
+func TestEmptyDestinationSetup(t *testing.T) {
+	if _, err := loadText(t, `{"stream_key":"input-key-1234567890","targets":[]}`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedDestinationsIgnoreRemovedLegacyEnvironment(t *testing.T) {
+	directory := t.TempDir()
+	credentials := filepath.Join(directory, "destinations.json")
+	if err := os.WriteFile(credentials, []byte(`{"version":1,"targets":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"stream_key":"input-key-1234567890","destinations_file":"` + credentials + `","targets":[{"name":"legacy","url":"${RESTREAMER_MISSING_LEGACY_URL}","stream_key":"old-key"}]}`
+	cfg, err := loadText(t, body)
+	if err != nil || len(cfg.Targets) != 0 {
+		t.Fatal("managed file did not supersede legacy definitions", err)
 	}
 }
