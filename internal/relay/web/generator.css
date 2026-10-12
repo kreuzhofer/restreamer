@@ -12,6 +12,8 @@
 #design-list button { text-align: left; padding: 12px; background: #171e2d; color: #e7eafa; border: 1px solid transparent; border-radius: 7px; overflow-wrap: anywhere; cursor: pointer; }
 #design-list button[aria-current="true"] { border-color: #4de0c5; }
 #design-list small { display: block; margin-top: 5px; color: #aab0c5; }
+.design-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+#design-list .delete-button { color: #ffb3b3; border-color: #794545; }
 #save-state { color: #4de0c5; font-size: 13px; text-align: right; }
 .generator-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
 .generator-theme { border: 1px solid #30374b; padding: 14px; font-size: 13px; }

@@ -91,6 +91,9 @@ func (s *Server) initializeLibrary() error {
 		}
 	}
 	s.library = &videoLibrary{preparation: s.preparation, root: root, limit: int64(limit) << 20, profile: s.broadcast.media.settings.Profile, entries: make(map[string]*LibraryEntry), revisions: make(map[string]*MediaRevision), wake: make(chan struct{}, 1)}
+	if err := recoverMediaDeletions(root); err != nil {
+		return errors.New("cannot recover media deletion; check library storage")
+	}
 	return s.library.loadRevisions()
 }
 func (l *videoLibrary) notify() {

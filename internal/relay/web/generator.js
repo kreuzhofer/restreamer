@@ -13,6 +13,7 @@
   let validationIssues = [];
   let dirty = false;
   let saving = false;
+  let deleting = false;
   let conflict = false;
   let editSequence = 0;
   let previewSequence = 0;
@@ -66,6 +67,7 @@
     renderJobs();
   }
   function canLeave() {
+    if (deleting) { notify('Deletion is in progress. Wait for its result.'); return false; }
     if (saving) { notify('A save is in progress. Wait for its acknowledgement before opening another draft.'); return false; }
     return !dirty || window.confirm('Discard your unsaved local edits and open another design?');
   }
@@ -90,8 +92,38 @@
         }
         catch (error) { notify(error.message); }
       });
-      $('design-list').append(button);
+      const remove = document.createElement('button');
+      remove.type = 'button'; remove.className = 'delete-button'; remove.textContent = 'Delete';
+      remove.setAttribute('aria-label', `Delete design ${design.name || 'Untitled design'}`);
+      remove.addEventListener('click', () => deleteDesign(design));
+      const row = document.createElement('div'); row.className = 'design-row'; row.append(button, remove);
+      $('design-list').append(row);
     }
+  }
+  async function deleteDesign(design) {
+    if (deleting || saving || jobRequest) { notify('Wait for the current save or request before deleting.'); return; }
+    if (!window.confirm(`Permanently delete “${design.name || 'Untitled design'}”, its generation history and generated files? Uploaded images, videos and music stay in Reusable media. Output shared with another saved result is kept. Selected or playing output blocks deletion.${draft?.id === design.id && dirty ? ' Unsaved edits to this design will also be discarded.' : ''}`)) return;
+    deleting = true; editSequence++;
+    const current = draft?.id === design.id;
+    if (current) clearTimeout(saveTimer);
+    $('scene-form').inert = true;
+    try {
+      const result = await (await request(`/api/generator/designs/${design.id}`, 'DELETE', {version: current ? draft.version : design.version})).json();
+      if (current) {
+        clearTimeout(previewTimer); previewSequence++; previewAbort?.abort();
+        draft = null; dirty = false; conflict = false; editSequence++;
+        $('design-editor').hidden = true; $('generator-empty').hidden = false;
+        history.replaceState(null, '', '/generator');
+      }
+      stopGeneratedPreview();
+      await listDesigns(); await loadJobs(); await loadAssets();
+      notify(`Design deleted with ${result.deleted_media} generated file(s). Uploaded assets were kept.${result.retained_shared_media.length ? ' Shared generated output was retained for other results.' : ''}`);
+    } catch (error) { notify(error.message); }
+    finally { deleting = false; $('scene-form').inert = false; if (draft && dirty && !conflict) saveTimer = setTimeout(() => saveDraft(), 700); }
+  }
+  function stopGeneratedPreview() {
+    const video = $('generated-video'); video.pause(); video.removeAttribute('src'); video.load();
+    reviewedRevision = ''; $('generated-preview').hidden = true;
   }
   function openDraft(value) {
     clearTimeout(saveTimer);
@@ -304,7 +336,7 @@
   }
   async function saveDraft(asCopy = false) {
     clearTimeout(saveTimer);
-    if (!draft || saving || (conflict && !asCopy) || (!dirty && !asCopy)) return;
+    if (!draft || saving || deleting || (conflict && !asCopy) || (!dirty && !asCopy)) return;
     saving = true;
     const sequence = editSequence;
     const snapshot = structuredClone(draft);
@@ -378,6 +410,20 @@
     if ([...$('new-template').options].some(option => option.value === chosen)) $('new-template').value = chosen;
     if ([...$('update-template').options].some(option => option.value === target)) $('update-template').value = target;
     $('update-template-button').disabled = !$('update-template').value || templateSaving;
+    $('template-list').replaceChildren();
+    for (const template of templates.filter(item => !item.builtin)) {
+      const row = document.createElement('p'); row.textContent = `${template.name} · v${template.version} `;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete template';
+      remove.setAttribute('aria-label', `Delete template ${template.name}`);
+      remove.addEventListener('click', async () => {
+        if (templateSaving || !window.confirm(`Permanently delete template “${template.name}”? Independent designs, generated files and uploaded assets stay.`)) return;
+        remove.disabled = true;
+        try { await request(`/api/generator/templates/${template.id}`, 'DELETE', {version: template.version}); await loadTemplates(); await loadAssets(); notify('Template deleted. Designs and uploads kept.'); }
+        catch (error) { notify(error.message); remove.disabled = false; }
+      });
+      row.append(remove); $('template-list').append(row);
+    }
+    if (!templates.some(item => !item.builtin)) $('template-list').textContent = 'No custom templates.';
   }
   async function loadTemplates() {
     templates = await (await request('/api/generator/templates')).json();
@@ -439,7 +485,7 @@
     if (!draft) return;
     const outstanding = jobs.filter(job => ['queued', 'running', 'cancelling'].includes(job.state));
     const busy = outstanding.length >= 8;
-    $('generate-design').disabled = dirty || saving || conflict || jobRequest || busy;
+    $('generate-design').disabled = deleting || dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
@@ -494,6 +540,19 @@
           row.append(actions);
         }
       }
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete result';
+      remove.disabled = ['running', 'cancelling'].includes(job.state);
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Permanently delete this result for “${job.design_snapshot.name}” and its generated file? The editable design and uploaded assets stay. Output shared with another result is kept. Selected or playing output blocks deletion.`)) return;
+        remove.disabled = true;
+        try {
+          const result = await (await request(`/api/generator/jobs/${job.id}`, 'DELETE', {})).json();
+          if (reviewedRevision === job.media_revision) stopGeneratedPreview();
+          await loadJobs(); await loadAssets();
+          generationError(''); notify(result.retained_shared_media.length ? 'Result deleted. Shared output remains available to other results.' : 'Result and generated file deleted. Design and uploads kept.');
+        } catch (error) { generationError(error.message); remove.disabled = false; }
+      });
+      row.append(remove);
       $('generation-jobs').append(row);
     }
   }
@@ -522,7 +581,7 @@
   $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${reviewedRevision.slice(0, 12)}.`; });
   $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
   $('generate-design').addEventListener('click', async () => {
-    if (!draft || dirty || saving || conflict || jobRequest) return;
+    if (!draft || deleting || dirty || saving || conflict || jobRequest) return;
     jobRequest = true; generationError(''); renderJobs();
     try { await request('/api/generator/jobs', 'POST', {design_id: draft.id, version: draft.version}); await loadJobs(); }
     catch (error) { generationError(error.message); }
@@ -749,6 +808,7 @@
       $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? (key === 'content_offset_y_percent' ? 0 : '');
     }
     $('theme-publish').disabled = theme.builtin;
+    $('theme-delete').disabled = theme.builtin;
     $('theme-status').textContent = `${theme.name} · revision ${theme.revision}${theme.builtin ? '. Duplicate to create an editable variant.' : '. Publish changes explicitly; existing designs keep their pinned revision.'}`;
   }
   function localTheme() {
@@ -793,6 +853,21 @@
   }
   $('theme-form').addEventListener('submit', event => { event.preventDefault(); publishTheme(false); });
   $('theme-duplicate').addEventListener('click', () => publishTheme(true));
+  $('theme-delete').addEventListener('click', async () => {
+    if (!editingTheme || editingTheme.builtin || themeSaving) return;
+    const theme = editingTheme;
+    const revision = Math.max(...themes.filter(item => item.id === theme.id).map(item => item.revision));
+    if (!window.confirm(`Permanently delete custom theme “${theme.name}” and all its revisions? Uploaded backgrounds and logos stay. Designs, generation history or BRB media still using this theme block deletion.${themeDirty ? ' Unpublished settings will also be discarded.' : ''}`)) return;
+    themeSaving = true; $('theme-delete').disabled = true;
+    $('theme-form').inert = true;
+    $('theme-library').disabled = true;
+    try {
+      await request(`/api/generator/themes/${theme.id}`, 'DELETE', {revision});
+      editingTheme = null; themeDirty = false;
+      await loadThemes(); await loadAssets(); notify('Custom theme and its revisions deleted. Uploaded assets kept.');
+    } catch (error) { themeError(error.message); }
+    finally { themeSaving = false; $('theme-form').inert = false; $('theme-library').disabled = false; $('theme-delete').disabled = editingTheme?.builtin ?? true; }
+  });
   $('theme-refresh').addEventListener('click', async () => {
     if (themeSaving || (themeDirty && !window.confirm('Discard unpublished settings and reload the latest theme revision?'))) return;
     try { await loadThemes(); editTheme(themes.filter(theme => theme.id === editingTheme.id).sort((a,b) => b.revision-a.revision)[0]); } catch (error) { themeError(error.message); }

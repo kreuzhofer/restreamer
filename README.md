@@ -867,6 +867,44 @@ and [Neon Night](artwork/neon-night/README.md).
 Neon Night uses pale aqua lettering with magenta edges and purple shadows;
 its artwork and animation remain independent of Arcade After Hours.
 
+### Deleting authored media
+
+Each saved show design has a **Delete** button. After confirmation, deletion
+removes the draft, its generation history (including queued work), and generated
+video files that are not shared with another saved result. **Delete result** in
+generation history removes one result without deleting its editable design.
+Wait for running generation to finish or cancel it before deleting.
+
+Uploaded images, videos and music are **never automatically deleted with a
+design**. Manage them separately under **Reusable media**: expand an asset to see
+its references, then use **Delete unused image/video/audio** to remove the upload
+and all its revisions from disk. Remove its uses in designs, templates, themes,
+generation history or BRB before deleting it.
+
+**Manage saved templates** deletes custom content templates independently of
+designs made from them. The style library's **Delete custom theme and all
+revisions** removes an unused custom theme; built-in starters/themes remain.
+Current or prepared BRB, saved designs and generation history protect their
+theme revisions until those uses are removed.
+
+Generated media selected for PRESTREAM/ENDING, a clip shortcut, current playback
+or a suspended return stage cannot be deleted. Clear or replace those uses in
+live control first. Deletion never changes the broadcast or silently clears a
+stage selection. Files are staged together before removal; startup restores
+interrupted uncommitted operations or finishes committed file cleanup. Storage
+errors are reported rather than acknowledging incomplete cleanup.
+
+Authenticated same-origin JSON deletion endpoints:
+
+- `DELETE /api/generator/designs/{id}` with `{"version":<current draft version>}`.
+- `DELETE /api/generator/jobs/{id}` with `{}`.
+- `DELETE /api/generator/templates/{id}` with `{"version":<current template version>}`.
+- `DELETE /api/generator/themes/{id}` with `{"revision":<latest theme revision>}`.
+- `DELETE /api/generator/assets/{id}` with `{}` (separate upload deletion).
+
+Design/result deletion reports deleted job/media counts and retained shared
+media IDs. A newer draft, template or theme revision rejects a stale deletion.
+
 ### Media generator drafts
 
 Open **Media generator** from the dashboard to create independent prestream or
