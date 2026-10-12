@@ -19,6 +19,23 @@ func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
 		defer s.controlMu.Unlock()
+		// Reject overlapping stores before any initialization can create secrets.
+		paths := make(map[string]bool)
+		for _, path := range []string{s.cfg.StateFile, s.cfg.IngestionKeyFile, s.destinationsPath()} {
+			if path == "" {
+				continue
+			}
+			abs, err := filepath.Abs(path)
+			if err != nil {
+				s.initErr = errors.New("cannot resolve persistent storage path")
+				return
+			}
+			if paths[abs] {
+				s.initErr = errors.New("destination credentials, ingestion keys, and switch state require separate files")
+				return
+			}
+			paths[abs] = true
+		}
 		if err := s.initializeDestinations(); err != nil {
 			s.initErr = err
 			return
@@ -128,7 +145,8 @@ func (s *Server) setTargetLocked(name string, enabled bool) (bool, error) {
 }
 
 // Write in the same directory and rename atomically so interrupted saves never
-// leave a partially written JSON file. No secrets or metrics are persisted.
+// leave a partially written JSON file. The caller determines the stored data;
+// switch state contains no secrets, while managed destinations contain credentials.
 func writeState(path string, state any) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".targets-*")
 	if err != nil {

@@ -62,7 +62,7 @@
     }
   });
   window.addEventListener('beforeunload', event => {
-    if (dirty() || pending) { event.preventDefault(); event.returnValue = ''; }
+    if (!window.workspace?.departureApproved && (dirty() || pending)) { event.preventDefault(); event.returnValue = ''; }
   });
   window.streamProfile = {
     isPending: () => pending,

@@ -18,8 +18,20 @@
       heading?.focus();
     }
   }
-  document.querySelectorAll('.workspace-nav a, .workspace-alert-link').forEach(link => link.addEventListener('click', event => {
-    if (!onDashboard || link.dataset.workspace === 'studio' || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  document.querySelectorAll('.workspace-nav a, .workspace-alert-link, a.brand, a[href^="/studio"]').forEach(link => link.addEventListener('click', event => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!onDashboard || link.dataset.workspace === 'studio' || link.getAttribute('href')?.startsWith('/studio')) {
+      // Ask the existing form guards before replacing the document. Browser
+      // beforeunload dialogs can be suppressed, so workspace departures get an
+      // explicit review. This synthetic event never performs navigation.
+      const review = new Event('beforeunload', {cancelable: true});
+      window.dispatchEvent(review);
+      if (review.defaultPrevented) {
+        if (!window.confirm('Leave this workspace and discard unsaved changes? Pending saves may not finish.')) event.preventDefault();
+        else window.workspace.departureApproved = true;
+      }
+      return;
+    }
     event.preventDefault();
     history.pushState(null, '', link.href);
     navigate(true);
@@ -81,7 +93,8 @@
     window.brbMedia?.update(snapshot, connected);
     freshness();
   }
-  window.workspace = {update};
+  window.workspace = {update, departureApproved: false};
+  window.addEventListener('pageshow', () => { window.workspace.departureApproved = false; });
   setInterval(freshness, 1000);
   // Live and Settings reuse the dashboard's existing status request. Studio has
   // its own read-only subscription; navigation never sends broadcast commands.

@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/kreuzhofer/restreamer/internal/rtmp"
 	"net"
 	"net/http/httptest"
@@ -244,5 +245,52 @@ func TestIngestionManagementLivesInSettingsAndPreservesOldLink(t *testing.T) {
 	redirect := dashboardRequest(s, "GET", "/ingestion-settings.html", "")
 	if redirect.Code != 307 || redirect.Header().Get("Location") != "/settings#ingestion-settings" {
 		t.Fatal("old ingestion link did not preserve access", redirect.Code)
+	}
+}
+
+func TestCredentialPathsCannotCreateSecretsInSwitchState(t *testing.T) {
+	for _, pair := range []string{"ingestion-state", "destinations-state", "destinations-ingestion"} {
+		for _, relative := range []bool{false, true} {
+			t.Run(pair+fmt.Sprint(relative), func(t *testing.T) {
+				s := dashboardServer(t)
+				dir := t.TempDir()
+				s.cfg.StateFile = filepath.Join(dir, "switches.json")
+				s.cfg.IngestionKeyFile = filepath.Join(dir, "ingestion.json")
+				s.cfg.DestinationsFile = filepath.Join(dir, "destinations.json")
+				alias := func(path string) string {
+					if !relative {
+						return path
+					}
+					wd, err := os.Getwd()
+					if err != nil {
+						t.Fatal(err)
+					}
+					result, err := filepath.Rel(wd, path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return result
+				}
+				switch pair {
+				case "ingestion-state":
+					s.cfg.IngestionKeyFile = alias(s.cfg.StateFile)
+				case "destinations-state":
+					s.cfg.DestinationsFile = alias(s.cfg.StateFile)
+				case "destinations-ingestion":
+					s.cfg.DestinationsFile = alias(s.cfg.IngestionKeyFile)
+				}
+				w := dashboardRequest(s, "GET", "/api/dashboard", "")
+				if w.Code != 503 {
+					t.Fatalf("overlapping private storage accepted: %d", w.Code)
+				}
+				entries, err := os.ReadDir(dir)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(entries) != 0 {
+					t.Fatal("invalid storage configuration wrote a file before rejection")
+				}
+			})
+		}
 	}
 }

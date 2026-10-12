@@ -55,7 +55,7 @@
   });
   function changed() { dirty = true; el('brb-save-status').textContent = 'Not active yet. Prepare & activate BRB applies these changes after preparation.'; render(); }
   form?.addEventListener('input', changed); form?.addEventListener('change', changed);
-  window.addEventListener('beforeunload', event => { if (dirty || pending) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || pending)) { event.preventDefault(); event.returnValue = ''; } });
   desktop.addEventListener('change', render);
   window.brbMedia = {update(data, online) { snapshot = data; connected = online; render(); }};
 })();
