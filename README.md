@@ -186,8 +186,12 @@ Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Create o
 open a design to use its scene list, quick preview, and properties. Properties
 switch between the selected **Scene**, whole **Design** settings (including exact
 theme revision, soundtrack, loop or ending fade), and reusable **Template** actions.
-**Results & queue** retains generation, exact-result review, activation links, and
-cleanup. Returning to a collection keeps the open draft and autosave active; use
+**Results & queue** separates the current draft, latest generation attempt, last
+ready output, selected stage revision, and active revision. Each design has its
+own newest-first history with exact-result preview, explicit activation links,
+retry and protected cleanup. The compact shared queue remains available while
+browsing collections; cancelling or failed work leaves previous ready output
+and active media unchanged. Returning to a collection keeps the open draft and autosave active; use
 **Return to open design** to resume. Narrow desktop windows expose the preview and
 properties through panel buttons. Phones can browse designs and review prepared
 results; authoring, uploads, theme changes and generation require desktop.
