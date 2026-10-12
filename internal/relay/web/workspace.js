@@ -78,6 +78,7 @@
       el('workspace-mode').textContent = rehearsal ? 'REHEARSAL · destination delivery blocked' : stage.stage === 'OFF' ? 'OFF · delivery stopped' : 'Broadcast · relay delivery';
       el('workspace-status').classList.toggle('rehearsal', rehearsal);
     }
+    window.brbMedia?.update(snapshot, connected);
     freshness();
   }
   window.workspace = {update};

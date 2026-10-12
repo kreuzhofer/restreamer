@@ -513,7 +513,13 @@ The broadcast still starts OFF after every application restart.
   cancelling a dialog, or pressing Escape never stops a broadcast. Application
   shutdown or loss of the relay's own connectivity cannot be protected by BRB.
 
-Expand **BRB screen & music** in the dashboard:
+Open **Studio → BRB** for screen, music and theme preparation. BRB is standalone
+fallback media, separate from prestream/ending scene-sequence designs. **Live → BRB
+readiness & activation** retains readiness, exact candidate review, and explicit
+activation, with a direct link back to Studio. Phones can review and activate a
+prepared candidate; editing, uploads and preparation require desktop.
+
+Expand **BRB screen & music** in Studio:
 
 - The default is a **32-second pixel-art arcade loop**: ghosts chase Pac-Man,
   a power pellet reverses the chase, frightened ghosts scatter and returning
@@ -522,14 +528,14 @@ Expand **BRB screen & music** in the dashboard:
   The dashboard shows a labelled still preview of this animation.
 - Upload a PNG/JPEG image up to 10 MiB and 20 megapixels for a static screen,
   or select **Remove the custom image and use the BRB message** and
-  **Prepare & save BRB** to restore the message screen. Select **Restore legacy
+  **Prepare & activate BRB** to restore the message screen. Select **Restore legacy
   arcade/custom-image styling** as well to return from a shared theme to the
   original animation. Images fit inside the output without cropping.
   Existing default-screen installations receive the animation on restart;
   custom images and music are preserved.
   To change sprites, colours or choreography, use the editable Canvas source and
   browser preview described in [the artwork guide](artwork/brb/README.md).
-- Edit **BRB message**, then click **Prepare & save BRB** to change the text
+- Edit **BRB message**, then click **Prepare & activate BRB** to change the text
   and its still preview. With legacy styling, the message stays on one centred line and automatically
   shrinks in whole-pixel steps to fit clear of the animation. Up to 40 characters
   are supported: A–Z, 0–9, ÄÖÜß, spaces and `. , ! ? : ' - / ( ) + &`.
@@ -541,14 +547,15 @@ Expand **BRB screen & music** in the dashboard:
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
-- **Prepare & save BRB** validates and encodes assets before atomically activating
-  them. Failed uploads preserve the previous working assets. The saved dashboard
+- **Prepare & activate BRB** validates and encodes assets before atomically activating
+  them. During a show, confirmation explains that success immediately replaces BRB
+  and restarts its playback if on air. Failed uploads preserve the previous working assets. The saved dashboard
   profile overrides the initial JSON profile on restart. Assets/profile persist;
   deliberate BRB selection does not persist across application restarts.
 
 Expand **Shared style theme** to select an exact built-in or named theme revision
 from the same library used by prestream and ending. Customize named variants in
-**Media generator**, then explicitly refresh the BRB choices. A theme edit never
+**Studio → Themes**, then explicitly refresh the BRB choices. A theme edit never
 changes the current BRB or an already-prepared candidate. Save any message,
 custom-image, or music edits first; theme preparation captures those saved inputs.
 

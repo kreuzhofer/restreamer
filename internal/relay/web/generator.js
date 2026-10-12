@@ -64,6 +64,8 @@
     document.querySelectorAll('[data-preview-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.previewPanel === name)));
   }
   document.querySelectorAll('[data-studio-collection]').forEach(button => button.addEventListener('click', () => showCollection(button.dataset.studioCollection)));
+  const requestedCollection = new URLSearchParams(location.search).get('collection');
+  if (['designs', 'media', 'themes', 'templates', 'brb'].includes(requestedCollection)) showCollection(requestedCollection);
   document.querySelectorAll('[data-inspector]').forEach(button => button.addEventListener('click', () => showInspector(button.dataset.inspector)));
   document.querySelectorAll('[data-editor-panel]').forEach(button => button.addEventListener('click', () => showEditorPanel(button.dataset.editorPanel)));
   document.querySelectorAll('[data-preview-panel]').forEach(button => button.addEventListener('click', () => showPreviewPanel(button.dataset.previewPanel)));
