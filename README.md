@@ -198,6 +198,14 @@ and active media unchanged. Returning to a collection keeps the open draft and a
 properties through panel buttons. Phones can browse designs and review prepared
 results; authoring, uploads, theme changes and generation require desktop.
 
+Desktop Live and Studio panels have draggable dividers. Focus a divider and use
+arrow keys (Shift for larger steps), Home, or End; the **Layout** menu also offers
+touch-friendly width sliders and **Reset layout**. Sizes persist only in this
+browser. Invalid or unavailable preferences show a visible recovery message.
+Narrow windows use panel buttons while preserving open work; no layout setting
+changes broadcast state. Alerts and the shared queue reduce the remaining panel
+height naturally, and long content scrolls within its panel.
+
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
 dedicated hostname at `/` (subpath hosting is not supported). A proxy on the same
