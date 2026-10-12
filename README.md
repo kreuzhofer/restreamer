@@ -881,7 +881,7 @@ generation history removes one result without deleting its editable design.
 Wait for running generation to finish or cancel it before deleting.
 
 Uploaded images, videos and music are **never automatically deleted with a
-design**. Manage them separately under **Reusable media**: expand an asset to see
+design**. Manage them separately under **Studio → Media → Scene assets**: expand an asset to see
 its references, then use **Delete unused image/video/audio** to remove the upload
 and all its revisions from disk. Remove its uses in designs, templates, themes,
 generation history or BRB before deleting it.
@@ -899,6 +899,16 @@ stage selection. Files are staged together before removal; startup restores
 interrupted uncommitted operations or finishes committed file cleanup. Storage
 errors are reported rather than acknowledging incomplete cleanup.
 
+**Studio → Media → Library videos** manages uploaded MP4 originals separately
+from scene assets and generated outputs. Upload and preparation progress, errors,
+exact ready revisions, previews and explicit links to Live selection are shown
+there. **Delete uploaded video** removes the original, prepared cache copies and
+owned revisions only when they are not selected, playing, retained for return,
+shared with another upload, or referenced by generation history. Wait for active
+preparation to finish first. Deletion uses the same recoverable file transaction
+as generated-result cleanup. Uploads, preparation and cleanup require desktop;
+phones can browse, preview and select ready media.
+
 Authenticated same-origin JSON deletion endpoints:
 
 - `DELETE /api/generator/designs/{id}` with `{"version":<current draft version>}`.
@@ -906,6 +916,7 @@ Authenticated same-origin JSON deletion endpoints:
 - `DELETE /api/generator/templates/{id}` with `{"version":<current template version>}`.
 - `DELETE /api/generator/themes/{id}` with `{"revision":<latest theme revision>}`.
 - `DELETE /api/generator/assets/{id}` with `{}` (separate upload deletion).
+- `DELETE /api/library/files/{id}` with `{"version":<file version from GET /api/library>}` (uploaded original and eligible prepared files).
 
 Design/result deletion reports deleted job/media counts and retained shared
 media IDs. A newer draft, template or theme revision rejects a stale deletion.

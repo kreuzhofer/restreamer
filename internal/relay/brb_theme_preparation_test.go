@@ -209,6 +209,9 @@ func TestBRBThemePendingReferencesAndCrashStatusRemainVisible(t *testing.T) {
 
 func TestBRBThemePublisherDisconnectDoesNotStopPreparation(t *testing.T) {
 	s := libraryServer(t)
+	// Publishing uses an explicit fixture key; empty ingestion keys are rejected.
+	s.cfg.StreamKey = "brb-preparation-test-key"
+	s = New(s.cfg, s.log)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
