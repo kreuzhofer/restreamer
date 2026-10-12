@@ -44,6 +44,29 @@ func TestLiveConsoleOffersMonitoringAndReadinessBeforeOperation(t *testing.T) {
 	}
 }
 
+func TestBRBPreparationMovesToStudioAndKeepsLiveReview(t *testing.T) {
+	s := dashboardServer(t)
+	before := dashboardRequest(s, "GET", "/api/stage", "").Body.String()
+	live := dashboardRequest(s, "GET", "/live", "")
+	studio := dashboardRequest(s, "GET", "/studio?collection=brb", "")
+	if live.Code != 200 || studio.Code != 200 {
+		t.Fatal("BRB workspaces unavailable", live.Code, studio.Code)
+	}
+	if strings.Contains(live.Body.String(), `id="brb-form"`) || !strings.Contains(studio.Body.String(), `id="brb-form"`) {
+		t.Fatal("BRB authoring must be available in Studio and absent from Live")
+	}
+	for _, page := range []string{live.Body.String(), studio.Body.String()} {
+		for _, action := range []string{"Preview exact BRB", "Activate prepared BRB"} {
+			if !strings.Contains(page, action) {
+				t.Fatal("exact candidate operation missing", action)
+			}
+		}
+	}
+	if after := dashboardRequest(s, "GET", "/api/stage", "").Body.String(); after != before {
+		t.Fatal("opening BRB preparation changed the broadcast")
+	}
+}
+
 func TestPreparedMediaIsAvailableOnDemandWithoutLiveUploadControls(t *testing.T) {
 	s := dashboardServer(t)
 	page := dashboardRequest(s, "GET", "/live", "").Body.String()
@@ -54,5 +77,21 @@ func TestPreparedMediaIsAvailableOnDemandWithoutLiveUploadControls(t *testing.T)
 	}
 	if strings.Contains(page, `id="library-upload"`) {
 		t.Fatal("Live still exposes media upload instead of Studio")
+	}
+}
+
+func TestPhoneRemoteOffersOperationAndSignalsWithoutDesktopSetup(t *testing.T) {
+	s := dashboardServer(t)
+	for path, labels := range map[string][]string{
+		"/live":     {`aria-label="Remote panels"`, `aria-controls="live-primary"`, `aria-controls="live-sidebar"`, `Uploads and preparation require desktop`},
+		"/studio":   {`Text edits, uploads, generation and theme editing require desktop`},
+		"/settings": {`Ingestion keys, destination setup and profile changes require desktop`},
+	} {
+		response := dashboardRequest(s, "GET", path, "")
+		for _, label := range labels {
+			if !strings.Contains(response.Body.String(), label) {
+				t.Errorf("%s missing mobile capability: %s", path, label)
+			}
+		}
 	}
 }

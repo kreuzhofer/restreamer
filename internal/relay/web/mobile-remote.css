@@ -1,0 +1,44 @@
+.remote-panels,.remote-only{display:none}
+@media(max-width:600px){
+  .remote-desktop{display:none!important}.remote-only{display:block}
+  body[data-workspace=live]{overflow:auto}
+  .workspace-header{position:static;min-height:0;padding:8px 14px;gap:5px}
+  .workspace-header .brand{font-size:15px}.workspace-header .connection{font-size:10px;max-width:165px}
+  .workspace-nav a{min-height:40px;padding:11px 8px;font-size:12px}
+  .workspace-status{position:sticky;top:0;min-height:0;padding:8px 14px;gap:5px 12px;align-items:baseline}
+  .workspace-status>span:nth-child(2){flex:1;min-width:100px;overflow-wrap:anywhere}
+  #workspace-mode{font-size:10px}#workspace-freshness{font-size:10px;margin-left:auto}
+  .workspace-alert{top:var(--remote-status-height,70px);padding:8px 14px;gap:8px;font-size:11px}
+  .workspace-alert-link{min-height:40px;display:flex;align-items:center}
+  .remote-panels{display:flex;gap:6px;padding:8px 0;background:var(--bg);position:sticky;top:calc(var(--remote-status-height,70px) + var(--remote-alert-height,0px));z-index:17}
+  .remote-panels button{flex:1;min-height:44px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--muted);font:inherit;font-size:12px}
+  .remote-panels button[aria-pressed=true]{background:#26304b;border-color:var(--cyan);color:var(--text)}
+  .live-console{display:block;height:auto;min-height:0}
+  .live-primary{padding:6px 14px 18px;gap:10px}
+  .live-console:not([data-remote-panel=signals])>.live-sidebar{display:none}
+  .live-console[data-remote-panel=signals]>.live-primary{display:none}
+  .live-sidebar{border:0;padding:8px 14px 18px;gap:14px}
+  .live-sidebar .preview-panel{order:3}.live-sidebar #live-destinations{order:0}.live-sidebar #live-readiness{order:1}.live-sidebar #live-brb-tools{order:2}.live-sidebar #live-diagnostics{order:4}
+  .live-sidebar .preview-screen{max-width:none}.live-sidebar .preview-screen video{max-height:180px}
+  .live-primary .broadcast-panel .panel-heading{margin-bottom:7px}.live-primary h2{font-size:13px}.live-primary .eyebrow,.monitor-caption{display:none}
+  .live-program-screen{max-height:210px}.live-primary #broadcast-status{font-size:10px;margin-top:5px}
+  .live-primary .stage-panel{display:flex;flex-direction:column;padding-top:8px}
+  .live-primary .stage-panel>.panel-heading{display:none}
+  .live-primary .stage-summary{display:block;padding:0 0 5px}.live-primary .stage-summary>div:not(:last-child){display:none}
+  .live-primary .stage-summary>div:last-child{display:flex;align-items:baseline;gap:6px}.live-primary .stage-summary strong{font-size:11px}.live-primary .stage-label{margin:0}
+  .live-primary #stage-media{display:none}
+  .live-primary .stage-buttons{margin:4px 0 8px;gap:8px}.live-primary .stage-button{min-height:58px;font-size:14px}
+  .live-primary .stage-secondary{order:1;gap:8px}.stage-secondary-actions{width:100%}.stage-secondary-actions button{flex:1}
+  .live-primary .live-clips{order:2;margin-top:10px;border-top:1px solid var(--border)}
+  .live-primary #clip-playback-controls{order:3}.live-primary #stage-help{order:4}.live-primary #command-status{order:5}
+  .live-primary .clip-shortcuts{max-height:none}.live-clips-heading{flex-wrap:nowrap}.live-clips-heading h3{font-size:11px}.live-clips-heading button{font-size:11px}
+  #live-workspace .preview-button,#live-workspace .danger-button,#live-workspace summary,#live-workspace .toggle{min-height:44px}
+  #live-workspace summary{display:flex;align-items:center}
+  #live-workspace .toggle{min-width:48px}#live-destinations .target-panel .badge{font-size:10px}#live-destinations .target-brief{font-size:11px}
+  #rehearsal-label,.clip-playback-controls .check-label{min-height:44px}.check-label input{width:20px;height:20px}
+  #brb-settings{display:none}
+  .prepared-media-drawer button,.prepared-media-drawer select,.prepared-media-drawer input,.prepared-media-drawer summary{min-height:44px}
+  .prepared-media-drawer input,.prepared-media-drawer select{font-size:16px}.prepared-media-heading{position:sticky;top:-18px;background:var(--panel);z-index:2;padding-top:8px}
+  #stage-dialog .dialog-actions button{min-height:48px}#stage-dialog{max-height:90dvh;overflow:auto}
+  .studio-mobile-note,.desktop-only-note{padding:14px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+}
