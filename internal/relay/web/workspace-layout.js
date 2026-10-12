@@ -89,7 +89,9 @@
   }
   function viewportChanged() {
     const active = document.activeElement;
-    if (studio && innerWidth > 800 && studio.dataset.panel === 'scenes') document.querySelector('[data-editor-panel=preview]')?.click();
+    if (studio && innerWidth > 800 && studio.dataset.panel === 'scenes') {
+      const preview = document.querySelector('[data-editor-panel=preview]'); preview?.click(); preview?.focus();
+    }
     apply();
     if (active && active !== document.body && !active.getClientRects().length) {
       if (innerWidth <= 600) document.querySelector('.workspace-nav a')?.focus();
