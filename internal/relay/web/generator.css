@@ -153,6 +153,31 @@
   .studio-editor-heading #save-state { width: 100%; font-size: 11px; text-align: left; }
 }
 
+.studio-queue { flex-shrink: 0; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); font-size: 12px; }
+.studio-queue > summary { padding: 9px 12px; overflow-wrap: anywhere; cursor: pointer; color: var(--muted); }
+#studio-results > #generation-history { margin-top: 18px; }
+#generation-history > summary { cursor: pointer; padding: 12px 0; font-size: 13px; }
+#generation-queue { max-height: 160px; overflow: auto; padding: 0 12px; }
+#generation-queue > p { color: var(--muted); }
+.queue-job { display: flex; justify-content: space-between; gap: 12px; align-items: center; border-top: 1px solid var(--border); padding: 8px 0; }
+.queue-job p { margin: 0; overflow-wrap: anywhere; }
+.queue-job .preview-button { flex-shrink: 0; font-size: 11px; }
+#generation-queue-error { margin: 0 12px 8px; }
+.generation-summary { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 9px 16px; padding: 15px; margin: 14px 0; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.generation-summary dt { color: var(--muted); }.generation-summary dd { margin: 0; overflow-wrap: anywhere; }
+.generation-summary.stale { border-color: #bd8c4f; }
+.generator-job[data-state="failed"], .generator-job[data-state="interrupted"] { border-color: #9c5960; }
+.studio-app #generated-video { display: block; width: auto; max-width: 100%; height: auto; max-height: 32dvh; margin: 0 auto; }
+#generated-preview { padding: 14px 0; }#generated-preview h4 { margin-top: 10px; }
+@media (max-width:600px) {
+ .studio-queue { font-size: 11px; }
+ .studio-queue > summary { min-height: 44px; padding: 12px; }
+ .generation-summary { grid-template-columns: 1fr; gap: 5px; padding: 12px; }
+ .generation-summary dd { margin-bottom: 8px; }
+ #generation-history > summary { min-height: 44px; }
+ #preview-last-ready { min-height: 44px; }
+}
+
 /* Uploaded sources are managed independently from editable designs and results. */
 .studio-media-grid { display: grid; grid-template-columns: minmax(240px, 310px) minmax(0, 1fr); gap: 24px; margin-top: 20px; }
 .studio-media-grid[hidden] { display: none; }

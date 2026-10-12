@@ -23,6 +23,9 @@
   let jobs = [];
   let jobRequest = false;
   let jobsFetching = false;
+  let jobsLoaded = false;
+  let jobsCurrent = false;
+  let lastReadyJob = null;
   let reviewedRevision = '';
   let stageSelections = {};
   let stageStatus = {}, mediaRevisions = [];
@@ -172,6 +175,8 @@
     clearTimeout(saveTimer);
     draft = value; dirty = false; conflict = false; editSequence++;
     selectedScene = 0; validationIssues = [];
+    stopGeneratedPreview();
+    $('generation-history').open = false;
     $('design-name').value = draft.name;
     $('loop-controls').hidden = draft.stage !== 'prestream';
     $('loop-transition').value = draft.loop_transition?.kind || 'cut';
@@ -389,6 +394,7 @@
     try {
       const path = asCopy ? '/api/generator/designs' : `/api/generator/designs/${snapshot.id}`;
       const saved = await (await request(path, asCopy ? 'POST' : 'PUT', snapshot)).json();
+      if (saved.id !== draft.id) { stopGeneratedPreview(); $('generation-history').open = false; }
       // Keep edits made while this request was in flight, but advance the CAS version.
       draft.id = saved.id; draft.version = saved.version; draft.updated_at = saved.updated_at;
       conflict = false; dirty = editSequence !== sequence;
@@ -527,26 +533,67 @@
   });
 
   function renderJobs() {
-    if (!draft) return;
+    const focused = document.activeElement;
+    const focusJob = focused?.closest('[data-job-id]')?.dataset.jobId;
+    const focusAction = focused?.textContent;
+    const focusContainer = focused?.closest('#generation-queue,#generation-jobs')?.id;
     const outstanding = jobs.filter(job => ['queued', 'running', 'cancelling'].includes(job.state));
     const busy = outstanding.length >= 8;
-    $('generate-design').disabled = deleting || dirty || saving || conflict || jobRequest || busy;
+    const active = jobs.find(job => ['running', 'cancelling'].includes(job.state));
+    $('generation-status').textContent = !jobsLoaded ? 'Shared queue · loading…' : `Shared queue · ${outstanding.length}/8 outstanding · ${active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available'}${jobsCurrent ? '' : ' · status stale'}`;
+    $('generation-queue').replaceChildren();
+    if (!outstanding.length) {
+      const empty = document.createElement('p'); empty.textContent = jobsLoaded ? 'No outstanding work. Completed and failed attempts are in each design’s history.' : 'Loading generation status…'; $('generation-queue').append(empty);
+    }
+    for (const job of outstanding) {
+      const row = document.createElement('article'); row.className = 'queue-job'; row.dataset.jobId = job.id;
+      const label = document.createElement('p'); label.textContent = `${job.design_snapshot.name} · captured draft v${job.design_snapshot.version} · ${job.state}${job.queue_position ? ` · queue #${job.queue_position}` : ` · ${job.progress}%`}`;
+      const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button studio-authoring'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = !jobsCurrent || job.state === 'cancelling';
+      cancel.addEventListener('click', async () => { cancel.disabled = true; try { await request(`/api/generator/jobs/${job.id}/cancel`, 'POST', {}); await loadJobs(); } catch (error) { queueError(error.message); cancel.disabled = false; } });
+      row.append(label, cancel); $('generation-queue').append(row);
+    }
+    if (!draft) {
+      if (focusContainer === 'generation-queue') $('generation-status').focus({preventScroll: true});
+      return;
+    }
+    $('generate-design').disabled = !jobsCurrent || deleting || dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
-    const active = jobs.find(job => ['running', 'cancelling'].includes(job.state));
-    $('generation-status').textContent = `${outstanding.length}/8 outstanding · ${active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available'} · one render at a time`;
     const stagePhase = stageStatus.stage === 'ENDING' && stageStatus.ending?.draining ? 'ENDING · finishing destination writes' : stageStatus.stage === 'OFF' && stageStatus.ending?.completed ? 'Ending completed · destination results are in live control' : stageStatus.stage || 'Status unavailable';
     $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
-    const relevant = jobs;
+    const relevant = jobs.filter(job => job.design_snapshot.id === draft.id).sort((a, b) => b.sequence - a.sequence);
+    const latest = relevant[0];
+    lastReadyJob = relevant.find(job => job.state === 'ready') || null;
+    const readyMedia = mediaRevisions.find(media => media.id === lastReadyJob?.media_revision);
+    const shortRevision = revision => revision ? revision.slice(0, 12) : 'None';
+    const selectedRevision = stageSelections[draft.stage];
+    const activeRevision = stageStatus.source === 'file' ? stageStatus.media?.revision : null;
+    const summary = [
+      ['Draft', `v${draft.version}${dirty ? ' · unsaved local edits' : saving ? ' · saving' : ' · saved'}${conflict ? ' · conflict' : ''}`],
+      ['Latest attempt', latest ? `${latest.state} · captured draft v${latest.design_snapshot.version}${latest.error ? ` · ${latest.error}` : ''}` : jobsLoaded ? 'No attempts yet' : 'Loading…'],
+      ['Last ready output', lastReadyJob ? `Captured draft v${lastReadyJob.design_snapshot.version} · ${shortRevision(lastReadyJob.media_revision)} · ${readyMedia?.state || 'unavailable'}` : jobsLoaded ? 'No ready output yet' : 'Loading…'],
+      [`Selected for ${draft.stage.toUpperCase()}`, `${shortRevision(selectedRevision)}${selectedRevision && !relevant.some(job => job.media_revision === selectedRevision) ? ' · from other media' : ''}`],
+      ['Active revision', activeRevision ? `${shortRevision(activeRevision)} · ${stageStatus.mode === 'preview_only' ? 'rehearsal' : 'on-air source'}${!relevant.some(job => job.media_revision === activeRevision) ? ' · from other media' : ''}` : `None · ${stageStatus.source || 'status unavailable'}`]
+    ];
+    $('generation-summary').replaceChildren();
+    for (const [label, value] of summary) {
+      const term = document.createElement('dt'); term.textContent = label;
+      const description = document.createElement('dd'); description.textContent = value;
+      $('generation-summary').append(term, description);
+    }
+    $('generation-summary').classList.toggle('stale', !jobsCurrent);
+    $('preview-last-ready').hidden = !lastReadyJob;
+    $('preview-last-ready').disabled = !jobsCurrent || readyMedia?.state !== 'ready';
+    $('generation-history-heading').textContent = `Design history · ${relevant.length} attempt${relevant.length === 1 ? '' : 's'}`;
     $('generation-jobs').replaceChildren();
     if (!relevant.length) {
-      const empty = document.createElement('p'); empty.className = 'stage-help'; empty.textContent = 'No generated results yet. Generate a saved design on desktop, then review its exact prepared output here.'; $('generation-jobs').append(empty);
+      const empty = document.createElement('p'); empty.className = 'stage-help'; empty.textContent = jobsLoaded ? 'No generated results for this design yet. Generate its saved draft on desktop, then review the exact prepared output here.' : 'Loading design generation history…'; $('generation-jobs').append(empty);
     }
     for (const job of relevant) {
-      const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id;
+      const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id; row.dataset.state = job.state;
       const title = document.createElement('strong'); title.textContent = `${job.design_snapshot.name} · ${job.design_snapshot.stage.toUpperCase()} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
-      const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps`;
+      const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · theme ${job.design_snapshot.theme.id} revision ${job.design_snapshot.theme.revision} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps${job.retry_of ? ' · retry of captured inputs' : ''}`;
       row.append(title, identity);
       if (job.mix_gain != null) {
         const gain = document.createElement('p');
@@ -603,17 +650,25 @@
       row.append(remove);
       $('generation-jobs').append(row);
     }
+    if (focusJob && focusContainer) {
+      const row = [...$(focusContainer).querySelectorAll('[data-job-id]')].find(item => item.dataset.jobId === focusJob);
+      const nextFocus = [...(row?.querySelectorAll('button,a') || [])].find(button => button.textContent === focusAction);
+      (nextFocus || $(focusContainer === 'generation-queue' ? 'generation-status' : 'generation-history-heading')).focus({preventScroll: true});
+    }
   }
+  $('preview-last-ready').addEventListener('click', () => { if (lastReadyJob && jobsCurrent && mediaRevisions.some(media => media.id === lastReadyJob.media_revision && media.state === 'ready')) previewGenerated(lastReadyJob); });
+  function queueError(message) { $('generation-queue-error').textContent = message; $('generation-queue-error').hidden = !message; }
   function generationError(message) { $('generation-error').textContent = message; $('generation-error').hidden = !message; }
   async function loadJobs() {
     if (jobsFetching) return;
     jobsFetching = true;
     try {
       const [nextJobs, selections, stage, catalog] = await Promise.all(['/api/generator/jobs', '/api/stage-media', '/api/stage', '/api/library'].map(async path => (await request(path)).json()));
-      jobs = nextJobs; stageSelections = selections; stageStatus = stage; mediaRevisions = catalog.revisions || [];
+      jobs = nextJobs; jobsLoaded = true; jobsCurrent = true; stageSelections = selections; stageStatus = stage; mediaRevisions = catalog.revisions || [];
+      queueError('');
       if ($('generation-error').textContent.startsWith('Generation status unavailable:')) generationError('');
       renderJobs();
-    } catch (error) { generationError(`Generation status unavailable: ${error.message}`); }
+    } catch (error) { jobsCurrent = false; queueError(`Generation status unavailable: ${error.message}. Last received data is retained.`); generationError(`Generation status unavailable: ${error.message}`); renderJobs(); if (!jobsLoaded) $('generation-status').textContent = 'Shared queue · status unavailable'; }
     finally { jobsFetching = false; }
   }
   function previewGenerated(job) {
@@ -625,8 +680,12 @@
     video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview${passes === 2 ? "?passes=2" : ""}`;
     $('generated-playback-status').textContent = 'Loading exact prepared output…';
     video.play().catch(() => { $('generated-playback-status').textContent = 'Press Play to review the exact prepared output.'; });
+    $('generated-preview').scrollIntoView({block: 'nearest'});
+    video.focus({preventScroll: true});
   }
   $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${reviewedRevision.slice(0, 12)}.`; });
+  $('generated-video').addEventListener('ended', () => { $('generated-playback-status').textContent = `Finished exact revision ${reviewedRevision.slice(0, 12)}. Playback and selected broadcast media are unchanged.`; });
+  $('generated-video').addEventListener('pause', () => { if (reviewedRevision && !$('generated-video').ended) $('generated-playback-status').textContent = `Preview paused · exact revision ${reviewedRevision.slice(0, 12)}. Broadcast playback is unchanged.`; });
   $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
   $('generate-design').addEventListener('click', async () => {
     if (!draft || deleting || dirty || saving || conflict || jobRequest) return;
