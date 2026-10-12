@@ -79,3 +79,20 @@ func TestPreparedMediaIsAvailableOnDemandWithoutLiveUploadControls(t *testing.T)
 		t.Fatal("Live still exposes media upload instead of Studio")
 	}
 }
+
+func TestSettingsProvidesAuthenticatedDestinationManagement(t *testing.T) {
+	s := dashboardServer(t)
+	page := dashboardRequest(s, "GET", "/settings", "")
+	for _, content := range []string{`data-destination-settings`, `src="/destination-settings.js"`, `href="/destination-settings.css"`} {
+		if !strings.Contains(page.Body.String(), content) {
+			t.Errorf("Settings missing destination management: %s", content)
+		}
+	}
+	for _, path := range []string{"/destination-settings.js", "/destination-settings.css"} {
+		unauthorized := httptest.NewRecorder()
+		s.Handler().ServeHTTP(unauthorized, httptest.NewRequest("GET", path, nil))
+		if unauthorized.Code != 401 {
+			t.Fatal("unprotected Settings asset", path, unauthorized.Code)
+		}
+	}
+}
