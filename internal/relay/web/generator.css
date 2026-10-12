@@ -199,3 +199,19 @@
   .studio-app .media-library-item button:not(.studio-authoring) { display: inline-block !important; }
   #asset-list .generator-asset select, .media-revision-row .preview-button { min-height: 44px; }
 }
+
+/* BRB remains standalone fallback media, outside scene-sequence designs. */
+#studio-brb { margin-top: 0; }
+#studio-brb > .panel-heading { align-items: start; gap: 20px; }
+#studio-brb .brb-assets { grid-template-columns: minmax(240px, 1fr) minmax(300px, 1fr); align-items: start; }
+#studio-brb .brb-assets > div:first-child { position: sticky; top: 0; }
+#studio-brb .brb-save { flex-wrap: wrap; }
+#studio-brb #brb-theme-settings { padding-bottom: 20px; }
+#studio-brb #brb-theme-video { display: block; aspect-ratio: 16/9; object-fit: contain; max-width: 960px; }
+#studio-brb #brb-theme-video[hidden] { display: none; }
+#studio-brb .brb-fields { max-width: 960px; }
+#studio-brb .notice { overflow-wrap: anywhere; }
+@media (max-width: 900px) { #studio-brb .brb-assets { grid-template-columns: minmax(180px, 1fr) minmax(260px, 1fr); gap: 18px; } }
+@media (max-width: 600px) { #studio-brb .brb-assets { grid-template-columns: minmax(0, 1fr); } #studio-brb .preview-button { min-height: 44px; } #studio-brb > .panel-heading { flex-wrap: wrap; } }
+#studio-brb input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+#studio-brb .check-label { justify-content: flex-start; }

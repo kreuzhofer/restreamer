@@ -43,3 +43,26 @@ func TestLiveConsoleOffersMonitoringAndReadinessBeforeOperation(t *testing.T) {
 		}
 	}
 }
+
+func TestBRBPreparationMovesToStudioAndKeepsLiveReview(t *testing.T) {
+	s := dashboardServer(t)
+	before := dashboardRequest(s, "GET", "/api/stage", "").Body.String()
+	live := dashboardRequest(s, "GET", "/live", "")
+	studio := dashboardRequest(s, "GET", "/studio?collection=brb", "")
+	if live.Code != 200 || studio.Code != 200 {
+		t.Fatal("BRB workspaces unavailable", live.Code, studio.Code)
+	}
+	if strings.Contains(live.Body.String(), `id="brb-form"`) || !strings.Contains(studio.Body.String(), `id="brb-form"`) {
+		t.Fatal("BRB authoring must be available in Studio and absent from Live")
+	}
+	for _, page := range []string{live.Body.String(), studio.Body.String()} {
+		for _, action := range []string{"Preview exact BRB", "Activate prepared BRB"} {
+			if !strings.Contains(page, action) {
+				t.Fatal("exact candidate operation missing", action)
+			}
+		}
+	}
+	if after := dashboardRequest(s, "GET", "/api/stage", "").Body.String(); after != before {
+		t.Fatal("opening BRB preparation changed the broadcast")
+	}
+}

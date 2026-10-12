@@ -6,6 +6,8 @@
  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/generator.css">
  <script src="/generator.js" defer></script>
  <script src="/studio-media.js" defer></script>
+ <script src="/brb-theme.js" defer></script>
+ <script src="/brb-media.js" defer></script>
  <link rel="stylesheet" href="/workspace.css">
  <script src="/workspace.js" defer></script>
 </head>
@@ -21,7 +23,7 @@
  <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
  <nav class="studio-collections" aria-label="Studio collections">
   <button type="button" data-studio-collection="designs" aria-current="page">Designs</button><button type="button" data-studio-collection="media">Media</button><button type="button" data-studio-collection="themes">Themes</button><button type="button" data-studio-collection="templates">Templates</button>
-  <button id="resume-design" type="button" hidden>Return to open design</button>
+  <button type="button" data-studio-collection="brb">BRB</button><button id="resume-design" type="button" hidden>Return to open design</button>
  </nav>
  <details class="studio-queue"><summary id="generation-status">Shared queue · loading…</summary><div id="generation-queue" aria-label="Shared generation queue"></div><p id="generation-queue-error" class="notice" role="alert" hidden></p></details>
  <p class="studio-mobile-note">Authoring, uploads and generation require desktop. Browse designs and review prepared results here, or open Live to operate your broadcast.</p>
@@ -49,6 +51,39 @@
   <section id="studio-themes" class="panel studio-collection generator-themes" data-collection-panel="themes" hidden><h2>Themes</h2><p class="collection-mobile-note">Open Studio on desktop to manage themes.</p><p class="stage-help">Choose an immutable revision, duplicate a built-in theme, or publish a new revision of your named variant. Designs adopt updates explicitly.</p><label>Theme revision<select id="theme-library"></select></label><button id="theme-delete" class="preview-button" type="button" disabled>Delete custom theme and all revisions</button><button id="theme-refresh" class="preview-button" type="button">Reload latest revision</button><form id="theme-form"><label>Theme name<input id="theme-name" maxlength="180" required></label><div id="theme-fields"></div><div class="generator-actions"><button id="theme-duplicate" class="preview-button" type="button">Save settings as new theme</button><button id="theme-publish" class="preview-button" type="submit">Publish new revision</button></div></form><p id="theme-status" class="stage-help" role="status"></p><p id="theme-error" class="notice" role="alert" hidden></p><p class="stage-help">Up to 200 custom revisions. Images retain exact revisions. Arcade After Hours includes a 16-second animated background with bold stars, water reflections and chasing lights. Use multiples of 16 seconds or a loop transition for seamless prestream playback. Arcade Pixel uses uppercase glyphs. Text remains stationary.</p></section>
   <section id="studio-templates" class="panel studio-collection generator-templates" data-collection-panel="templates" hidden><h2>Templates</h2><p class="collection-mobile-note">Open Studio on desktop to manage templates.</p><p class="stage-help">Create an independent design from a saved template in Designs. Save or update templates from an open design’s Template properties.</p><p class="stage-help">Delete custom templates here. Independent designs and uploaded media are kept.</p><div id="template-list"></div></section>
 
+  <section id="studio-brb" class="panel brb-panel studio-collection" data-collection-panel="brb" hidden aria-labelledby="brb-title">
+   <div class="panel-heading"><div><p class="eyebrow">STUDIO · BRB</p><h2 id="brb-title">BRB screen &amp; music</h2><p class="stage-help">Standalone fallback media, separate from prestream and ending scene designs.</p></div><span id="brb-badge" class="badge">Loading</span></div>
+   <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div></div>
+   <p id="brb-active-profile" class="brb-active-profile" hidden></p>
+   <div id="brb-unsaved" class="brb-unsaved studio-authoring" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; activate BRB</b> to prepare and then activate your changes. If BRB is on air, its playback restarts. The shared streaming profile is managed in Settings.</p></div>
+   <p id="brb-error" class="notice" role="alert" hidden></p>
+   <details id="brb-settings" class="studio-authoring" open><summary>BRB screen &amp; music</summary>
+    <form id="brb-form">
+     <div class="brb-assets">
+      <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
+      <div class="brb-fields">
+       <label>BRB message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Shown when no custom image is selected. Legacy arcade text sizes automatically; shared themes validate the chosen font and layout. Up to 40 characters: A–Z, 0–9, ÄÖÜß, spaces and . , ! ? : ' - / ( ) + &amp;. Displayed in uppercase. Click Prepare &amp; activate BRB to apply.</small>
+       <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels. Fitted without cropping.</small>
+       <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Remove the custom image and use the BRB message</label>
+       <label class="check-label"><input name="reset_theme" type="checkbox" value="true"> Restore legacy arcade/custom-image styling</label>
+       <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes. Loops during BRB.</small>
+       <label class="check-label"><input name="remove_music" type="checkbox" value="true"> Remove music and use silent audio</label>
+       <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
+      </div>
+     </div>
+     <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Prepare &amp; activate BRB</button><span id="brb-save-status" role="status">Your current BRB stays active during preparation. Successful saving activates the new screen and music immediately.</span></div>
+    </form>
+   </details>
+   <details id="brb-theme-settings" open><summary>Shared style theme</summary><div class="brb-fields">
+    <p id="brb-theme-current" class="library-help"></p>
+    <div class="studio-authoring"><p class="library-help">Choose the same immutable themes as prestream and ending. <a href="/studio?collection=themes">Customize themes in Studio</a>. Preparing captures the saved BRB message, custom image and music; unsaved form edits must be saved first.</p>
+    <p id="brb-theme-profile-limit" class="notice" role="status" hidden>Shared themes support up to 1920 × 1080 and 30 fps. Your legacy BRB remains usable. Change the shared profile while stopped before preparing a shared theme.</p>
+    <label>Exact theme revision<select id="brb-theme-select"></select></label>
+    <div class="brb-save"><button id="brb-theme-refresh" class="preview-button" type="button">Refresh theme choices</button><button id="brb-theme-prepare" class="preview-button" type="button">Prepare theme preview</button><button id="brb-theme-cancel" class="preview-button" type="button" hidden>Cancel preparation</button></div>
+    </div><p id="brb-theme-status" class="library-help" role="status" aria-live="polite"></p>
+    <p id="brb-theme-error" class="notice" role="alert" hidden></p><p id="brb-theme-empty" class="library-help" role="status">Loading prepared BRB…</p><section id="brb-theme-candidate" hidden><h3>Prepared BRB · not active</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button><button id="brb-theme-discard" class="preview-button studio-authoring" type="button">Discard candidate</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview shows four seconds of the exact video and audio. The four-second visual loop and your complete music track loop independently on air. Theme preparation never changes the music volume or duration.</p></section>
+   </div></details>
+  </section>
  <section id="design-editor" class="panel generator-editor" aria-labelledby="editor-heading" hidden>
   <div class="panel-heading studio-editor-heading"><button id="back-to-designs" class="preview-button" type="button">← Designs</button><div><p class="eyebrow" id="design-stage">DRAFT</p><h2 id="editor-heading" tabindex="-1">Show design</h2></div><span id="save-state" role="status" aria-live="polite">Saved</span></div>
   <p id="save-error" class="notice" role="alert" hidden></p>
