@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const el = id => document.getElementById(id);
-  let snapshot, connected = false, catalog = {files: [], revisions: []}, fetching = false, lastFetch = 0, pending = false, seeking = false, upload, error = '', catalogError = '';
+  let snapshot, connected = false, catalog = {files: [], revisions: []}, fetching = false, lastFetch = 0, seeking = false, error = '', catalogError = '';
   let saved = {prestream: '', ending: '', shortcuts: []}, draft, saving = false, previewRevision = '';
   const clock = seconds => { const n = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`; };
   const selected = () => catalog.files.find(file => file.id === el('library-select').value);
@@ -52,20 +52,22 @@
 
   function render() {
     if (!snapshot) return;
+    el('library-loading').hidden = (lastFetch > 0 && !fetching) || !snapshot.library_enabled;
     el('library-panel').hidden = !snapshot.library_enabled;
+    el('library-unavailable').hidden = !!snapshot.library_enabled;
     if (!snapshot.library_enabled) return;
     const stage = snapshot.stage || {}, p = stage.playback || {}, file = selected(), candidate = revision();
-    const usable = connected && !pending && !window.broadcastStages?.busy(), clip = stage.stage === 'CLIP', ending = window.broadcastStages?.locked();
+    const usable = connected && !window.broadcastStages?.busy(), clip = stage.stage === 'CLIP', ending = window.broadcastStages?.locked();
+    el('clip-playback-controls').hidden = !clip;
+    el('library-empty').hidden = catalog.revisions.length > 0;
+    el('library-revision-info').textContent = candidate ? `${candidate.state} · ${clock(candidate.duration)} · revision ${candidate.id}${candidate.error ? ` · ${candidate.error}` : ''}` : 'No exact revision selected.';
     el('library-count').textContent = `${catalog.files.length} originals · ${catalog.revisions.length} revisions`;
     el('library-error').hidden = !(error || catalogError || catalog.error);
     el('library-error').textContent = error || catalogError || catalog.error || '';
-    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.message ? ` · ${file.message}` : ''}${file.error ? ` · ${file.error}` : ''}` : 'All retained revisions, including generated results. To edit generated content, reopen its show design in Media generator.';
+    el('library-file-info').textContent = file ? `${file.state === 'discovering' ? 'Waiting for file copy to settle' : file.state === 'preparing' ? `Preparing next revision · ${file.progress}%` : file.state} · ${clock(file.duration)} · ${(file.bytes / 1048576).toFixed(1)} MiB${file.message ? ` · ${file.message}` : ''}${file.error ? ` · ${file.error}` : ''}` : 'All retained revisions, including generated results. To edit generated content, reopen its show design in Studio.';
     el('library-once').disabled = el('library-loop').disabled = !usable || stage.stage === 'OFF' || ending || !ready(candidate) || !!catalog.error;
+    el('library-play-help').textContent = stage.stage === 'OFF' ? 'Start Prestream or Go live first. A clip cannot start a broadcast.' : ending ? 'Ending is playing. Clip playback cannot interrupt it; use a confirmed Stop now or review an ending replacement.' : !ready(candidate) ? 'Choose a ready exact revision to play a clip.' : `Plays as a temporary clip and returns to ${stage.stage === 'CLIP' ? stage.return_stage : stage.stage}.`;
     el('library-preview').disabled = !connected || !ready(candidate);
-    el('library-prepare').disabled = !usable || !file || ['preparing', 'discovering', 'queued'].includes(file.state);
-    el('library-upload-button').disabled = !connected || !!upload;
-    el('library-file').disabled = !!upload;
-    el('library-upload-cancel').hidden = !upload;
     el('playback-status').textContent = stage.stage === 'OFF' ? 'Start Prestream or Go live first. Clip shortcuts cannot start a broadcast.' : clip ? `${p.state === 'failed' ? 'Playback failed · BRB on air' : p.state === 'paused' ? 'Paused · BRB on air' : 'Playing'}: ${p.name || stage.media?.name}${p.loop ? ' · looping' : ' · once'} · returns to ${stage.return_stage || 'the recorded stage'}` : `${stage.stage} selected. Detailed playback controls are available only for CLIP.`;
     el('playback-pause').disabled = !usable || !clip || p.state !== 'playing';
     el('playback-resume').disabled = !usable || !clip || p.state !== 'paused';
@@ -148,7 +150,7 @@
     finally { fetching = false; render(); }
   }
   function command(action, extra = {}, confirmation = true) {
-    if (pending || !connected) return;
+    if (!connected) return;
     error = ''; seeking = false;
     window.broadcastStages?.request({action, ...extra}, confirmation);
     render();
@@ -181,15 +183,6 @@
   });
   el('library-replace-now').addEventListener('click', () => command('replace_now', {revision: revision()?.id}));
   el('library-replace-return').addEventListener('click', () => command('replace_on_return', {revision: revision()?.id}));
-  el('library-prepare').addEventListener('click', async () => {
-    if (pending || !selected()) return;
-    pending = true; error = ''; render();
-    try {
-      const response = await fetch(`${location.origin}/api/library/prepare`, {method: 'PUT', headers: {'Content-Type': 'application/json', 'X-Restreamer-Control': '1'}, body: JSON.stringify({id: selected().id}), signal: AbortSignal.timeout(8000)});
-      if (!response.ok) throw new Error((await response.text()).trim() || 'Could not queue preparation.');
-    } catch (e) { error = e.message; }
-    finally { pending = false; await loadCatalog(); render(); }
-  });
   for (const action of ['pause', 'resume']) el(`playback-${action}`).addEventListener('click', () => command(action, {}, false));
   el('playback-stop').addEventListener('click', () => command('stop_clip'));
   el('playback-loop').addEventListener('change', () => command('set_loop', {loop: el('playback-loop').checked}, false));
@@ -212,26 +205,23 @@
     } catch (e) { el('selection-status').textContent = `${e.message} Previous saved selections remain in use.`; }
     finally { saving = false; render(); }
   });
-  el('library-upload').addEventListener('submit', event => {
-    event.preventDefault();
-    const file = el('library-file').files[0];
-    if (!file || upload) return;
-    if (file.size > catalog.upload_limit) {error = `Upload limit is ${(catalog.upload_limit / 1073741824).toFixed(1)} GiB`;render();return;}
-    const data = new FormData();data.append('file', file);
-    const xhr = new XMLHttpRequest();upload = xhr;error = '';
-    xhr.open('POST', `${location.origin}/api/library/upload`);xhr.setRequestHeader('X-Restreamer-Control', '1');xhr.timeout = 7200000;
-    xhr.upload.onprogress = e => { el('library-upload-status').textContent = e.lengthComputable ? `Uploading · ${Math.floor(e.loaded / e.total * 100)}%` : 'Uploading…'; };
-    xhr.onload = () => {
-      if (xhr.status === 202) {el('library-upload-status').textContent = 'Upload saved. Preparation will begin automatically.';el('library-file').value = '';}
-      else error = xhr.responseText.trim() || 'Upload failed';
-    };
-    xhr.onerror = () => {error = 'Upload connection failed. Check the library before retrying.';};
-    xhr.ontimeout = () => {error = 'Upload timed out.';};
-    xhr.onabort = () => {el('library-upload-status').textContent = 'Upload cancelled. Check the library if the server had already finished receiving it.';};
-    xhr.onloadend = () => {upload = undefined;loadCatalog();render();};
-    el('library-upload-status').textContent = 'Uploading…';xhr.send(data);render();
+  const drawer = el('prepared-media-drawer');
+  function openDrawer() {
+    if (!drawer.open) drawer.showModal();
+    el('prepared-media-title').focus();
+    loadCatalog();
+  }
+  el('prepared-media-open').addEventListener('click', openDrawer);
+  el('prepared-media-close').addEventListener('click', () => drawer.close());
+  // Old generator links are review requests only; opening the drawer has no
+  // broadcast or persistence effect and never substitutes another revision.
+  if (intent || ['#library-panel', '#media-intent', '#stage-selections'].includes(location.hash)) {
+    openDrawer();
+    if (location.hash === '#stage-selections') el('stage-selections').open = true;
+  }
+  window.addEventListener('beforeunload', event => {
+    if (draft || saving) { event.preventDefault(); event.returnValue = ''; }
   });
-  el('library-upload-cancel').addEventListener('click', () => upload?.abort());
   document.addEventListener('stage-command-state', render);
   window.updateLibrary = (data, online) => {
     snapshot = data; connected = online;

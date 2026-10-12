@@ -4,7 +4,7 @@
   const commandID = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
   const time = seconds => { const value = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`; };
   let snapshot, online = false, refreshing = false, review, inflight, lastCommand, lastOutcome, resolving = false, message = '', serverID;
-  let selections = {prestream: '', ending: '', shortcuts: []}, revisions = [];
+  let selections = {prestream: '', ending: '', shortcuts: []}, revisions = [], shortcutSignature = '';
   const current = () => snapshot?.stage;
   const name = revision => revisions.find(item => item.id === revision)?.name || revision || 'No media selected';
   const label = media => media?.name ? `${media.name} · revision ${media.revision}` : media?.revision || 'No prepared media';
@@ -154,12 +154,19 @@
     const buttons = selections.shortcuts.map(shortcut => {
       const button = document.createElement('button');
       button.className = 'preview-button'; button.type = 'button';
-      button.textContent = `▶ ${shortcut.name || name(shortcut.revision)}`;
-      button.disabled = !usable || ending || stage.stage === 'OFF';
+      const available = readyRevision(shortcut.revision);
+      button.textContent = `▶ ${shortcut.name || name(shortcut.revision)}${available ? '' : ' · unavailable'}`;
+      button.title = `Exact revision ${shortcut.revision}`;
+      button.disabled = !usable || ending || stage.stage === 'OFF' || !available;
       button.addEventListener('click', () => request({action: 'play_clip', revision: shortcut.revision, loop: false}));
       return button;
     });
-    el('clip-shortcuts').replaceChildren(...buttons);
+    const signature = JSON.stringify(buttons.map(button => [button.textContent, button.title, button.disabled]));
+    if (signature !== shortcutSignature) {
+      shortcutSignature = signature;
+      el('clip-shortcuts').replaceChildren(...buttons);
+    }
+    el('clip-shortcuts-empty').hidden = buttons.length > 0;
     if (review) {
       const stale = review.server_id !== stage.server_id || review.context !== stage.context;
       el('stage-dialog-stale').hidden = !stale;

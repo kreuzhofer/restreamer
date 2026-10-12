@@ -43,7 +43,8 @@ try {
   assert.equal(await page.locator('#library-revision').inputValue(),b.revision);
   assert.deepEqual(await api('/api/stage-media'),initial);
   assert.equal((await stage()).stage,'OFF');
-  assert.equal(await page.locator('#library-prepare').isDisabled(),true);
+  assert.equal(await page.locator('#library-prepare').count(),0);
+  assert.equal(await page.getByRole('link',{name:'Upload & prepare in Studio Media'}).getAttribute('href'),'/studio?collection=media');
   await page.locator('#media-intent-review').click();
   assert.equal(await page.locator('#selection-prestream').inputValue(),b.revision);
   assert.deepEqual(await api('/api/stage-media'),initial,'Opening and staging are not saves');

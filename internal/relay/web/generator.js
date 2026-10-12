@@ -960,6 +960,7 @@
       await loadThemes();
       const id = new URLSearchParams(location.search).get('id');
       if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
+      if (new URLSearchParams(location.search).get('collection') === 'media') showCollection('media');
     } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
   })();
 })();
