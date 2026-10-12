@@ -3,7 +3,7 @@ package relay
 import (
 	"bytes"
 	"context"
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"image"
@@ -32,20 +32,37 @@ var neonNightLoop []byte
 //go:embed artwork/neon-night/poster.png
 var neonNightPoster []byte
 
+//go:embed artwork/maker-workshop/*/*.mp4 artwork/maker-workshop/*/*.png
+var workshopMedia embed.FS
+
 type preparedArtwork struct {
 	loop, poster []byte
 	effect       string
 	seconds      int
+	holdEnding   bool
 }
 
 func themeArtwork(id string) (preparedArtwork, bool) {
+	return themeArtworkForStage(id, "brb")
+}
+
+func themeArtworkForStage(id, stage string) (preparedArtwork, bool) {
 	switch id {
 	case "arcade-after-hours":
-		return preparedArtwork{afterHoursLoop, afterHoursPoster, "arcade-palette", 16}, true
+		return preparedArtwork{loop: afterHoursLoop, poster: afterHoursPoster, effect: "arcade-palette", seconds: 16}, true
 	case "neon-night":
-		return preparedArtwork{neonNightLoop, neonNightPoster, "neon-palette", 16}, true
+		return preparedArtwork{loop: neonNightLoop, poster: neonNightPoster, effect: "neon-palette", seconds: 16}, true
 	default:
-		return preparedArtwork{}, false
+		if !mediaauthor.IsWorkshopArtwork(id) || (stage != "brb" && stage != "prestream" && stage != "ending") {
+			return preparedArtwork{}, false
+		}
+		root := "artwork/maker-workshop/" + strings.TrimPrefix(id, "maker-") + "/" + stage
+		loop, loopErr := workshopMedia.ReadFile(root + ".mp4")
+		poster, posterErr := workshopMedia.ReadFile(root + ".png")
+		if loopErr != nil || posterErr != nil {
+			return preparedArtwork{}, false
+		}
+		return preparedArtwork{loop: loop, poster: poster, effect: "workshop-motion", seconds: 12, holdEnding: stage == "ending"}, true
 	}
 }
 func animatedArtwork(style mediaauthor.Style) bool {
@@ -63,19 +80,28 @@ func themedBRBSeconds(style mediaauthor.Style) int {
 // Contain the illustration just like static ThemeBackdrop, including non-16:9
 // profiles. Colors have already passed six-digit validation before rendering.
 func artworkBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string {
-	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=area,format=rgb24,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x%s,setsar=1", p.Width, p.Height, p.Width, p.Height, strings.TrimPrefix(style.BackgroundColor, "#"))
+	filter := "area"
+	if mediaauthor.IsWorkshopArtwork(style.Artwork) {
+		filter = "neighbor"
+	}
+	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=%s,format=rgb24,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x%s,setsar=1", p.Width, p.Height, filter, p.Width, p.Height, strings.TrimPrefix(style.BackgroundColor, "#"))
 }
 
 // Preview uses the same prepared master, frame-rate conversion and sizing as encoding.
 // The existing preview admission lock bounds concurrent decoder memory.
-func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style) (image.Image, error) {
+func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style, stage string) (image.Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	art, ok := themeArtwork(style.Artwork)
+	art, ok := themeArtworkForStage(style.Artwork, stage)
 	if !ok {
 		return nil, errors.New("The selected artwork is unavailable.")
 	}
-	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),%s", p.FPS, frame%(art.seconds*p.FPS), artworkBackdropFilter(p, style))
+	if art.holdEnding {
+		frame = min(frame, art.seconds*p.FPS-1)
+	} else {
+		frame %= art.seconds * p.FPS
+	}
+	filter := fmt.Sprintf("fps=%d,select=eq(n\\,%d),%s", p.FPS, frame, artworkBackdropFilter(p, style))
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-threads", "2", "-filter_threads", "1", "-i", "pipe:0", "-vf", filter, "-frames:v", "1", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "pipe:1")
 	cmd.Stdin = bytes.NewReader(art.loop)
 	data, err := cmd.Output()
@@ -91,8 +117,8 @@ func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, st
 
 // artworkOverlayArgs composes transparent content over the immutable artwork loop.
 // It only writes into the caller-owned, bounded preparation workspace.
-func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style) ([]string, error) {
-	art, ok := themeArtwork(style.Artwork)
+func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style, stage string) ([]string, error) {
+	art, ok := themeArtworkForStage(style.Artwork, stage)
 	if !ok {
 		return nil, errors.New("The selected artwork is unavailable.")
 	}
@@ -100,13 +126,20 @@ func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style media
 	if err := os.WriteFile(master, art.loop, 0600); err != nil {
 		return nil, errors.New("Cannot save artwork preparation master; check storage.")
 	}
-	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, artworkBackdropFilter(p, style))
-	return []string{"-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground, "-threads", "2", "-stream_loop", "-1", "-i", master, "-filter_complex", filter, "-map", "[v]"}, nil
+	backdrop := artworkBackdropFilter(p, style)
+	args := []string{"-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground, "-threads", "2"}
+	if art.holdEnding {
+		backdrop += ",tpad=stop_mode=clone:stop_duration=3600"
+	} else {
+		args = append(args, "-stream_loop", "-1")
+	}
+	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, backdrop)
+	return append(args, "-i", master, "-filter_complex", filter, "-map", "[v]"), nil
 }
 
 // Normalize only the clip range first, then repeat it over the full background
 // cycle. Repeating a one-second inset must not restart the sixteen-second sky.
-func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs) error {
+func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs, stage string) error {
 	source, meta, err := s.openVideoAsset(scene)
 	if err != nil {
 		return err
@@ -143,7 +176,7 @@ func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaautho
 	if err != nil || info.Size() >= budget {
 		return errors.New("Artwork video normalization reached its workspace limit.")
 	}
-	art, ok := themeArtwork(style.Artwork)
+	art, ok := themeArtworkForStage(style.Artwork, stage)
 	if !ok {
 		return errors.New("The selected artwork is unavailable.")
 	}
@@ -163,12 +196,19 @@ func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaautho
 	if err := saveGeneratorRaster(foreground, overlay); err != nil {
 		return err
 	}
-	args = append(generatorBaseArgs(), "-threads", "2", "-stream_loop", "-1", "-i", master)
+	args = append(generatorBaseArgs(), "-threads", "2")
+	backdrop := artworkBackdropFilter(p, style)
+	if art.holdEnding {
+		backdrop += ",tpad=stop_mode=clone:stop_duration=3600"
+	} else {
+		args = append(args, "-stream_loop", "-1")
+	}
+	args = append(args, "-i", master)
 	if frames > rangeFrames {
 		args = append(args, "-stream_loop", "-1")
 	}
 	args = append(args, "-threads", "2", "-i", normalized, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", border, "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground)
-	filter = fmt.Sprintf("[0:v]fps=%d,%s[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, artworkBackdropFilter(p, style), region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
+	filter = fmt.Sprintf("[0:v]fps=%d,%s[art];[art][2:v]overlay=0:0:format=rgb[backdrop];[backdrop][1:v]overlay=%d:%d:format=rgb[content];[content][3:v]overlay=0:0:format=rgb,format=yuv420p[v]", p.FPS, backdrop, region.Min.X+(region.Dx()-width)/2, region.Min.Y+(region.Dy()-height)/2)
 	args = append(args, "-filter_complex", filter, "-map", "[v]", "-an", "-frames:v", strconv.Itoa(frames))
 	args = append(args, videoEncodingArgs(p)...)
 	args = append(args, "-fs", strconv.FormatInt(budget-info.Size(), 10), "-progress", "pipe:1", dst)

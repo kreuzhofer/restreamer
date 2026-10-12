@@ -220,11 +220,11 @@ func (s *Server) generatorThemeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.saveThemeHTTP(w, g, t, 200)
 }
 
-func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int) (mediaauthor.RenderInputs, error) {
+func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int, stage string) (mediaauthor.RenderInputs, error) {
 	inputs := mediaauthor.RenderInputs{}
 	var err error
 	if theme.Style.Artwork != "" {
-		art, ok := themeArtwork(theme.Style.Artwork)
+		art, ok := themeArtworkForStage(theme.Style.Artwork, stage)
 		if !ok {
 			return inputs, errors.New("The selected artwork is unavailable.")
 		}
@@ -239,7 +239,11 @@ func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int) (me
 			return inputs, errors.New("The pinned theme background cannot be decoded or verified.")
 		}
 	}
-	inputs.Background = boundedThemeImage(inputs.Background, width, height)
+	// Workshop posters are already bounded 1024×576 assets. Keep their original
+	// pixels for the nearest-neighbor renderer, including frozen theme variants.
+	if !mediaauthor.IsWorkshopArtwork(theme.Style.Artwork) {
+		inputs.Background = boundedThemeImage(inputs.Background, width, height)
+	}
 	if theme.Style.Logo != nil {
 		inputs.Logo, err = s.loadAssetImage(*theme.Style.Logo)
 		if err != nil {

@@ -92,7 +92,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	if len(mediaauthor.ValidateStyle(settings.Theme.Style)) > 0 {
 		return nil, errors.New("Captured BRB theme settings are invalid")
 	}
-	inputs, err := s.loadThemeInputs(*settings.Theme, p.Width, p.Height)
+	inputs, err := s.loadThemeInputs(*settings.Theme, p.Width, p.Height, "brb")
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	}
 	inputs.TransparentBackdrop = false
 	if animatedArtwork(settings.Theme.Style) {
-		inputs.Background, err = artworkPreviewFrame(ctx, p, 0, settings.Theme.Style)
+		inputs.Background, err = artworkPreviewFrame(ctx, p, 0, settings.Theme.Style, "brb")
 		if err != nil {
 			return nil, err
 		}
@@ -142,12 +142,12 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	args := []string{"-filter_threads", "1", "-filter_complex_threads", "1", "-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", filepath.Join(dir, "base.png")}
 	style := settings.Theme.Style
 	if animatedArtwork(style) {
-		args, err = artworkOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style)
+		args, err = artworkOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style, "brb")
 		if err != nil {
 			return nil, err
 		}
 		args = append([]string{"-filter_threads", "1", "-filter_complex_threads", "1"}, args...)
-		defer os.Remove(filepath.Join(dir, "arcade-master.mp4"))
+		defer os.Remove(filepath.Join(dir, "artwork-master.mp4"))
 	} else if style.Effect == "none" {
 		args = append(args, "-map", "0:v:0", "-vf", "setsar=1,format=yuv420p")
 	} else {

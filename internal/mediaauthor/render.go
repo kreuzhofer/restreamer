@@ -114,8 +114,8 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	if rh == 0 {
 		rh = 80
 	}
-	if math.IsNaN(rw) || math.IsInf(rw, 0) || math.IsNaN(rh) || math.IsInf(rh, 0) || rw < 30 || rw > 90 || rh < 30 || rh > 90 {
-		return fail("content_region", "Content width and height must be between 30% and 90% (blank inherits the theme).")
+	if math.IsNaN(rw) || math.IsInf(rw, 0) || math.IsNaN(rh) || math.IsInf(rh, 0) || rw < 30 || rw > 90 || rh < 12 || rh > 90 {
+		return fail("content_region", "Content width must be 30–90% and height 12–90% (blank inherits the theme).")
 	}
 	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
 	offset := 0
