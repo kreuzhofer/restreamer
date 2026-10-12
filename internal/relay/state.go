@@ -17,6 +17,10 @@ func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
 		defer s.controlMu.Unlock()
+		if err := s.initializeIngestion(); err != nil {
+			s.initErr = err
+			return
+		}
 		if err := s.initializeBRB(); err != nil {
 			s.initErr = err
 			return

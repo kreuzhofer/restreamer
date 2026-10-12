@@ -53,11 +53,10 @@ Requires Docker with the Compose plugin.
 
 ```sh
 cp .env.example .env
-openssl rand -hex 24
 ```
 
-Edit `.env`: set `INGEST_STREAM_KEY` to the generated value and set the stream key
-for each platform you want to use. Leave a target key empty to disable that output,
+Edit `.env`: set dashboard credentials and the stream key for each platform you want to use.
+The ingestion key is generated automatically; copy it from desktop **Settings → OBS ingestion**. Leave a target key empty to disable that output,
 or set `TWITCH_ENABLED=false` / `YOUTUBE_ENABLED=false` to disable it while retaining
 its key. Both switches default to `true` when omitted. Twitch and YouTube server
 URLs have defaults; override them with your platform's ingest URL if needed.
@@ -87,7 +86,7 @@ Create/update a stack from this Git repository, branch `main`, Compose path
 `docker-compose.yml`. Alternatively, paste that file into the stack editor.
 Set these in the stack's **Environment variables** section:
 
-- `INGEST_STREAM_KEY`: your own random key, at least 16 characters.
+- Ingestion keys are generated and persisted automatically; no ingestion environment key is required.
 - `TWITCH_SERVER`: optional Twitch server URL, without the key; defaults to `rtmp://live.twitch.tv/app`.
 - `TWITCH_STREAM_KEY`: your Twitch key; missing or empty disables Twitch.
 - `TWITCH_ENABLED`: optional `true`/`false`, defaults to `true`.
@@ -134,14 +133,14 @@ In OBS, choose **Settings → Stream → Service: Custom**:
 | Setting | Value |
 | --- | --- |
 | Server | `rtmp://YOUR_SERVER_IP:1935/live` |
-| Stream key | Your `INGEST_STREAM_KEY` |
+| Stream key | Copy from desktop Settings → OBS ingestion |
 | Video encoder | An H.264 encoder |
 | Audio encoder | AAC |
 | Keyframe interval | 2 seconds is a practical starting point; follow destination requirements |
 
 Include both the port and `/live` in OBS's **Server** field. The path must match
-the configured `application`; the **Stream key** field must match the container's
-`INGEST_STREAM_KEY`.
+the configured `application`; copy the current key from desktop **Settings → OBS ingestion**
+into the **Stream key** field.
 
 Input failures log a safe `stage`, `reason`, and `hint`. `application_mismatch`
 means the server path is wrong or missing; `stream_key_mismatch` means the OBS key
@@ -1248,3 +1247,33 @@ the final frame's source audio is silent before the single AAC encode (which can
 have small lossy residuals). No hold frame or second is appended. Destination
 draining remains a later broadcast-controller operation, separate from the media
 duration. Editing, generating and previewing never start or end a broadcast.
+
+
+### Managed ingestion keys and migration
+
+The standard image stores its ingestion credential in `/data/ingestion-key.json`
+(`ingestion_key_file`), separate from secret-free target switch state. Keep the
+persistent volume when updating. The file is written atomically with permissions
+0600. For native installations, set `ingestion_key_file` to a writable private
+location before starting. Back up this credential securely alongside persistent
+media; do not commit it or include it in diagnostic reports.
+
+On the first managed startup only, an existing legacy `stream_key` value
+(including `INGEST_STREAM_KEY` in the bundled configuration) is imported without
+changing the OBS credential. If none exists, the server generates a random key.
+Once the managed file exists it is authoritative: old configuration values never
+replace it. After verifying OBS reconnects, remove the old environment value and
+optionally the `stream_key` configuration field. Configurations without
+`ingestion_key_file` retain legacy authentication for compatibility; management
+controls explain that migration is required. Invalid or unreadable stored keys
+fail startup rather than silently rotating credentials.
+
+Use desktop Settings to reveal or copy the key. It is masked initially, and
+clipboard failures offer manual copying. Regeneration requires confirmation and
+persists the replacement before success. A connected publisher **stays connected
+until it disconnects**; new connections must use the new key immediately. Update
+OBS before reconnecting. Concurrent or stale regeneration requests are rejected
+so another browser cannot unknowingly overwrite a newer key. Restarting preserves
+the key and leaves the broadcast OFF. The plaintext key is returned only by the
+explicit authenticated, same-origin reveal/copy request; it is absent from status,
+metrics, health responses and logs.
