@@ -36,6 +36,7 @@
   function showCollection(name, focus = false) {
     document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = panel.dataset.collectionPanel !== name; });
     $('design-editor').hidden = true;
+    renderCollectionContext();
     $('resume-design').hidden = !draft;
     document.querySelectorAll('[data-studio-collection]').forEach(button => {
       if (button.dataset.studioCollection === name) button.setAttribute('aria-current', 'page');
@@ -464,29 +465,59 @@
     if ([...$('update-template').options].some(option => option.value === target)) $('update-template').value = target;
     $('update-template-button').disabled = !$('update-template').value || templateSaving;
     $('template-list').replaceChildren();
-    for (const template of templates.filter(item => !item.builtin)) {
-      const row = document.createElement('p'); row.textContent = `${template.name} · v${template.version} `;
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button'; remove.textContent = 'Delete template';
-      remove.setAttribute('aria-label', `Delete template ${template.name}`);
-      remove.addEventListener('click', async () => {
-        if (templateSaving || !window.confirm(`Permanently delete template “${template.name}”? Independent designs, generated files and uploaded assets stay.`)) return;
-        remove.disabled = true;
-        try { await request(`/api/generator/templates/${template.id}`, 'DELETE', {version: template.version}); await loadTemplates(); await loadAssets(); notify('Template deleted. Designs and uploads kept.'); }
-        catch (error) { notify(error.message); remove.disabled = false; }
+    for (const template of templates) {
+      const row = document.createElement('article'); row.className = 'template-card';
+      const title = document.createElement('h3'); title.textContent = template.name;
+      const detail = document.createElement('p'); detail.className = 'stage-help';
+      detail.textContent = `${template.builtin ? 'Built-in starter' : `Custom · v${template.version}`} · ${template.content.stage} · ${template.content.scenes.length} scenes`;
+      const use = document.createElement('button'); use.type = 'button'; use.className = 'preview-button studio-authoring'; use.textContent = 'Use template';
+      use.setAttribute('aria-label', `Use template ${template.name}`);
+      use.addEventListener('click', () => {
+        $('new-stage').value = template.content.stage; renderTemplateChoices();
+        $('new-template').value = template.id; $('new-name').value = template.name;
+        showCollection('designs'); $('new-name').focus();
+        notify('Choose a name and exact style theme, then create an independent design. Your open draft is retained.');
       });
-      row.append(remove); $('template-list').append(row);
+      row.append(title, detail, use);
+      if (!template.builtin) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button studio-authoring'; remove.textContent = 'Delete template';
+        remove.setAttribute('aria-label', `Delete template ${template.name}`);
+        remove.addEventListener('click', async () => {
+          if (templateSaving || !window.confirm(`Permanently delete template “${template.name}”? Independent designs, generated files and uploaded assets stay.`)) return;
+          remove.disabled = true;
+          try { await request(`/api/generator/templates/${template.id}`, 'DELETE', {version: template.version}); await loadTemplates(); await loadAssets(); notify('Template deleted. Designs and uploads kept.'); $('templates-refresh').focus(); }
+          catch (error) { notify(error.message); remove.disabled = false; }
+        });
+        row.append(remove);
+      }
+      $('template-list').append(row);
     }
-    if (!templates.some(item => !item.builtin)) $('template-list').textContent = 'No custom templates.';
+    if (!templates.length) $('template-list').textContent = 'No templates available. Save content from an open design to start.';
+    renderCollectionContext();
+  }
+  function renderCollectionContext() {
+    $('template-source').textContent = draft ? `${draft.name} · draft v${draft.version}${dirty ? ' · local edits included' : ''}. Saving creates an explicit content snapshot.` : 'Open a design first to save or update reusable content.';
+    $('save-template').disabled = !draft || templateSaving;
+    $('update-template-button').disabled = !draft || !$('update-template').value || templateSaving;
+    $('theme-adopt').disabled = !draft || !editingTheme || themeSaving;
+    const pinnedTheme = themes.find(theme => theme.id === draft?.theme.id && theme.revision === draft?.theme.revision);
+    $('theme-adoption-state').textContent = draft ? `Open design: ${draft.name} · pinned ${pinnedTheme?.name || 'unavailable theme'} revision ${draft.theme.revision}. Adoption changes this draft only; scene overrides stay.` : 'Open a design to adopt a saved theme revision. Unpublished settings are never adopted.';
   }
   async function loadTemplates() {
-    templates = await (await request('/api/generator/templates')).json();
-    renderTemplateChoices();
+    $('templates-state').textContent = 'Loading templates…';
+    try {
+      templates = await (await request('/api/generator/templates')).json();
+      renderTemplateChoices();
+      $('templates-state').textContent = `${templates.filter(item => item.builtin).length} built-in starters · ${templates.filter(item => !item.builtin).length} custom templates`;
+    } catch (error) { $('templates-state').textContent = `Templates could not refresh: ${error.message}. Existing choices and local edits are retained.`; throw error; }
   }
+  $('templates-refresh').addEventListener('click', () => loadTemplates().catch(error => notify(error.message)));
+  $('open-template-collection').addEventListener('click', () => { showCollection('templates'); $('template-name').focus(); });
   $('new-stage').addEventListener('change', renderTemplateChoices);
   $('update-template').addEventListener('change', () => {
     const template = templates.find(item => item.id === $('update-template').value);
     if (template) $('template-name').value = template.name;
-    $('update-template-button').disabled = !template;
+    $('update-template-button').disabled = !draft || !template;
     $('reload-template').hidden = true;
     $('template-status').textContent = template ? `Explicit update will replace template v${template.version} with this draft’s content. Existing show designs remain independent.` : '';
   });
@@ -943,6 +974,7 @@
     }
     $('theme-publish').disabled = theme.builtin;
     $('theme-delete').disabled = theme.builtin;
+    renderCollectionContext();
     $('theme-status').textContent = `${theme.name} · revision ${theme.revision}${theme.builtin ? '. Duplicate to create an editable variant.' : '. Publish changes explicitly; existing designs keep their pinned revision.'}`;
   }
   function localTheme() {
@@ -957,7 +989,10 @@
     return theme;
   }
   async function loadThemes() {
-    themes = await (await request('/api/generator/themes')).json();
+    $('themes-state').textContent = 'Loading theme revisions…';
+    try { themes = await (await request('/api/generator/themes')).json(); }
+    catch (error) { $('themes-state').textContent = `Themes could not refresh: ${error.message}. Local settings are retained.`; throw error; }
+    $('themes-state').textContent = `${themes.length} immutable revisions · ${new Set(themes.map(theme => theme.id)).size} themes`;
     const selection = $('new-theme').value;
     $('new-theme').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
     $('new-theme').value = themes.some(theme => themeKey(theme) === selection) ? selection : 'retro:2';
@@ -983,7 +1018,7 @@
       editTheme(saved); await loadThemes(); await loadAssets();
       $('theme-status').textContent = `${saved.name} · revision ${saved.revision} saved. Select it in a design or use Apply updated theme to adopt it.`;
     } catch (error) { themeError(`${error.message} Your local settings are retained. Reload latest revision to discard them, or save settings as a new theme.`); }
-    finally { themeSaving = false; $('theme-form').querySelectorAll('input, select, button').forEach(control => { control.disabled = false; }); $('theme-library').disabled = false; $('theme-publish').disabled = editingTheme.builtin; }
+    finally { themeSaving = false; $('theme-form').querySelectorAll('input, select, button').forEach(control => { control.disabled = false; }); $('theme-library').disabled = false; $('theme-publish').disabled = editingTheme.builtin; renderCollectionContext(); }
   }
   $('theme-form').addEventListener('submit', event => { event.preventDefault(); publishTheme(false); });
   $('theme-duplicate').addEventListener('click', () => publishTheme(true));
@@ -1000,11 +1035,16 @@
       editingTheme = null; themeDirty = false;
       await loadThemes(); await loadAssets(); notify('Custom theme and its revisions deleted. Uploaded assets kept.');
     } catch (error) { themeError(error.message); }
-    finally { themeSaving = false; $('theme-form').inert = false; $('theme-library').disabled = false; $('theme-delete').disabled = editingTheme?.builtin ?? true; }
+    finally { themeSaving = false; $('theme-form').inert = false; $('theme-library').disabled = false; $('theme-delete').disabled = editingTheme?.builtin ?? true; renderCollectionContext(); }
   });
   $('theme-refresh').addEventListener('click', async () => {
     if (themeSaving || (themeDirty && !window.confirm('Discard unpublished settings and reload the latest theme revision?'))) return;
     try { await loadThemes(); editTheme(themes.filter(theme => theme.id === editingTheme.id).sort((a,b) => b.revision-a.revision)[0]); } catch (error) { themeError(error.message); }
+  });
+  $('theme-adopt').addEventListener('click', () => {
+    if (!draft || !editingTheme || themeSaving) return;
+    draft.theme = themeRef(themeKey(editingTheme)); renderDesignTheme(); changed(); renderCollectionContext();
+    $('theme-adoption-state').textContent = `Adopted ${editingTheme.name} revision ${editingTheme.revision} in ${draft.name}. Revalidation and autosave pending; prepared and on-air revisions are unchanged.`;
   });
   $('design-theme').addEventListener('change', event => { event.stopPropagation(); if (!draft) return; draft.theme = themeRef($('design-theme').value); renderDesignTheme(); changed(); });
   $('apply-theme-update').addEventListener('click', () => {
@@ -1021,6 +1061,7 @@
       await loadThemes();
       const id = new URLSearchParams(location.search).get('id');
       if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
+      if (new URLSearchParams(location.search).get('collection') === 'media') showCollection('media');
     } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
   })();
 })();

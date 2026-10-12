@@ -16,6 +16,7 @@
  <script src="/preview.js" defer></script>
  <link rel="stylesheet" href="/workspace.css">
  <link rel="stylesheet" href="/live-console.css">
+ <link rel="stylesheet" href="/prepared-media.css">
  <script src="/workspace.js" defer></script>
  <link rel="stylesheet" href="/ingestion.css">
  <script src="/ingestion.js" defer></script>
@@ -55,8 +56,15 @@
     <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled><span>03</span> BRB<small>Stay on a deliberate break</small></button>
     <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled><span>04</span> End stream<small>Play ending, then stop</small></button>
    </div>
-   <div class="live-clips"><h3>Clip shortcuts</h3><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
+   <div class="live-clips"><div class="live-clips-heading"><h3>Pinned clips</h3><button id="prepared-media-open" class="preview-button" type="button" aria-haspopup="dialog">Browse prepared media</button></div><p id="clip-shortcuts-empty" class="library-help">Pin clip shortcuts in prepared-media selections.</p><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
    <div class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div><label id="rehearsal-label" class="check-label"><input id="stage-rehearsal" type="checkbox"> Start a preview-only rehearsal</label></div>
+   <details id="clip-playback-controls" class="clip-playback-controls" hidden><summary>Clip playback</summary>
+     <p id="playback-status" role="status" class="library-help">No file playing</p>
+     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>
+     <label class="check-label"><input id="playback-loop" type="checkbox"> Loop current clip until stopped</label>
+     <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
+     <p class="library-help">Release the seek bar to resume at a decodable keyframe. Pause shows BRB. Deliberate BRB suspends the clip until Return. Stop clip restores its recorded return stage. PRESTREAM loops automatically; ENDING cannot be paused or scrubbed.</p>
+   </details>
    <p id="stage-help" class="stage-help">Only Prestream and Go live can start a broadcast. Starts OFF after every server restart. OBS input preview stays available.</p>
    <p id="command-status" class="stage-help" role="status"></p>
   </section>
@@ -76,30 +84,6 @@
   <section class="destinations" aria-labelledby="destinations-title">
    <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence" class="visually-hidden">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
-  </section>
-   </details>
-   <details id="live-media-tools" class="live-disclosure"><summary>Prepared media &amp; playback</summary>
-  <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
-   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>
-   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Preparing content creates a ready media revision. Saving a selection affects its next use; current and suspended playback keep their selected revision until you confirm a replacement.</p>
-   <form id="library-upload"><label>MP4 file <input id="library-file" type="file" accept=".mp4,video/mp4" required></label><button id="library-upload-button" class="preview-button" type="submit">Upload MP4</button><button id="library-upload-cancel" class="preview-button" type="button" hidden>Cancel upload</button></form>
-   <p id="library-upload-status" role="status" class="library-help"></p>
-   <p id="library-error" class="notice" role="alert" hidden></p>
-   <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>
-    <form id="stage-selections-form"><div class="selection-fields"><label>Starting soon <select id="selection-prestream"></select></label><label>Ending video <select id="selection-ending"></select></label></div><div class="shortcut-editor"><h3>Clip shortcuts</h3><div id="selection-shortcuts"></div><button id="selection-add-shortcut" class="preview-button" type="button">Add clip shortcut</button></div><p id="selection-warning" class="library-help"></p><div class="library-actions"><button id="selection-save" class="preview-button" type="submit">Save selections</button><button id="selection-cancel" class="preview-button" type="button">Discard changes</button></div><p id="selection-status" class="library-help" role="status"></p></form>
-   </details>
-   <section id="media-intent" class="media-intent" aria-labelledby="media-intent-title" hidden><h3 id="media-intent-title">Generated result</h3><p id="media-intent-detail" class="library-help"></p><p id="media-intent-status" class="library-help" role="status"></p><div class="library-actions"><button id="media-intent-review" class="preview-button" type="button" disabled>Review requested action</button><button id="media-intent-dismiss" class="preview-button" type="button">Dismiss request and choose another action</button></div></section>
-   <div class="library-grid">
-    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p><label>Media revision <select id="library-revision"></select></label>
-     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-preview" class="preview-button" type="button">Preview revision</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
-     <p id="playback-status" role="status" class="library-help">No file playing</p>
-     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>
-     <label class="check-label"><input id="playback-loop" type="checkbox"> Loop current clip until stopped</label>
-     <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
-     <p class="library-help">Release the seek bar to resume at a decodable keyframe. Pause shows BRB. Deliberate BRB suspends the clip until Return. Stop clip restores its recorded return stage. PRESTREAM loops automatically; ENDING cannot be paused or scrubbed.</p>
-    </div>
-    <div class="candidate-preview"><h3>Ready revision preview</h3><video id="candidate-video" controls muted playsinline aria-label="Ready revision preview" hidden></video><p id="candidate-status" class="library-help">Choose a ready video and Preview revision to review its exact content.</p><div class="library-actions"><button id="library-replace-now" class="preview-button" type="button" disabled>Replace now</button><button id="library-replace-return" class="preview-button" type="button" disabled>Replace on return</button></div><p class="library-help">Replacement starts this revision at the beginning. Current media keeps playing during preparation and preview.</p></div>
-   </div>
   </section>
    </details>
    <details id="live-brb-tools" class="live-disclosure"><summary>BRB readiness &amp; activation</summary>
@@ -154,6 +138,29 @@
    </section></div>
   </section>
  </main>
+<dialog id="prepared-media-drawer" class="prepared-media-drawer" aria-labelledby="prepared-media-title">
+ <header class="prepared-media-heading"><div><p class="eyebrow">READY CONTENT</p><h2 id="prepared-media-title" tabindex="-1">Prepared media</h2></div><button id="prepared-media-close" class="preview-button" type="button">Close</button></header>
+ <p id="library-loading" class="library-help" role="status">Loading prepared media…</p>
+ <p id="library-unavailable" class="library-help" hidden>Prepared media is unavailable. Configure the media library on the server, then prepare content in Studio.</p>
+  <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
+   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Browse exact revisions</h2></div><span id="library-count" class="badge">Loading</span></div>
+   <p class="library-help">Browse and preview an exact revision before selecting or activating it. Saved selections affect the next use; current and suspended playback retain their revision.</p>
+   <a class="preview-button" href="/studio?collection=media">Upload &amp; prepare in Studio Media</a>
+   <p id="library-empty" class="library-help" hidden>No prepared media yet. Prepare an upload or generate a design in Studio, then return here to review and select it.</p>
+   <p id="library-error" class="notice" role="alert" hidden></p>
+   <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>
+    <form id="stage-selections-form"><div class="selection-fields"><label>Starting soon <select id="selection-prestream"></select></label><label>Ending video <select id="selection-ending"></select></label></div><div class="shortcut-editor"><h3>Clip shortcuts</h3><div id="selection-shortcuts"></div><button id="selection-add-shortcut" class="preview-button" type="button">Add clip shortcut</button></div><p id="selection-warning" class="library-help"></p><div class="library-actions"><button id="selection-save" class="preview-button" type="submit">Save selections</button><button id="selection-cancel" class="preview-button" type="button">Discard changes</button></div><p id="selection-status" class="library-help" role="status"></p></form>
+   </details>
+   <section id="media-intent" class="media-intent" aria-labelledby="media-intent-title" hidden><h3 id="media-intent-title">Generated result</h3><p id="media-intent-detail" class="library-help"></p><p id="media-intent-status" class="library-help" role="status"></p><div class="library-actions"><button id="media-intent-review" class="preview-button" type="button" disabled>Review requested action</button><button id="media-intent-dismiss" class="preview-button" type="button">Dismiss request and choose another action</button></div></section>
+   <div class="library-grid">
+    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p><label>Media revision <select id="library-revision"></select></label><p id="library-revision-info" class="library-help"></p>
+     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-preview" class="preview-button" type="button">Preview revision</button></div><p id="library-play-help" class="library-help"></p>
+
+    </div>
+    <div class="candidate-preview"><h3>Ready revision preview</h3><video id="candidate-video" controls muted playsinline aria-label="Ready revision preview" hidden></video><p id="candidate-status" class="library-help">Choose a ready video and Preview revision to review its exact content.</p><div class="library-actions"><button id="library-replace-now" class="preview-button" type="button" disabled>Replace now</button><button id="library-replace-return" class="preview-button" type="button" disabled>Replace on return</button></div><p class="library-help">Replacement starts this revision at the beginning. Current media keeps playing during preparation and preview.</p></div>
+   </div>
+  </section>
+</dialog>
  <dialog id="stage-dialog" aria-labelledby="stage-dialog-title" aria-describedby="stage-dialog-effect stage-dialog-context">
   <h2 id="stage-dialog-title">Confirm broadcast change</h2><p id="stage-dialog-effect"></p><p id="stage-dialog-context" class="confirmation-context"></p><p id="stage-dialog-stale" class="notice" role="alert" hidden>The broadcast changed while this confirmation was open. Cancel and review the updated state before trying again.</p>
   <div class="dialog-actions"><button id="stage-dialog-cancel" class="preview-button" type="button" autofocus>Cancel</button><button id="stage-dialog-confirm" class="preview-button" type="button">Confirm</button></div>

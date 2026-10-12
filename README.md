@@ -182,10 +182,12 @@ never starts or stops a broadcast. Profile drafts survive Live/Settings switches
 leaving a page with unsaved edits prompts before discarding them. Streaming-profile
 setup requires a desktop window and an OFF broadcast, including no rehearsal.
 
-Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Create or
+Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Themes browses
+immutable revisions and explicitly adopts a saved revision into the open design;
+publishing shared styling alone leaves existing designs pinned. Create or
 open a design to use its scene list, quick preview, and properties. Properties
 switch between the selected **Scene**, whole **Design** settings (including exact
-theme revision, soundtrack, loop or ending fade), and reusable **Template** actions.
+theme revision, soundtrack, loop or ending fade), and a **Template** shortcut to collection administration.
 **Results & queue** separates the current draft, latest generation attempt, last
 ready output, selected stage revision, and active revision. Each design has its
 own newest-first history with exact-result preview, explicit activation links,
@@ -711,7 +713,7 @@ References: [FFmpeg's streamcopy and transcoding model](https://ffmpeg.org/ffmpe
 ## Prepared video library
 
 Enable BRB to use its saved output profile and persistent broadcast controller.
-The **Video library** section accepts MP4 uploads and discovers regular `.mp4`
+**Studio → Media** accepts MP4 uploads on desktop and discovers regular `.mp4`
 files in `<library_directory>/originals` every five seconds. In Compose this is
 `/data/videos/originals` inside the existing persistent `/data` volume. Mount a
 host folder there if you want to add files directly. Copy external files under a
@@ -730,13 +732,15 @@ reused after restart. Playback reads bounded packets from disk instead of loadin
 entire videos into memory. Node/browser runtimes are not needed on the server;
 FFmpeg and FFprobe are required (both are in the container image).
 
-Save an exact ready revision as starting-soon media, ending media, or a named
-clip shortcut. There can be multiple shortcuts. Selections survive restart, but
+In **Live → Browse prepared media**, preview an exact ready revision and save it
+as starting-soon media, ending media, or a named pinned clip shortcut. Closing
+the drawer keeps selection edits; save or discard them explicitly. There can be multiple shortcuts. Selections survive restart, but
 active playback and pending transitions do not. Changed content under the same
 filename cannot silently replace a selected revision.
 
-Start Prestream or Go live, then choose **Play clip**. A shortcut plays once and
-returns to its recorded stage. Detailed CLIP controls provide pause, resume,
+Start Prestream or Go live, then trigger a pinned clip or choose **Play once**
+in the prepared-media drawer. A shortcut plays once and returns to its recorded
+stage. The contextual **Clip playback** panel provides pause, resume,
 seek, explicit looping, and Stop clip. Pause holds the position with fallback
 BRB on air; seeking resumes from a preceding keyframe within about one second,
 and seeking while paused keeps it paused. PRESTREAM owns its loop; ENDING is
@@ -806,6 +810,9 @@ prestream starter, the thanks/follow-up-links ending starter, or a saved content
 template. Select the style theme separately. Every starter scene can be edited,
 reordered, duplicated, or removed using the normal scene editor.
 
+In **Studio → Templates**, browse built-in starters and custom templates, then
+use **Use template** to choose a name and separate theme for an independent design.
+The collection also shows the open design as the source for explicit save/update.
 **Save as new template** captures the current draft content explicitly.
 **Update selected template** replaces only that reusable template; draft autosave
 never does this. Copies are independent: changes to one show or the template do
