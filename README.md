@@ -1321,8 +1321,12 @@ optionally the `stream_key` configuration field. Configurations without
 controls explain that migration is required. Invalid or unreadable stored keys
 fail startup rather than silently rotating credentials.
 
-Use desktop Settings to reveal or copy the key. It is masked initially, and
-clipboard failures offer manual copying. Regeneration requires confirmation and
+Use desktop **Settings → OBS ingestion** to reveal or copy the key. It is masked
+initially and whenever you leave Settings, and clipboard failures offer manual
+copying. Enter your public RTMP hostname and published port in the server-address
+field; the dashboard hostname/HTTP port can differ, so the app does not infer
+those values. This field is a copying aid, not server configuration. Keep the
+application path shown in its placeholder and enter the key separately in OBS. Regeneration requires confirmation and
 persists the replacement before success. A connected publisher **stays connected
 until it disconnects**; new connections must use the new key immediately. Update
 OBS before reconnecting. Concurrent or stale regeneration requests are rejected

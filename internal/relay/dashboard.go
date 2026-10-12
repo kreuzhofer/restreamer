@@ -25,6 +25,9 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)
 	private.HandleFunc("PUT /api/destinations/{name}", s.destinationsHTTP)
 	private.HandleFunc("DELETE /api/destinations/{name}", s.destinationsHTTP)
+	private.HandleFunc("GET /ingestion-settings.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/settings#ingestion-settings", http.StatusTemporaryRedirect)
+	})
 	private.HandleFunc("GET /api/ingestion", s.ingestionStatusHTTP)
 	private.HandleFunc("POST /api/ingestion/key", s.ingestionKeyHTTP)
 	private.HandleFunc("POST /api/ingestion/regenerate", s.ingestionKeyHTTP)

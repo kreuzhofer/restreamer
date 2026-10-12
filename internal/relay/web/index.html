@@ -16,13 +16,14 @@
  <link rel="stylesheet" href="/workspace.css">
  <link rel="stylesheet" href="/live-console.css">
  <script src="/workspace.js" defer></script>
+ <link rel="stylesheet" href="/ingestion.css">
+ <script src="/ingestion.js" defer></script>
 </head>
 <body>
  <main>
   <header class="workspace-header">
   <a class="brand" href="/live" aria-label="Restreamer Live"><span class="brand-mark" aria-hidden="true">↗</span> restreamer <span class="workspace-wordmark">/ studio</span></a>
   <nav class="workspace-nav" aria-label="Workspace"><a href="/live" data-workspace="live">Live</a><a href="/studio" data-workspace="studio">Studio</a><a href="/settings" data-workspace="settings">Settings</a></nav>
-  <a class="preview-button" href="/ingestion-settings.html">Ingestion settings</a>
   <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Connecting…</span></div>
  </header>
  <div id="workspace-status" class="workspace-status" role="status" aria-label="Broadcast status">
@@ -152,7 +153,9 @@
   <section id="settings-workspace" data-workspace-panel="settings" class="settings-workspace" aria-labelledby="settings-title" hidden>
    <p class="eyebrow">CONNECTIONS &amp; SETUP</p><h1 id="settings-title" tabindex="-1">Settings</h1>
    <p class="desktop-only-note">Use a desktop window to configure connections and the streaming profile. Live controls remain available on your phone.</p>
-   <div class="settings-desktop"><section class="panel settings-profile" aria-label="Streaming profile">
+   <div class="settings-desktop">
+   <section id="ingestion-settings" class="panel settings-ingestion" data-ingestion-settings aria-label="OBS ingestion"></section>
+   <section class="panel settings-profile" aria-label="Streaming profile">
    <p id="profile-unavailable" class="profile-help">Loading streaming profile…</p>
    <div id="input-profile" class="input-profile" hidden>
     <h3>Shared streaming profile</h3>
