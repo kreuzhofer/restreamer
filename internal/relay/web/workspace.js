@@ -41,8 +41,9 @@
       el('workspace-stage').textContent = stage.stage || 'Unknown';
       const sources = {off: 'None', obs: 'OBS', file: stage.media?.name || 'Prepared video', brb: stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB'};
       el('workspace-source').textContent = sources[stage.source] || 'Unknown';
-      el('workspace-mode').textContent = stage.mode === 'preview_only' ? 'REHEARSAL · destination delivery blocked' : stage.stage === 'OFF' ? 'OFF · delivery stopped' : 'Broadcast · relay delivery';
-      el('workspace-status').classList.toggle('rehearsal', stage.mode === 'preview_only');
+      const rehearsal = stage.mode === 'preview_only' || stage.pending?.mode === 'preview_only';
+      el('workspace-mode').textContent = rehearsal ? 'REHEARSAL · destination delivery blocked' : stage.stage === 'OFF' ? 'OFF · delivery stopped' : 'Broadcast · relay delivery';
+      el('workspace-status').classList.toggle('rehearsal', rehearsal);
     }
     freshness();
   }
