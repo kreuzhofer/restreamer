@@ -98,8 +98,15 @@ func recoverMediaDeletion(root, dir string) error {
 	return os.RemoveAll(dir)
 }
 
+var errMediaDeletionRollback = errors.New("cannot restore media deletion")
+
 // committed distinguishes an acknowledged catalog change from a staging failure.
 func deleteMediaFiles(root string, paths []string) (committed bool, err error) {
+	return deleteReviewedMediaFiles(root, paths, nil)
+}
+
+// Review staged files before committing so external replacements can be restored.
+func deleteReviewedMediaFiles(root string, paths []string, review func(path, staged string) error) (committed bool, err error) {
 	for _, path := range paths {
 		if !validDeletionPath(path) {
 			return false, errors.New("invalid media deletion path")
@@ -112,7 +119,12 @@ func deleteMediaFiles(root string, paths []string) (committed bool, err error) {
 	if err := writeState(filepath.Join(dir, "paths.json"), paths); err != nil {
 		return false, errors.Join(err, os.RemoveAll(dir))
 	}
-	rollback := func(cause error) (bool, error) { return false, errors.Join(cause, recoverMediaDeletion(root, dir)) }
+	rollback := func(cause error) (bool, error) {
+		if err := recoverMediaDeletion(root, dir); err != nil {
+			return false, errors.Join(cause, errMediaDeletionRollback, err)
+		}
+		return false, cause
+	}
 	for i, path := range paths {
 		source := filepath.Join(root, path)
 		parent, err := os.Stat(filepath.Dir(source))
@@ -136,6 +148,13 @@ func deleteMediaFiles(root string, paths []string) (committed bool, err error) {
 		// Missing output is already removed; its metadata can still be cleaned up.
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return rollback(err)
+		}
+	}
+	if review != nil {
+		for i, path := range paths {
+			if err := review(path, filepath.Join(dir, fmt.Sprint(i))); err != nil {
+				return rollback(err)
+			}
 		}
 	}
 	if err := writeState(filepath.Join(dir, "committed"), true); err != nil {

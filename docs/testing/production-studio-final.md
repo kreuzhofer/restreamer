@@ -26,7 +26,7 @@ A red startup regression demonstrated that overlapping ingestion/state paths cou
 - `go vet ./...`: passed.
 - Full race/vet gate ran successfully on the assembled integration before these final fixes; final SHA CI and main image publication remain the release coordinator's delivery gate.
 
-The browser extension did not reliably track native JavaScript dialogs after native dismissal. Dialog outcomes were checked against the fresh native accessibility tree on the exact task-owned local tab. No browser permissions were changed. Upload picker coverage and detailed theme/rehearsal/layout journeys are recorded in the earlier slice evidence; this pass did not repeat those checks.
+The browser extension did not reliably track native JavaScript dialogs after native dismissal. Dialog outcomes were checked against the fresh native accessibility tree on the exact task-owned local tab. No browser permissions were changed. The native PNG/MP4 upload-picker gap was subsequently resolved by the release coordinator; see [review resolutions](production-studio-review.md). Detailed theme/rehearsal/layout journeys are recorded in the earlier slice evidence; this pass did not repeat those checks.
 
 All synthetic publishers, local receivers and fixture servers were stopped after verification. Temporary viewport overrides were reset.
 

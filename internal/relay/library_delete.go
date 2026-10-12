@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,7 +91,38 @@ func (s *Server) libraryDelete(w http.ResponseWriter, r *http.Request) {
 	for _, revision := range revisions {
 		paths = append(paths, "revisions/"+revision+".json", "revisions/"+revision+".flv")
 	}
-	committed, err := deleteMediaFiles(l.root, paths)
+	original := paths[0]
+	reviewedInfo, statErr := os.Lstat(filepath.Join(l.root, original))
+	changed := errors.New("upload changed since review")
+	committed, err := deleteReviewedMediaFiles(l.root, paths, func(path, staged string) error {
+		if path != original {
+			return nil
+		}
+		info, err := os.Lstat(staged)
+		if statErr != nil || err != nil || !info.Mode().IsRegular() || !os.SameFile(reviewedInfo, info) {
+			return changed
+		}
+		// Compare the discovered file identity and reviewed bytes. Rename and
+		// upload temporary-link cleanup can legitimately change ctime.
+		if entry.sourceInfo == nil || !os.SameFile(entry.sourceInfo, info) {
+			return changed
+		}
+		if info.Size() > l.limit && sourceFileIdentity(entry.sourceInfo) != sourceFileIdentity(reviewedInfo) {
+			return changed
+		}
+		stamp := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+		if info.Size() > 0 && info.Size() <= l.limit {
+			digest, err := mediaDigest(staged)
+			if err != nil {
+				return err
+			}
+			stamp += ":" + digest
+		}
+		if stamp != entry.stamp {
+			return changed
+		}
+		return nil
+	})
 	if committed {
 		delete(l.entries, id)
 		for _, revision := range revisions {
@@ -98,6 +131,10 @@ func (s *Server) libraryDelete(w http.ResponseWriter, r *http.Request) {
 		s.broadcast.mu.Lock()
 		s.broadcast.control.version++
 		s.broadcast.mu.Unlock()
+	}
+	if errors.Is(err, changed) && !errors.Is(err, errMediaDeletionRollback) {
+		http.Error(w, "Upload changed; refresh Media before deleting", 409)
+		return
 	}
 	if err != nil {
 		http.Error(w, "Deletion storage error; refresh Media to check the result. Restart retries interrupted cleanup.", 507)
