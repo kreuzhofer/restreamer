@@ -71,7 +71,8 @@ type Config struct {
 	Listen            string     `json:"listen"`
 	HealthListen      string     `json:"health_listen"`
 	Application       string     `json:"application"`
-	StreamKey         string     `json:"stream_key"`
+	StreamKey         string     `json:"stream_key,omitempty"`
+	IngestionKeyFile  string     `json:"ingestion_key_file,omitempty"`
 	QueueBytes        int        `json:"queue_bytes"`
 	Targets           []Target   `json:"targets"`
 	DashboardUsername string     `json:"dashboard_username"`
@@ -98,7 +99,17 @@ func Load(path string) (Config, error) {
 	}
 	// Expand individual decoded strings, so quotes or backslashes in a secret
 	// cannot alter the structure of the configuration.
-	values := []*string{&c.Listen, &c.HealthListen, &c.Application, &c.StreamKey}
+	c.IngestionKeyFile = os.ExpandEnv(c.IngestionKeyFile)
+	values := []*string{&c.Listen, &c.HealthListen, &c.Application}
+	if c.IngestionKeyFile == "" {
+		values = append(values, &c.StreamKey)
+	} else {
+		var missing bool
+		c.StreamKey, missing = expand(c.StreamKey)
+		if missing {
+			c.StreamKey = ""
+		}
+	}
 	for _, value := range values {
 		var missing bool
 		*value, missing = expand(*value)
@@ -183,7 +194,7 @@ func (c Config) Validate() error {
 	if !identifier.MatchString(c.Application) {
 		return errors.New("application must contain only letters, digits, underscores or hyphens")
 	}
-	if len(c.StreamKey) < 16 || len(c.StreamKey) > 256 || !identifier.MatchString(c.StreamKey) {
+	if !(c.StreamKey == "" && c.IngestionKeyFile != "") && (len(c.StreamKey) < 16 || len(c.StreamKey) > 256 || !identifier.MatchString(c.StreamKey)) {
 		return errors.New("input stream_key must contain 16–256 letters, digits, underscores or hyphens")
 	}
 	if c.QueueBytes < 1<<20 || c.QueueBytes > 256<<20 {

@@ -1,0 +1,7 @@
+.ingestion-key { display: block; width: min(100%, 42rem); margin: .5rem 0 1rem; }
+.ingestion-feedback { min-height: 1.5em; overflow-wrap: anywhere; }
+.ingestion-desktop-notice { display: none; }
+@media (max-width: 700px) {
+  .ingestion-desktop-controls { display: none; }
+  .ingestion-desktop-notice { display: block; }
+}
