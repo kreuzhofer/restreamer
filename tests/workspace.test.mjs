@@ -70,3 +70,11 @@ test('pending transitions and fallback BRB identify the actual retained source',
   const fallback = await studio({...base,stage:{stage:'LIVE',mode:'real',source:'brb'}});
   assert.match(fallback.element('workspace-alert-message').textContent,/Fallback BRB is on air/);
 });
+
+test('a failed destination remains alerted during reconnect attempts until media resumes', async () => {
+  const ui = await studio({...base,outputs:[{name:'A',enabled:true,can_enable:true,state:'retrying',last_error:'connect_failed'}]});
+  await ui.receive({...base,outputs:[{name:'A',enabled:true,can_enable:true,state:'connecting',last_error:'connect_failed'}]});
+  assert.equal(ui.element('workspace-alert').hidden, false);
+  await ui.receive(base);
+  assert.equal(ui.element('workspace-alert').hidden, true);
+});

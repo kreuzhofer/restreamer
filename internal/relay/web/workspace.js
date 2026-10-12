@@ -38,7 +38,7 @@
       if (stage.error) { messages.push(stage.error); severity = 'error'; }
       if (stage.stage !== 'OFF' && stage.mode === 'real') {
         const eligible = (snapshot.outputs || []).filter(output => output.enabled && output.can_enable);
-        const failed = eligible.filter(output => output.state === 'retrying');
+        const failed = eligible.filter(output => output.state === 'retrying' || (output.last_error && ['connecting', 'waiting_for_keyframe'].includes(output.state)));
         if (!eligible.length) { messages.push('No eligible destination is enabled. The selected feed is not being delivered.'); if (severity !== 'error') severity = 'warning'; }
         else if (failed.length) {
           messages.push(`${failed.length === eligible.length ? 'All enabled destinations are failing' : `${failed.length} of ${eligible.length} destinations failing`}: ${failed.map(output => output.name).join(', ')}. Reconnecting independently.`);
