@@ -29,6 +29,13 @@ type Server struct {
 	previewDone           <-chan struct{}
 	previewSlots          chan struct{}
 	outputs               []*output
+	outputsMu             sync.RWMutex
+	outputContext         context.Context
+	outputWorkers         sync.WaitGroup
+	outputCancels         map[*output]context.CancelFunc
+	outputDone            map[*output]chan struct{}
+	destinations          destinationState
+	destinationsManaged   bool
 	inputBytes            atomic.Uint64
 	inputFrames           atomic.Uint64
 	metrics               metrics
@@ -50,15 +57,7 @@ type Server struct {
 func New(cfg config.Config, log *slog.Logger) *Server {
 	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{slot: make(chan struct{}, 1)}}
 	for _, target := range cfg.Targets {
-		state := "paused"
-		if !target.IsEnabled() {
-			state = "disabled"
-		}
-		status := OutputStatus{Name: target.Name, Enabled: target.IsEnabled(), State: state, CanEnable: target.ReadyError() == nil}
-		if err := target.ReadyError(); err != nil {
-			status.UnavailableReason = err.Error()
-		}
-		s.outputs = append(s.outputs, &output{config: target, log: log, changed: make(chan struct{}, 1), status: status, blocked: true})
+		s.outputs = append(s.outputs, s.newOutput(target))
 	}
 	return s
 }
@@ -118,10 +117,21 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	if s.broadcast != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); s.broadcast.run(ctx) }()
-		for _, o := range s.outputs {
-			wg.Add(1)
-			go func() { defer wg.Done(); o.manage(ctx, s.broadcast.hub) }()
+		s.controlMu.Lock()
+		s.outputContext = ctx
+		for _, o := range s.outputSnapshot() {
+			s.startOutputLocked(o)
 		}
+		s.controlMu.Unlock()
+		defer func() {
+			s.controlMu.Lock()
+			s.outputContext = nil
+			for _, cancelOutput := range s.outputCancels {
+				cancelOutput()
+			}
+			s.controlMu.Unlock()
+			s.outputWorkers.Wait()
+		}()
 	}
 	slots := make(chan struct{}, 16)
 	s.log.Info("RTMP listener ready", "address", l.Addr().String())
@@ -198,7 +208,7 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	session, cancel := context.WithCancel(ctx)
 	h := newHub(s.cfg.QueueBytes)
 	if s.broadcast == nil {
-		h = newHub(s.cfg.QueueBytes, s.outputs...)
+		h = newHub(s.cfg.QueueBytes, s.outputSnapshot()...)
 	} else {
 		s.broadcast.attach(func() { n.Close() })
 		defer s.broadcast.inputLost()
@@ -211,7 +221,7 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 	defer wg.Wait()
 	defer cancel()
 	if s.broadcast == nil {
-		for _, o := range s.outputs {
+		for _, o := range s.outputSnapshot() {
 			wg.Add(1)
 			go func() { defer wg.Done(); o.manage(session, h) }()
 		}

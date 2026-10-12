@@ -25,7 +25,7 @@ func (s *Server) setForwarding(enabled bool) {
 		}
 		s.broadcast.mu.Unlock()
 	}
-	for _, o := range s.outputs {
+	for _, o := range s.outputSnapshot() {
 		o.mu.Lock()
 		o.blocked = !enabled
 		o.failed = false
