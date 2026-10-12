@@ -1,0 +1,45 @@
+.layout-controls { position: relative; flex-shrink: 0; font-size: 12px; }
+.layout-controls > summary { cursor: pointer; padding: 8px; border: 1px solid var(--border); border-radius: 5px; }
+.layout-options { position: absolute; z-index: 30; right: 0; top: 100%; width: 270px; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 12px 30px #0008; }
+.layout-options label { display: block; font-size: 12px; margin-bottom: 12px; }
+.layout-options input { width: 100%; min-height: 44px; accent-color: var(--cyan); }
+.layout-status { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.5; color: #efbf71; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.layout-divider { position: relative; width: 10px; min-width: 10px; cursor: col-resize; touch-action: none; background: #11151d; }
+.layout-divider::after { content: ''; position: absolute; top: calc(50% - 24px); height: 48px; left: 4px; width: 2px; background: #59657c; border-radius: 2px; }
+.layout-divider:hover, .layout-divider:focus-visible { background: #34405c; outline: 2px solid var(--cyan); outline-offset: -2px; }
+.live-secondary-tabs { display: none; }
+@media (min-width: 601px) {
+  body[data-workspace=live] { height: 100dvh; overflow: hidden; }
+  body[data-workspace=live] > main { height: 100%; display: flex; flex-direction: column; }
+  body[data-workspace=live] .workspace-header, body[data-workspace=live] .workspace-status, body[data-workspace=live] .workspace-alert,
+  .studio-app .workspace-alert { position: static; flex-shrink: 0; }
+  body[data-workspace=live] #live-workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body[data-workspace=live] #notice { flex-shrink: 0; max-height: 120px; overflow: auto; }
+  body[data-workspace=live] .live-console { height: auto !important; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 10px var(--signals-width, 320px); }
+  .live-primary, .live-sidebar { min-height: 0; }
+  .studio-app .studio-queue { max-height: 220px; overflow: auto; }
+  .studio-app #scene-preview { width: 100%; height: auto; object-fit: contain; }
+}
+@media (min-width: 1151px) {
+  .studio-editor-grid { grid-template-columns: var(--scene-width, 220px) 10px minmax(360px, 1fr) 10px var(--inspector-width, 330px); }
+}
+@media (max-width: 1150px) { .studio-editor-grid > .layout-divider { display: none; } }
+@media (min-width: 601px) and (max-width: 999px) {
+  .live-secondary-tabs { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 0; }
+  .live-secondary-tabs button { min-height: 44px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 5px; padding: 8px 14px; cursor: pointer; }
+  .live-secondary-tabs button[aria-pressed=true] { background: #29334a; border-color: var(--cyan); }
+  body[data-workspace=live] .live-console { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .live-console > .layout-divider, .live-console[data-layout-panel=operation] > .live-sidebar, .live-console[data-layout-panel=signals] > .live-primary { display: none; }
+  .live-sidebar { overflow: auto; border-left: 0; }
+  .live-primary { display: grid; overflow: auto; grid-template-rows: minmax(140px, 1fr) auto; }
+  .live-primary .broadcast-panel { display: grid; }
+  .live-program-screen { aspect-ratio: auto; }
+}
+@media (max-width: 600px) { .layout-controls, .layout-divider, .layout-status { display: none !important; } }
+.layout-help { color: var(--muted); line-height: 1.5; margin: 0 0 10px; }
+@media (min-width: 601px) and (max-width: 760px) {
+  .workspace-header { gap: 8px; flex-wrap: wrap; }
+  .workspace-header .workspace-nav { order: 3; width: 100%; }
+  .workspace-header .workspace-nav a { flex: 1; text-align: center; }
+}
+.studio-app #media-library-preview { display: block; width: auto; max-width: 100%; height: auto; max-height: 45dvh; object-fit: contain; margin: 12px auto; }
