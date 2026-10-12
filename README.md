@@ -1316,16 +1316,32 @@ its directory and `destinations.json` is used. The file is atomically replaced
 with mode 0600. Back it up as a secret. The older switch-state file remains
 secret-free. Failed validation or writes leave the running configuration intact.
 
-For migration, retain your existing target JSON and environment configuration for
-one start, stop broadcasting/rehearsal, and choose **Import existing destinations**.
-Import preserves names and current enabled preferences, including saved switches.
-After successful import, remove the legacy targets and destination environment
-variables; the managed file is authoritative on future starts and is never
-silently overwritten by legacy settings. The default Compose configuration no
-longer passes Twitch/YouTube keys: existing deployments should import using their
-previous configuration before upgrading, or temporarily mount their old config
-and explicitly pass the required environment variables for this one-time import.
-Keep the persistent volume when upgrading. A restart always begins OFF.
+For an existing deployment, migrate deliberately before replacing its old
+configuration with the new empty-target example:
+
+1. Save a copy of the existing target JSON configuration and keep the existing
+   destination environment mappings. Do not paste keys into tickets or logs.
+2. In that retained configuration, add `ingestion_key_file` set to
+   `/data/ingestion-key.json` and `destinations_file` set to
+   `/data/destinations.json`. Keep the old `stream_key` and target entries for
+   this first new-binary start, so the OBS credential imports unchanged.
+3. Upgrade the image while mounting the retained configuration read-only at
+   `/etc/restreamer/config.json`, preserving its environment mappings and the
+   same persistent `/data` volume. For Compose/Portainer, the host config path
+   must exist on the Docker host. The new bundled Compose stops passing platform
+   variables, so retain them explicitly for this migration start.
+4. While OFF, open desktop **Settings → Destinations** and choose **Import existing
+   destinations**. Check names, readiness, and enabled preferences. Import
+   preserves the current preferences, including saved legacy switches.
+5. After successful import, remove the legacy targets and destination environment
+   mappings, and use the new bundled configuration. Restart and verify Settings:
+   the managed credentials file remains authoritative, and the broadcast stays
+   OFF. Keep the persistent volume. Old configuration values never silently
+   overwrite managed destinations.
+
+Unsaved form changes stay in memory when moving between Live and Settings. Moving
+to Studio or reloading prompts before discarding a draft; credentials are never
+stored in browser layout preferences. Failed saves retain the draft for correction.
 
 Editing a selected destination during a real broadcast requires confirmation
 against the current broadcast state and reconnects only that destination.

@@ -163,4 +163,5 @@ document.querySelectorAll('[data-metric]').forEach(button => {
   });
 });
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 100); });
+window.addEventListener('destinations-changed', refresh);
 poll();
