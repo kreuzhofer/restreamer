@@ -23,6 +23,7 @@
   <button type="button" data-studio-collection="designs" aria-current="page">Designs</button><button type="button" data-studio-collection="media">Media</button><button type="button" data-studio-collection="themes">Themes</button><button type="button" data-studio-collection="templates">Templates</button>
   <button id="resume-design" type="button" hidden>Return to open design</button>
  </nav>
+ <details class="studio-queue"><summary id="generation-status">Shared queue · loading…</summary><div id="generation-queue" aria-label="Shared generation queue"></div><p id="generation-queue-error" class="notice" role="alert" hidden></p></details>
  <p class="studio-mobile-note">Authoring, uploads and generation require desktop. Browse designs and review prepared results here, or open Live to operate your broadcast.</p>
  <p id="generator-notice" class="notice" role="alert" hidden></p>
  <div class="generator-grid">
@@ -60,13 +61,15 @@
   <p id="preview-state" class="stage-help" role="status">Enter your title to preview the scene.</p>
   <p class="stage-help">Quick scene preview uses the captured streaming profile. It is separate from exact generated output below.</p>
 </div>  <section class="generator-generation" id="studio-results" hidden aria-labelledby="generation-heading">
-   <div class="generator-preview-heading"><h3 id="generation-heading">Shared generation queue</h3><button id="generate-design" class="preview-button" type="button">Generate saved draft</button></div>
+   <div class="generator-preview-heading"><h3 id="generation-heading">Design results</h3><button id="generate-design" class="preview-button" type="button">Generate saved draft</button></div>
    <p id="generation-save-hint" class="stage-help">Generation captures the saved draft. Later edits leave its result unchanged.</p>
    <p id="generation-error" class="notice" role="alert" hidden></p>
-   <p id="generation-status" class="stage-help" role="status" aria-live="polite"></p>
+   <dl id="generation-summary" class="generation-summary" aria-label="Design and broadcast revisions"></dl>
+   <button id="preview-last-ready" class="preview-button" type="button" hidden>Preview last ready output</button>
    <p id="generation-stage-status" class="stage-help" role="status"></p>
-   <div id="generation-jobs" aria-label="Prestream and ending generation history"></div>
    <div id="generated-preview" hidden><h4>Exact prepared output</h4><p id="generated-identity" class="stage-help"></p><video id="generated-video" controls playsinline preload="metadata"></video><p id="generated-playback-status" class="stage-help" role="status"></p></div>
+   <details id="generation-history"><summary id="generation-history-heading">Design history</summary><div id="generation-jobs" aria-label="Design generation history"></div></details>
+
    <p class="stage-help">Generating and previewing do not select or activate media. Ready revisions are available in live control. Up to 600 seconds at 1920 × 1080 and 30 fps.</p>
   </section>
   </div></section><aside class="studio-inspector" aria-label="Properties"><nav class="studio-tabs" aria-label="Properties view"><button type="button" data-inspector="scene" aria-pressed="true">Scene</button><button type="button" data-inspector="design" aria-pressed="false">Design</button><button type="button" data-inspector="template" aria-pressed="false">Template</button></nav><div class="studio-inspector-scroll">  <form id="scene-form" novalidate><div data-inspector-panel="design" hidden>
