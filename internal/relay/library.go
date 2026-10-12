@@ -19,6 +19,7 @@ import (
 
 type LibraryEntry struct {
 	ID                         string            `json:"id"`
+	Version                    string            `json:"version"`
 	Revision                   string            `json:"revision,omitempty"`
 	Name                       string            `json:"name"`
 	State                      string            `json:"state"`
@@ -107,7 +108,9 @@ func (l *videoLibrary) status() LibraryStatus {
 	defer l.mu.Unlock()
 	status := LibraryStatus{Enabled: true, UploadLimit: l.limit, Error: l.lastError, Files: make([]LibraryEntry, 0, len(l.entries))}
 	for _, e := range l.entries {
-		status.Files = append(status.Files, *e)
+		file := *e
+		file.Version = clipHash(e.stamp)
+		status.Files = append(status.Files, file)
 	}
 	sort.Slice(status.Files, func(i, j int) bool { return status.Files[i].Name < status.Files[j].Name })
 	status.Selections = l.selectionsLocked()

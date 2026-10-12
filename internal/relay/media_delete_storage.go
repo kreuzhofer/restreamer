@@ -10,9 +10,16 @@ import (
 
 // Stage all files before committing removal. Before the commit marker exists,
 // recovery rolls every rename back; afterwards it finishes physical cleanup.
-// Paths are relative to the media library and never include uploaded originals.
+// Paths are relative to the media library. Only explicit library deletion owns originals.
 func validDeletionPath(path string) bool {
 	parts := strings.Split(filepath.ToSlash(path), "/")
+	if len(parts) == 2 && parts[0] == "originals" {
+		return validClipName(parts[1])
+	}
+	if len(parts) == 2 && parts[0] == "prepared" {
+		id := strings.TrimSuffix(parts[1], ".flv")
+		return strings.HasSuffix(parts[1], ".flv") && len(id) == 65 && id[32] == '-' && validDesignID(id[:32]) && validDesignID(id[33:])
+	}
 	if len(parts) == 2 && parts[0] == "revisions" {
 		return validRevisionID(strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))) && (filepath.Ext(parts[1]) == ".json" || filepath.Ext(parts[1]) == ".flv")
 	}
