@@ -183,7 +183,7 @@ func (b *broadcast) setDeliveryLocked(enabled bool) {
 	if b.server.forwarding.Swap(enabled) == enabled {
 		return
 	}
-	for _, o := range b.server.outputs {
+	for _, o := range b.server.outputSnapshot() {
 		if enabled {
 			o.resetDrain()
 		}
@@ -225,7 +225,7 @@ func (b *broadcast) commitLive(now time.Time) {
 }
 
 func (b *broadcast) hasEligibleDestination() bool {
-	for _, output := range b.server.outputs {
+	for _, output := range b.server.outputSnapshot() {
 		status := output.snapshot()
 		if status.Enabled && status.CanEnable {
 			return true
