@@ -83,6 +83,9 @@ function render() {
  $('#input-graph-label').textContent = graphMetric === 'fps' ? 'Input FPS · frames/s' : 'Input bitrate · Mbps';
  $('#input-chart').setAttribute('aria-label', `Input ${graphName} over the past 15 minutes`);
  chart($('#input-chart'), samples.map(p => ({time: p.time, value: graphMetric === 'fps' ? p.input_fps : p.input})).filter(p => Number.isFinite(p.value)), now, `Input ${graphName} over 15 minutes`);
+ for (const [name, card] of cards) {
+  if (!snapshot.outputs.some(output => output.name === name)) { card.remove(); cards.delete(name); }
+ }
  for (const output of snapshot.outputs) {
   let card = cards.get(output.name);
   if (!card) {
@@ -109,6 +112,8 @@ function render() {
   chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
   let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? snapshot.stage?.mode === 'preview_only' ? 'Rehearsal blocks destination delivery. Preference is kept.' : 'Broadcast is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? `Sending ${snapshot.stage?.source === 'obs' ? 'OBS' : snapshot.stage?.source === 'brb' ? 'BRB' : 'prepared video'} video and audio.` : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
   $('.target-message', card).textContent = message;
+  $('.target-brief', card).textContent = !connected ? 'Status stale · controls unavailable' : !output.can_enable ? output.unavailable_reason : output.state === 'streaming' ? `Relay sending · ${current ? rate(last.outputs[output.name] || 0) : '—'} Mbps · ${Number.isFinite(output.dropped_frames) ? output.dropped_frames.toLocaleString() : '—'} drops` : output.state === 'retrying' ? `Connection failed · ${message.toLowerCase()}` : snapshot.stage?.mode === 'preview_only' ? 'Rehearsal · delivery blocked' : snapshot.stage?.stage === 'OFF' ? 'OFF · delivery stopped' : message;
+  card.classList.toggle('destination-failing', connected && output.enabled && output.state === 'retrying');
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
   const issue = $('.issue', card);
   issue.hidden = !output.last_error;
@@ -119,7 +124,7 @@ function render() {
   button.disabled = !connected || !output.can_enable || window.broadcastStages?.busy() || (snapshot.stage?.stage === 'ENDING' && !snapshot.stage?.error && !output.enabled);
   $('.toggle-text', card).textContent = output.enabled ? 'On' : 'Off';
   $('.switch-label', card).textContent = !output.can_enable ? 'Configuration required' : output.enabled ? 'Target enabled' : 'Target disabled';
-  $('.switch-help', card).textContent = !output.can_enable ? 'Set a server URL and key, then redeploy.' : snapshot.stage?.mode === 'preview_only' ? 'Preference only. Stop rehearsal before a real broadcast.' : snapshot.stage?.stage === 'OFF' ? 'Choose Prestream or Go live to start delivery.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.stage?.stage === 'ENDING' ? 'Additional destinations cannot join during ENDING.' : 'Enable to join the current on-air source.';
+  $('.switch-help', card).textContent = !output.can_enable ? 'Configure the destination URL and stream key in desktop Settings.' : snapshot.stage?.mode === 'preview_only' ? 'Preference only. Stop rehearsal before a real broadcast.' : snapshot.stage?.stage === 'OFF' ? 'Choose Prestream or Go live to start delivery.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.stage?.stage === 'ENDING' ? 'Additional destinations cannot join during ENDING.' : 'Enable to join the current on-air source.';
  }
 }
 function connection(ok, message) {

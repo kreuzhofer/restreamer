@@ -20,7 +20,7 @@ func TestWorkspaceNavigationPreservesBroadcastAndAuthentication(t *testing.T) {
 		if response.Code != 200 {
 			t.Fatalf("%s: %d", path, response.Code)
 		}
-		for _, visible := range []string{`aria-label="Workspace"`, `href="/live"`, `href="/studio"`, `href="/settings"`, `id="workspace-status"`} {
+		for _, visible := range []string{`aria-label="Workspace"`, `href="/live"`, `href="/studio"`, `href="/settings"`, `id="workspace-status"`, `id="workspace-alert"`, `href="/live" class="workspace-alert-link"`} {
 			if !strings.Contains(response.Body.String(), visible) {
 				t.Errorf("%s missing workspace element %s", path, visible)
 			}
