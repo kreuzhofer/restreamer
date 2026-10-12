@@ -90,13 +90,13 @@ func NeonNightTheme() Theme {
 // versioned artwork. The renderer selects the stage-specific motion master.
 func WorkshopTheme(id string) Theme {
 	s := RetroTheme(1).Style
-	s.Font, s.FontSize, s.ListFontSize = "arcade-pixel", 96, 40
+	s.Font, s.FontSize, s.ListFontSize = "arcade-pixel", 72, 40
 	s.Artwork, s.Effect = id, "workshop-motion"
 	s.BackgroundColor, s.TextColor, s.AccentColor = "#0d1420", "#fff0cc", "#e8873c"
 	s.BorderStyle = "none"
-	s.ContentRegion = ContentRegion{58, 16}
+	s.ContentRegion = ContentRegion{58, 19}
 	s.ContentOffsetYPercent = -33
-	s.LineSpacingPercent, s.ListSpacingPercent = 110, 10
+	s.LineSpacingPercent, s.ListSpacingPercent = 100, 0
 	name := "Maker Workshop"
 	switch id {
 	case "maker-halloween":

@@ -19,7 +19,7 @@ Halloween includes witch hats, a floating ghost and haunted workshop decor.
 Christmas includes Santa hats, a scarf, moving parcels and festive workshop decor.
 The upper sign stays blank in the artwork: all headlines, lists and links are
 rendered by the app using the embedded pixel font. The default sign region is
-58% wide and 16% high, offset upward by 33%, with a smaller list font. Overflow
+58% wide and 19% high, offset upward by 33%, with a smaller list font. Overflow
 is validated; text is never silently truncated or shrunk. Long agendas should be
 split into more scenes. Existing themes and retained revisions remain unchanged.
 

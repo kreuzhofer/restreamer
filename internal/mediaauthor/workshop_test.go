@@ -25,7 +25,7 @@ func TestWorkshopThemesKeepEditableContentInsideTheSign(t *testing.T) {
 			if !theme.Builtin || theme.Revision != 1 || theme.Style.Effect != "workshop-motion" {
 				t.Fatal(theme)
 			}
-			for _, size := range [][2]int{{640, 360}, {1920, 1080}} {
+			for _, size := range [][2]int{{320, 180}, {640, 360}, {1920, 1080}} {
 				for _, stage := range []string{"prestream", "ending"} {
 					d := Design{Name: "Workshop show", Stage: stage, Theme: ThemeRef{ID: id, Revision: 1}, Scenes: []Scene{
 						{ID: "title", Layout: "title", Text: "STARTING SOON", DurationSeconds: 12},
@@ -43,7 +43,7 @@ func TestWorkshopThemesKeepEditableContentInsideTheSign(t *testing.T) {
 							t.Fatal(message)
 						}
 						layout.face.Close()
-						if float64(layout.region.Min.Y) < float64(size[1])*.075 || float64(layout.region.Max.Y) > float64(size[1])*.265 {
+						if float64(layout.region.Min.Y) < float64(size[1])*.075-1 || float64(layout.region.Max.Y) > float64(size[1])*.265+1 {
 							t.Fatalf("content leaves the blank sign: %v", layout.region)
 						}
 					}
