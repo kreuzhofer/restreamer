@@ -52,3 +52,13 @@ This is an art and motion prototype. There is no configurable text, production B
 The prototype skill skips new automated tests. Validation uses Python/JavaScript syntax checks, existing web/artwork checks, decoded frame count/duration, selected rendered-frame inspection and desktop/phone browser checks. Full local `make check` passed during this prototype sequence. Exact final-SHA CI and the design verdict are recorded on GitHub issue #52. Captures `flat-comparison-desktop.png` and `flat-comparison-mobile.png` show the current page.
 
 Detailed-pass verification: the rendered MP4 decodes without errors and contains exactly 288 frames at 24 fps / 12 seconds / 4096×2304. Selected source frames show partial printing and the assembled walking character. Chrome decodes at readyState 4; expanded view renders a 2048×1152 canvas at integer scale, Space advances playback, and Escape restores the page. At 390px the page remains 390px wide and overflow stays inside the preview. Existing web/artwork and source syntax checks passed. The expanded screenshot is `flat-expanded-desktop.png`.
+
+## Motion polish
+
+The approved illustrated direction now has eased printer scanning and growth, a slower distance-driven walking cycle, a greeting wave, and a deliberate assembly release. The robot waits until the arm is clear. The returning supply shuttle pauses while the gripper closes before leaving. Every moving element uses the same 12-second clock.
+
+Use `--frames 0 287 288` to inspect the loop boundary. `loop-verification.json` records decoded RGB comparisons: the rendered endpoint is identical to the start, and the boundary changes fewer pixels than the immediately preceding frame transition. The encoded clip remains 288 frames / 24 fps / 12 seconds and decodes without errors. Desktop and 390px phone playback, seeking, half-speed and loop continuation were checked; see `polished-desktop.png` and `polished-phone.png`.
+
+`mobile.html` is a minimal standalone player with a loop-inspection control. For LAN preview, copy only this file as `index.html` and `F.mp4` to an otherwise empty temporary directory, then serve that directory bound to your LAN address. Do not expose the source directory on the network. The local comparison remains unchanged at port 18861.
+
+The user has requested production integration next: workshop BRB, prestream and ending, plus matching Halloween and Christmas sets. Those are production work beyond this captured motion prototype.

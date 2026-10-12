@@ -8,6 +8,7 @@ import bpy
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--still',type=int)
+parser.add_argument('--frames',type=int,nargs='+',help='Render selected inspection frames, including 288 for the loop endpoint')
 parser.add_argument('--save',action='store_true')
 opts=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
 ROOT=Path(__file__).resolve().parent
@@ -147,29 +148,32 @@ camera.name='Flat orthographic camera';camera.rotation_euler=(0,0,0);camera.data
 def smooth(v):v=max(0,min(1,v));return v*v*(3-2*v)
 def mix(a,b,v):return a+(b-a)*smooth(v)
 def animate(frame):
- t=frame/24;p=min(1,t/3.2)
- x=156 if t<3.2 else mix(156,275,(t-3.2)/2) if t<5.2 else 275 if t<7.3 else mix(275,540,(t-7.3)/4.3)
- phase=(x-275)/9*math.tau if t>=7.3 else 0;stride=math.sin(phase);walking=t>=7.3
+ # Every moving system uses the same periodic clock, including inspection frame 288.
+ frame=frame%288;t=frame/24;p=smooth(t/3.2)
+ x=156 if t<3.2 else mix(156,275,(t-3.2)/2) if t<5.2 else 275 if t<7.6 else mix(275,540,(t-7.6)/4)
+ phase=(x-275)/32*math.tau if t>=7.6 else 0;stride=math.sin(phase);walking=t>=7.6
  body_y=(151 if t<3.2 else mix(151,180,(t-3.2)/2))-(abs(stride)*.75 if walking else 0)
  cut=33*(1-p)
  parts=[('torso',3,0,24,21),('left arm',-3,3,8,20),('right arm',27,3,8,20),('left leg',7,20,7,13),('right leg',18,20,7,13)]
  for name,xx,yy,w,h in parts:
   direction=1 if name.startswith('left') else -1
-  if walking and 'leg' in name:xx+=stride*direction*2;yy-=max(0,stride*direction)*2
-  if walking and 'arm' in name:yy+=stride*direction*1.5
+  angle=0
+  if walking and 'leg' in name:xx+=stride*direction*3;yy-=max(0,stride*direction)*2.5
+  if walking and 'arm' in name:angle=-stride*direction*.18
+  if name=='right arm':angle+=smooth((t-7.05)/.3)*(1-smooth((t-8.15)/.35))*(1.9+.16*math.sin(t*math.tau*2))
   o=hero[name];o.location.z=5 if t>=6.7 else 3
-  pose(o,x+xx,body_y+yy,w,h,trim=cut-yy)
+  pose(o,x+xx,body_y+yy,w,h,trim=cut-yy,angle=angle)
  if t<5.2:hx,hy=349,136
  elif t<6.7:hx,hy=mix(349,273,(t-5.2)/1.5),mix(136,156,(t-5.2)/1.5)
  else:hx,hy=x-2,body_y-24
  hero['head'].location.z=5 if t>=6.7 else 3;pose(hero['head'],hx-3,hy-12,40,36)
- if t<3.2:tip_y=184-33*p;nx=172+math.sin(t/3.2*math.tau*8)*16
+ if t<3.2:tip_y=184-33*p;nx=172+math.sin(t/3.2*math.tau*8)*16*smooth(t/.3)*smooth((3.2-t)/.3)
  elif t<10.5:tip_y=151;nx=mix(172,207,(t-3.2)/.5)
  else:tip_y=mix(151,184,(t-10.5)/1.5);nx=mix(207,172,(t-10.5)/1.5)
  pose(extruder,nx-9,tip_y-28,18,28);place(gantry,139,tip_y-22)
  pose(spool,99,126,22,22,pivot=.5,angle=math.tau*2*p)
  if t<6.7:tx,ty=hx+17,hy-2
- else:tx,ty=mix(290,366,(t-6.7)/.8),mix(154,134,(t-6.7)/.8)
+ else:tx,ty=mix(290,366,(t-6.95)/.55),mix(154,134,(t-6.95)/.55)
  bx,by=332,184;dx,dy=tx-bx,ty-by;d=math.hypot(dx,dy);l1,l2=48,58
  along=(l1*l1-l2*l2+d*d)/(2*d);height=math.sqrt(max(0,l1*l1-along*along))
  ex=bx+along*dx/d+height*dy/d;ey=by+along*dy/d-height*dx/d
@@ -181,7 +185,7 @@ def animate(frame):
  for xx,yy in ((bx,by),(ex,ey),(tx,ty)):
   disc(sh,xx,yy,5,'ink');disc(sh,xx-.5,yy-.5,4,'steel_light');disc(sh,xx,yy,2.5,'steel_dark');disc(sh,xx,yy,1,'glint')
   for angle in (0,math.pi/2,math.pi,math.pi*1.5):rect(sh,xx+math.cos(angle)*3,yy+math.sin(angle)*3,.5,.5,'ink')
- gap=16 if t<6.7 else mix(24,16,(t-11.6)/.4) if t>=11.6 else 24
+ gap=16 if t<6.7 else mix(16,24,(t-6.7)/.25) if t<11.1 else mix(24,16,(t-11.1)/.3)
  for side in (-1,1):
   line(sh,tx+side*3,ty+1,tx+side*gap,ty+4,'light',2);line(sh,tx+side*gap,ty+4,tx+side*gap,ty+11,'light',2)
  geometry(arm,sh)
@@ -215,7 +219,7 @@ def animate(frame):
   blink=7.1<t<7.25 or 9.3<t<9.45
   for xx in (10,22):
    if blink:rect(sh,xx,10,4,1,'cyan')
-   elif walking:line(sh,xx,10,xx+2,8,'cyan');line(sh,xx+2,8,xx+4,10,'cyan')
+   elif t>=7.3:line(sh,xx,10,xx+2,8,'cyan');line(sh,xx+2,8,xx+4,10,'cyan')
    else:rect(sh,xx,8,4,3,'cyan');rect(sh,xx,8,1,1,'white')
   line(sh,15,14,18,15,'teal');line(sh,18,15,21,14,'teal')
  geometry(face,sh);place(face,hx,hy)
@@ -223,8 +227,8 @@ def animate(frame):
  next_head.hide_render=t<10.2
  sh=[]
  if t>=10.2:
-  supply_x=mix(530,349,(t-10.2)/1.4);pose(next_head,supply_x-3,124,40,36)
-  cart_x=supply_x if t<11.6 else mix(349,530,(t-11.6)/.4)
+  supply_x=mix(530,349,(t-10.2)/.9);pose(next_head,supply_x-3,124,40,36)
+  cart_x=supply_x if t<11.5 else mix(349,530,(t-11.5)/.5)
   box(sh,cart_x+12,116,10,6,'steel','mid');line(sh,cart_x+17,122,cart_x+17,132,'light')
  geometry(shuttle,sh)
  sh=[]
@@ -247,6 +251,6 @@ def animate(frame):
 
 animate(0)
 if opts.save:bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'maker-flat-prototype.blend'))
-frames=[opts.still] if opts.still is not None else range(288)
+frames=opts.frames if opts.frames is not None else [opts.still] if opts.still is not None else range(288)
 for frame in frames:
  s.frame_set(frame);animate(frame);s.render.filepath=str(OUT/f'{frame:04}.png');bpy.ops.render.render(write_still=True)

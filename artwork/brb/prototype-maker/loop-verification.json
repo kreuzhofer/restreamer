@@ -1,0 +1,12 @@
+{
+  "endpoint_identical": true,
+  "endpoint_sha256": "5a46322fe3c8df6be455a95994da3a040adad441d88f4a82b062aee1de47dea9",
+  "before_boundary": {
+    "mean_channel_difference": 0.751,
+    "changed_pixels_percent": 1.2994
+  },
+  "across_boundary": {
+    "mean_channel_difference": 0.5573,
+    "changed_pixels_percent": 1.0559
+  }
+}

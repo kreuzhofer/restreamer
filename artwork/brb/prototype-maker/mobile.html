@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maker BRB · polished motion</title>
+<style>
+:root{color-scheme:dark;background:#0d1420;color:#e2ebf5;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{margin:0;padding:16px;max-width:1400px;margin-inline:auto}h1{font-size:20px;margin:8px 0 16px}video{display:block;width:100%;max-height:85vh;image-rendering:pixelated;background:#000}p{color:#b8c4d4;font-size:14px;line-height:1.5}.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px}button,select{font:inherit;color:inherit;background:#1b2c40;border:1px solid #476078;padding:10px 14px;border-radius:8px}button:focus-visible,select:focus-visible{outline:2px solid #ffb76c;outline-offset:3px}.tag{font-size:11px;letter-spacing:.14em;color:#ffb76c}label{display:flex;gap:8px;align-items:center}#error{color:#ffb49a}
+</style>
+</head>
+<body>
+<div class="tag">FACTORY MOTION · POLISHED PASS</div>
+<h1>Idea → Build → Repeat</h1>
+<video controls autoplay muted loop playsinline preload="auto" src="F.mp4?v=polish1" aria-label="Animated pixel-art maker factory"></video>
+<div class="controls"><button id="seam" type="button">Watch loop seam</button><label>Speed <select id="speed"><option value="1">1×</option><option value="0.5">½×</option></select></label></div>
+<p>Eased printer movement, a deliberate head handoff, a greeting wave and calmer footsteps. Turn your phone sideways and use the video’s fullscreen control for a larger view.</p>
+<p id="error" role="alert" hidden>The video could not play. Reload the page and use its play button.</p>
+<script>
+const video=document.querySelector('video'),error=document.querySelector('#error');
+document.querySelector('#speed').onchange=e=>video.playbackRate=Number(e.target.value);
+document.querySelector('#seam').onclick=()=>{
+ const seek=()=>{video.currentTime=10.2;video.play().catch(()=>error.hidden=false);};
+ if(video.readyState>=1)seek();else video.addEventListener('loadedmetadata',seek,{once:true});
+};
+video.addEventListener('error',()=>error.hidden=false);
+</script>
+</body>
+</html>
