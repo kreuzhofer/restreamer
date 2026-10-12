@@ -141,7 +141,6 @@
   .studio-app .generator-grid { padding-bottom: 8px; }
   .studio-app .generator-sidebar { padding: 16px; }
   .studio-app #new-design, .studio-app .delete-button, .studio-app #asset-upload,
-  .studio-app #studio-themes > :not(h2):not(.collection-mobile-note), .studio-app #studio-templates > :not(h2):not(.collection-mobile-note),
   .studio-app .studio-scenes, .studio-app .studio-inspector, .studio-app .studio-panel-switch,
   .studio-app .studio-monitor > .studio-tabs, .studio-app #studio-scene-preview,
   .studio-app #generate-design, .studio-app .generator-asset button, .studio-app .studio-authoring, .studio-app #save-actions { display: none !important; }
@@ -198,4 +197,27 @@
   .media-upload-pane { border: 0; padding: 0; }
   .studio-app .media-library-item button:not(.studio-authoring) { display: inline-block !important; }
   #asset-list .generator-asset select, .media-revision-row .preview-button { min-height: 44px; }
+}
+
+/* Collection administration stays outside the focused scene editor. */
+.studio-template-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 380px); gap: 24px; align-items: start; }
+#template-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.template-card { padding: 16px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+.template-card h3 { margin: 0 0 8px; font-size: 15px; overflow-wrap: anywhere; }
+.template-card button { margin: 6px 8px 0 0; }
+#template-authoring { border-left: 1px solid var(--border); padding-left: 24px; }
+#template-authoring h3 { margin-top: 0; }
+.theme-selection { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.theme-selection > label { max-width: 520px; }
+#studio-themes #theme-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; }
+#theme-fields label, #template-source, #theme-adoption-state { min-width: 0; overflow-wrap: anywhere; }
+#theme-status, #theme-error { overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .studio-template-grid { grid-template-columns: 1fr; }
+  #template-authoring { border-left: 0; border-top: 1px solid var(--border); padding: 20px 0 0; }
+  #studio-themes #theme-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  #studio-themes select, #templates-refresh, #theme-refresh { min-height: 44px; }
+  .studio-template-grid { gap: 0; }
 }

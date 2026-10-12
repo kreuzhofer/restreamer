@@ -182,10 +182,12 @@ never starts or stops a broadcast. Profile drafts survive Live/Settings switches
 leaving a page with unsaved edits prompts before discarding them. Streaming-profile
 setup requires a desktop window and an OFF broadcast, including no rehearsal.
 
-Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Create or
+Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Themes browses
+immutable revisions and explicitly adopts a saved revision into the open design;
+publishing shared styling alone leaves existing designs pinned. Create or
 open a design to use its scene list, quick preview, and properties. Properties
 switch between the selected **Scene**, whole **Design** settings (including exact
-theme revision, soundtrack, loop or ending fade), and reusable **Template** actions.
+theme revision, soundtrack, loop or ending fade), and a **Template** shortcut to collection administration.
 **Results & queue** separates the current draft, latest generation attempt, last
 ready output, selected stage revision, and active revision. Each design has its
 own newest-first history with exact-result preview, explicit activation links,
@@ -801,6 +803,9 @@ prestream starter, the thanks/follow-up-links ending starter, or a saved content
 template. Select the style theme separately. Every starter scene can be edited,
 reordered, duplicated, or removed using the normal scene editor.
 
+In **Studio → Templates**, browse built-in starters and custom templates, then
+use **Use template** to choose a name and separate theme for an independent design.
+The collection also shows the open design as the source for explicit save/update.
 **Save as new template** captures the current draft content explicitly.
 **Update selected template** replaces only that reusable template; draft autosave
 never does this. Copies are independent: changes to one show or the template do
