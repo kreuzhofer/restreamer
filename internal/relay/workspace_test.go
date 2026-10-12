@@ -96,3 +96,19 @@ func TestSettingsProvidesAuthenticatedDestinationManagement(t *testing.T) {
 		}
 	}
 }
+
+func TestPhoneRemoteOffersOperationAndSignalsWithoutDesktopSetup(t *testing.T) {
+	s := dashboardServer(t)
+	for path, labels := range map[string][]string{
+		"/live":     {`aria-label="Remote panels"`, `aria-controls="live-primary"`, `aria-controls="live-sidebar"`, `Uploads and preparation require desktop`},
+		"/studio":   {`Text edits, uploads, generation and theme editing require desktop`},
+		"/settings": {`Ingestion keys, destination setup and profile changes require desktop`},
+	} {
+		response := dashboardRequest(s, "GET", path, "")
+		for _, label := range labels {
+			if !strings.Contains(response.Body.String(), label) {
+				t.Errorf("%s missing mobile capability: %s", path, label)
+			}
+		}
+	}
+}
