@@ -8,7 +8,7 @@ The user's clarification is that Blender can be the authoring tool for every opt
 2. Fully modeled 3D miniature scenery and actors (the initial proof).
 3. Fully modeled 3D with pixel textures, stepped shading and a low-resolution render.
 
-The primary `index.html?variant=2|3` now compares **2 versus 3** at identical camera position and inspection time. This replaces the earlier proposed illustrated-background/rendered-actor hybrid as the current experiment. Option 1 remains a valid fully animated approach, but is not implemented in this comparison. The original A/B/C camera proof remains at `camera-study.html?variant=A|B|C`.
+The primary `index.html?variant=1|2|3` now compares **all three approaches**, preserving inspection time when switching. Options 2 and 3 share the same camera and geometry; option 1 uses a fully frontal sprite scene. This replaces the earlier proposed illustrated-background/rendered-actor hybrid as the current experiment. Option 1 is now implemented by `build_flat.py` and `F.mp4`. The original A/B/C camera proof remains at `camera-study.html?variant=A|B|C`.
 
 `P.mp4` is the pixel-styled version: the same geometry and 12-second animation as A, with deterministic 32×32 pixel texture tiles, nearest filtering, four discrete shading levels and a 512×288 source render enlarged to 2048×1152 for the downloadable MP4. The pixel preview samples that video back to the 512×288 source grid and draws it without smoothing at an integer device-pixel scale. The `.blend` file packs those generated texture images. This is a stylization experiment, not a claim that pixel textures automatically reproduce hand-drawn sprite art. The approved illustration is not used as a background in either video.
 
@@ -19,7 +19,7 @@ Rebuild the pixel variant:
 ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A-pixel/%04d.png -vf scale=2048:1152:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/P.mp4
 ```
 
-No aesthetic verdict has been accepted yet. Continue comparing motion readability and art treatment before production work.
+The user confirmed that corrected option 3 looks much sharper. The final style choice remains open while option 1 joins the comparison.
 
 The initial follow-up P video contained exactly 288 frames at 24 fps and 1536×864. Chrome decoded it at readyState 4 and advanced playback. Switching 3 → 2 → 3 retained the 5.8-second assembly inspection point. At 390px the page width remained 390px with working decoded media. Desktop and phone comparison screenshots are retained. The first prototype capture (`813ecae`) passed repository CI; the follow-up capture requires its own branch CI result, recorded on issue #52 rather than modifying the captured commit after verification.
 
@@ -73,3 +73,18 @@ The MP4 uses a 4× enlargement and CRF 12 instead of 3×/CRF 18: source-pixel bo
 This is a visual differential check, not a perceptual unit test: the prototype skill explicitly skips new tests. Existing web and artwork checks, Python/JavaScript syntax checks, decoded-video checks and desktop/mobile browser checks are used instead. Final verification and exact-SHA CI evidence are recorded on #52.
 
 Corrected-video verification: 288 decoded frames, 24 fps, 12 seconds, 2048×1152 H.264/yuv420p, no FFmpeg decode errors. Chrome reached readyState 4 and advanced playback; switching 3 → 2 → 3 retained 5.8 seconds. At desktop DPR 2, the canvas is 1024×576 pixels displayed at 512×288 CSS pixels (2× source pixels); at 390px/DPR 1 it uses 1× with internal scrolling and no page overflow. Both screenshots are updated. Existing web tests (27), original BRB tests (3), and all three artwork verification commands passed locally.
+
+## Option 1: flat animated pixel art
+
+`build_flat.py` creates actual flat, code-drawn pixel sprites in Blender: integer rectangle meshes, a small fixed palette, emission colors and a frontal orthographic camera. There are no volumetric props, lit 3D surfaces, perspective or image-generated backdrop. Separate sprite layers animate the rotating CAD sketch, AI activity, filament spool, extruder and gantry, printed body reveal, conveyor, articulated assembly arm, head attachment and alternating walking poses. The story uses the same 12-second beat timings as 2/3. This tests the flat-art direction rather than reproducing all the detail of the approved illustration.
+
+Regenerate the editable flat set and animation:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build_flat.py -- --save
+ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/flat/%04d.png -vf scale=2048:1152:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/F.mp4
+```
+
+`maker-flat-prototype.blend` saves the editable sprite set at the start; the Python script is the animation source, including changing sprite meshes. Timeline keyframes are not baked into the saved set. `--still 139` renders a single inspection frame. Pixel styles 1 and 3 share the unsmoothed, integer-scaled preview; style 2 retains the normal video view. The experiment remains on `prototype/maker-brb`, outside the production dashboard and main release.
+
+Flat-option verification: 288 frames at 24 fps, 12 seconds, 2048×1152, clean FFmpeg decode; Python/JavaScript syntax and existing web/artwork checks passed. Chrome decoded F.mp4 at readyState 4, advanced during playback, retained 5.8 seconds through 1 → 2 → 3 → 1, and showed no page overflow at 390px. Console warnings/errors were empty. Flat desktop/mobile screenshots are included. Full local `make check` passed during this prototype update; final branch CI is recorded on #52.
