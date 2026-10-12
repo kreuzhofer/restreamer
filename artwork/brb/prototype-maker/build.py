@@ -48,6 +48,8 @@ black=mat('Screen glass',(.008,.02,.027)); white=mat('Lettering',(.97,.84,.55),0
 # Geometry, animation and camera remain identical to the miniature reference.
 if opts.style=='pixel':
  scene.render.resolution_x=512;scene.render.resolution_y=288
+ # Keep samples inside the source pixel instead of blurring across its neighbours.
+ scene.render.filter_size=.01
  for material in [navy,wall,blue,edge,dark,silver,orange,coral,cream,purple,black]:
   base=material.diffuse_color[:3];rng=random.Random(material.name)
   tex=bpy.data.images.new('Pixel texture - '+material.name,width=32,height=32)
@@ -103,13 +105,15 @@ def light(name,loc,power,color,size):
  o.data.energy=power;o.data.color=color;o.data.shape='DISK';o.data.size=size;aim(o,(0,0,1.5))
 def pixeltext(text,x,y,z,scale,material):
  glyphs=json.loads((ROOT.parent/'font.json').read_text())
+ # Solid glyph cells avoid subpixel cracks once reconstruction smoothing is removed.
+ fill=1 if opts.style=='pixel' else .92
  verts=[]; faces=[]
  for i,ch in enumerate(text):
   for row,line in enumerate(glyphs.get(ch,[])):
    for col,v in enumerate(line):
     if v!='1':continue
     xx=x+(i*6+col)*scale; zz=z+(6-row)*scale; j=len(verts)
-    verts.extend([(xx,y,zz),(xx+scale*.92,y,zz),(xx+scale*.92,y,zz+scale*.92),(xx,y,zz+scale*.92)])
+    verts.extend([(xx,y,zz),(xx+scale*fill,y,zz),(xx+scale*fill,y,zz+scale*fill),(xx,y,zz+scale*fill)])
     faces.append((j,j+1,j+2,j+3))
  mesh=bpy.data.meshes.new(text);mesh.from_pydata(verts,[],faces);mesh.materials.append(material)
  o=bpy.data.objects.new(text,mesh);bpy.context.collection.objects.link(o);return o

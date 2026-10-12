@@ -10,18 +10,18 @@ The user's clarification is that Blender can be the authoring tool for every opt
 
 The primary `index.html?variant=2|3` now compares **2 versus 3** at identical camera position and inspection time. This replaces the earlier proposed illustrated-background/rendered-actor hybrid as the current experiment. Option 1 remains a valid fully animated approach, but is not implemented in this comparison. The original A/B/C camera proof remains at `camera-study.html?variant=A|B|C`.
 
-`P.mp4` is the pixel-styled version: the same geometry and 12-second animation as A, with deterministic 32×32 pixel texture tiles, nearest filtering, four discrete shading levels and a 512×288 source render enlarged to 1536×864. The `.blend` file packs those generated texture images. This is a stylization experiment, not a claim that pixel textures automatically reproduce hand-drawn sprite art. The approved illustration is not used as a background in either video.
+`P.mp4` is the pixel-styled version: the same geometry and 12-second animation as A, with deterministic 32×32 pixel texture tiles, nearest filtering, four discrete shading levels and a 512×288 source render enlarged to 2048×1152 for the downloadable MP4. The pixel preview samples that video back to the 512×288 source grid and draws it without smoothing at an integer device-pixel scale. The `.blend` file packs those generated texture images. This is a stylization experiment, not a claim that pixel textures automatically reproduce hand-drawn sprite art. The approved illustration is not used as a background in either video.
 
 Rebuild the pixel variant:
 
 ```sh
 /Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build.py -- --variant A --style pixel --save
-ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A-pixel/%04d.png -vf scale=1536:864:flags=neighbor -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/P.mp4
+ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A-pixel/%04d.png -vf scale=2048:1152:flags=neighbor -c:v libx264 -threads 2 -crf 12 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/P.mp4
 ```
 
 No aesthetic verdict has been accepted yet. Continue comparing motion readability and art treatment before production work.
 
-The follow-up P video also contains exactly 288 frames at 24 fps and 1536×864. Chrome decoded it at readyState 4 and advanced playback. Switching 3 → 2 → 3 retained the 5.8-second assembly inspection point. At 390px the page width remained 390px with working decoded media. Desktop and phone comparison screenshots are retained. The first prototype capture (`813ecae`) passed repository CI; the follow-up capture requires its own branch CI result, recorded on issue #52 rather than modifying the captured commit after verification.
+The initial follow-up P video contained exactly 288 frames at 24 fps and 1536×864. Chrome decoded it at readyState 4 and advanced playback. Switching 3 → 2 → 3 retained the 5.8-second assembly inspection point. At 390px the page width remained 390px with working decoded media. Desktop and phone comparison screenshots are retained. The first prototype capture (`813ecae`) passed repository CI; the follow-up capture requires its own branch CI result, recorded on issue #52 rather than modifying the captured commit after verification.
 
 ## Initial camera experiment
 
@@ -61,3 +61,15 @@ Limitations: robot walking is a simple pose cycle; printing reveals solid compon
 ## Manual verification
 
 All three videos rendered successfully. A contains 288 frames at 24 fps, 1536×864 and exactly 12 seconds. In Chrome, playback decoded at `readyState=4` and advanced; the assembly button sought to exactly 5.8 seconds; switching A → B → C retained that inspection time and decoded each video. The local static server does not provide seekable byte ranges, so the page loads each small video as an in-memory Blob before playback. At 390×844, page width was 390px and the video, controls and readout remained available. Temporary viewport override was reset. Desktop and mobile screenshots are included. No automated tests were added for this throwaway visual experiment.
+
+## Pixel sharpness correction
+
+The user preferred style 2 but identified blur in style 3, rather than rejecting pixel art. A fixed-frame comparison at frame 139 isolated the source rendering from browser/video scaling. Rendering that frame independently reproduced the softness seen in the sequence; it was not a motion-blur setting (motion blur was already off). The pixel scene inherited Blender's 1.5-pixel reconstruction filter. Narrowing only that filter to 0.01 made silhouettes, lettering and texture clusters visibly crisp. Render sample count stays at 64 to retain stable lighting. Pixel-style font cells fill their complete grid square so removal of smoothing does not reveal subpixel cracks in the lettering. This does not turn the 3D scene into hand-drawn pixel art.
+
+The previous responsive video fit was also fractional: at the tested desktop size, each source pixel occupied about 2.68 physical screen pixels. The new canvas view reconstructs the 512×288 grid with smoothing disabled and displays it at the largest whole-number device-pixel scale that fits. A screen too small for 1× can scroll the image rather than silently shrinking it. Resize, seeking, paused-frame inspection and style switches redraw the canvas. The scale is shown below the picture.
+
+The MP4 uses a 4× enlargement and CRF 12 instead of 3×/CRF 18: source-pixel boundaries align with the 4:2:0 chroma grid, and the preview samples pixel centers before enlargement. Standard H.264 playback and downloads remain available. No 4:4:4-only codec dependency is introduced.
+
+This is a visual differential check, not a perceptual unit test: the prototype skill explicitly skips new tests. Existing web and artwork checks, Python/JavaScript syntax checks, decoded-video checks and desktop/mobile browser checks are used instead. Final verification and exact-SHA CI evidence are recorded on #52.
+
+Corrected-video verification: 288 decoded frames, 24 fps, 12 seconds, 2048×1152 H.264/yuv420p, no FFmpeg decode errors. Chrome reached readyState 4 and advanced playback; switching 3 → 2 → 3 retained 5.8 seconds. At desktop DPR 2, the canvas is 1024×576 pixels displayed at 512×288 CSS pixels (2× source pixels); at 390px/DPR 1 it uses 1× with internal scrolling and no page overflow. Both screenshots are updated. Existing web tests (27), original BRB tests (3), and all three artwork verification commands passed locally.
