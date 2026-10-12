@@ -43,3 +43,16 @@ func TestLiveConsoleOffersMonitoringAndReadinessBeforeOperation(t *testing.T) {
 		}
 	}
 }
+
+func TestPreparedMediaIsAvailableOnDemandWithoutLiveUploadControls(t *testing.T) {
+	s := dashboardServer(t)
+	page := dashboardRequest(s, "GET", "/live", "").Body.String()
+	for _, control := range []string{`<dialog id="prepared-media-drawer"`, `id="prepared-media-open"`, `id="clip-playback-controls"`, `id="library-loading"`, `href="/studio?collection=media"`} {
+		if !strings.Contains(page, control) {
+			t.Errorf("missing prepared-media control %s", control)
+		}
+	}
+	if strings.Contains(page, `id="library-upload"`) {
+		t.Fatal("Live still exposes media upload instead of Studio")
+	}
+}
