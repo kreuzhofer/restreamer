@@ -2,7 +2,7 @@
 Blender background script; three compositions, one deterministic 12-second cycle.
 Run: Blender -b --python build.py -- --variant A [--still 120]
 """
-import bpy, math, json, sys, argparse
+import bpy, math, json, sys, argparse, random
 from pathlib import Path
 from mathutils import Vector
 
@@ -10,6 +10,7 @@ args = argparse.ArgumentParser()
 args.add_argument('--variant', default='A', choices=['A','B','C'])
 args.add_argument('--still', type=int)
 args.add_argument('--save', action='store_true')
+args.add_argument('--style', default='miniature', choices=['miniature','pixel'])
 opts = args.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT/'renders'; OUT.mkdir(exist_ok=True)
@@ -42,6 +43,42 @@ orange=mat('Safety amber',(.96,.36,.045),.15); coral=mat('Printed coral',(.94,.1
 cream=mat('Ivory casing',(.8,.83,.69)); cyan=mat('Cyan pixels',(.11,.82,.76),0,1.2)
 gold=mat('Warm light',(1,.64,.19),0,2); purple=mat('Violet',(.34,.17,.61))
 black=mat('Screen glass',(.008,.02,.027)); white=mat('Lettering',(.97,.84,.55),0,.5)
+
+# Second experiment: actual nearest-filtered pixel textures plus stepped shading.
+# Geometry, animation and camera remain identical to the miniature reference.
+if opts.style=='pixel':
+ scene.render.resolution_x=512;scene.render.resolution_y=288
+ for material in [navy,wall,blue,edge,dark,silver,orange,coral,cream,purple,black]:
+  base=material.diffuse_color[:3];rng=random.Random(material.name)
+  tex=bpy.data.images.new('Pixel texture - '+material.name,width=32,height=32)
+  tex.colorspace_settings.name='Non-Color'
+  pixels=[]
+  for y in range(32):
+   for x in range(32):
+    # Deliberate small pixel clusters: sparse paint flecks, seams and scratches.
+    value=1
+    if x in [0,31] or y in [0,31]:value=.79
+    elif (x//2+y//2)%13==0:value=1.12
+    elif rng.random()<.045:value=.68
+    if material==silver and y%8 in [0,1]:value=1.23
+    pixels.extend([min(1,c*value) for c in base]+[1])
+  tex.pixels=pixels;tex.pack()
+  nodes=material.node_tree.nodes;links=material.node_tree.links;nodes.clear()
+  output=nodes.new('ShaderNodeOutputMaterial');emission=nodes.new('ShaderNodeEmission')
+  diffuse=nodes.new('ShaderNodeBsdfDiffuse');diffuse.inputs['Color'].default_value=(.8,.8,.8,1)
+  to_rgb=nodes.new('ShaderNodeShaderToRGB');ramp=nodes.new('ShaderNodeValToRGB')
+  ramp.color_ramp.interpolation='CONSTANT'
+  ramp.color_ramp.elements.remove(ramp.color_ramp.elements[1])
+  for i,(position,level) in enumerate([(0,.22),(.10,.46),(.26,.74),(.5,1.04)]):
+   stop=ramp.color_ramp.elements[0] if i==0 else ramp.color_ramp.elements.new(position)
+   stop.position=position;stop.color=(level,level,level,1)
+  image=nodes.new('ShaderNodeTexImage');image.image=tex;image.interpolation='Closest';image.projection='BOX'
+  geometry=nodes.new('ShaderNodeTexCoord');scale=nodes.new('ShaderNodeVectorMath');scale.operation='SCALE';scale.inputs[3].default_value=1.2
+  multiply=nodes.new('ShaderNodeMixRGB');multiply.blend_type='MULTIPLY';multiply.inputs[0].default_value=1
+  links.new(geometry.outputs['Object'],scale.inputs[0]);links.new(scale.outputs['Vector'],image.inputs['Vector'])
+  links.new(diffuse.outputs[0],to_rgb.inputs[0]);links.new(to_rgb.outputs[0],ramp.inputs[0])
+  links.new(image.outputs['Color'],multiply.inputs[1]);links.new(ramp.outputs[0],multiply.inputs[2])
+  links.new(multiply.outputs[0],emission.inputs['Color']);links.new(emission.outputs[0],output.inputs['Surface'])
 
 def cube(name, loc, size, material, bevel=0):
  bpy.ops.mesh.primitive_cube_add(size=1, location=loc); o=bpy.context.object; o.name=name
@@ -245,10 +282,11 @@ if opts.variant=='A':cam.location=(0,-25,9.3);cam.data.ortho_scale=18.8;aim(cam,
 if opts.variant=='B':cam.location=(12,-19,15);cam.data.ortho_scale=21;aim(cam,(0,.7,2.4))
 if opts.variant=='C':cam.data.ortho_scale=10.2
 if opts.save:
- animate(0);bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'maker-prototype.blend'))
+ animate(0);bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/('maker-pixel-prototype.blend' if opts.style=='pixel' else 'maker-prototype.blend')))
+render_key=opts.variant+('-pixel' if opts.style=='pixel' else '')
 if opts.still is not None:
- animate(opts.still/24);scene.render.filepath=str(OUT/f'{opts.variant}-still.png');bpy.ops.render.render(write_still=True)
+ animate(opts.still/24);scene.render.filepath=str(OUT/f'{render_key}-still.png');bpy.ops.render.render(write_still=True)
 else:
- folder=OUT/opts.variant;folder.mkdir(exist_ok=True)
+ folder=OUT/render_key;folder.mkdir(exist_ok=True)
  for frame in range(288):
   animate(frame/24);scene.render.filepath=str(folder/f'{frame:04}.png');bpy.ops.render.render(write_still=True)

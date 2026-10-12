@@ -1,5 +1,30 @@
 # THROWAWAY — maker BRB motion prototype
 
+## Follow-up: distinguish authoring tool from visual style
+
+The user's clarification is that Blender can be the authoring tool for every option:
+
+1. Flat illustrated pixel sprites and backgrounds, animated as 2D layers in Blender.
+2. Fully modeled 3D miniature scenery and actors (the initial proof).
+3. Fully modeled 3D with pixel textures, stepped shading and a low-resolution render.
+
+The primary `index.html?variant=2|3` now compares **2 versus 3** at identical camera position and inspection time. This replaces the earlier proposed illustrated-background/rendered-actor hybrid as the current experiment. Option 1 remains a valid fully animated approach, but is not implemented in this comparison. The original A/B/C camera proof remains at `camera-study.html?variant=A|B|C`.
+
+`P.mp4` is the pixel-styled version: the same geometry and 12-second animation as A, with deterministic 32×32 pixel texture tiles, nearest filtering, four discrete shading levels and a 512×288 source render enlarged to 1536×864. The `.blend` file packs those generated texture images. This is a stylization experiment, not a claim that pixel textures automatically reproduce hand-drawn sprite art. The approved illustration is not used as a background in either video.
+
+Rebuild the pixel variant:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender -b --python artwork/brb/prototype-maker/build.py -- --variant A --style pixel --save
+ffmpeg -y -framerate 24 -i artwork/brb/prototype-maker/renders/A-pixel/%04d.png -vf scale=1536:864:flags=neighbor -c:v libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart artwork/brb/prototype-maker/P.mp4
+```
+
+No aesthetic verdict has been accepted yet. Continue comparing motion readability and art treatment before production work.
+
+The follow-up P video also contains exactly 288 frames at 24 fps and 1536×864. Chrome decoded it at readyState 4 and advanced playback. Switching 3 → 2 → 3 retained the 5.8-second assembly inspection point. At 390px the page width remained 390px with working decoded media. Desktop and phone comparison screenshots are retained. The first prototype capture (`813ecae`) passed repository CI; the follow-up capture requires its own branch CI result, recorded on issue #52 rather than modifying the captured commit after verification.
+
+## Initial camera experiment
+
 Question: can a short printer → conveyor → robot assembly sequence read clearly, and is a Blender-rendered miniature set a promising direction for the maker BRB?
 
 This is the visual branch of the prototype skill, adapted to an animation rather than an application UI. Three structurally different camera compositions share one route (`?variant=A`, `B`, `C`) and the same 12-second choreography. A is a fixed arcade elevation, B is an isometric workshop diorama, C follows the build as an inspection shot. The floating switcher is isolated in this standalone prototype; the embedded production dashboard does not serve this directory.
