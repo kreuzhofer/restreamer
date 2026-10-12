@@ -19,6 +19,8 @@
  <script src="/workspace.js" defer></script>
  <link rel="stylesheet" href="/ingestion.css">
  <script src="/ingestion.js" defer></script>
+ <link rel="stylesheet" href="/mobile-remote.css">
+ <script src="/mobile-remote.js" defer></script>
 </head>
 <body>
  <main>
@@ -34,8 +36,9 @@
   <div id="live-workspace" data-workspace-panel="live">
   <h1 class="visually-hidden" tabindex="-1">Live broadcast console</h1>
   <div id="notice" class="notice" role="alert" hidden></div>
+  <nav class="remote-panels" aria-label="Remote panels"><button type="button" data-remote-panel="operate" aria-controls="live-primary" aria-pressed="true">Operate</button><button type="button" data-remote-panel="signals" aria-controls="live-sidebar" aria-pressed="false">Signals &amp; destinations</button></nav>
   <div id="live-console" class="live-console">
-   <div class="live-primary" aria-label="Broadcast operation">
+   <div id="live-primary" class="live-primary" aria-label="Broadcast operation">
   <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><p class="eyebrow">ACTUAL SELECTED FEED</p><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
   <section class="panel stage-panel" aria-labelledby="stage-title">
    <div class="panel-heading"><div><p class="eyebrow">SHOW CONTROL</p><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
@@ -68,7 +71,7 @@
    <p id="command-status" class="stage-help" role="status"></p>
   </section>
    </div>
-   <aside class="live-sidebar" aria-label="Input and preparation">
+   <aside id="live-sidebar" class="live-sidebar" aria-label="Input and preparation">
   <section class="panel preview-panel" aria-labelledby="preview-title">
    <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">OBS input</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
    <div class="preview-screen"><video id="preview-video" controls autoplay muted playsinline aria-label="Live input preview"></video></div>
@@ -136,7 +139,7 @@
   </div>
   <section id="settings-workspace" data-workspace-panel="settings" class="settings-workspace" aria-labelledby="settings-title" hidden>
    <p class="eyebrow">CONNECTIONS &amp; SETUP</p><h1 id="settings-title" tabindex="-1">Settings</h1>
-   <p class="desktop-only-note">Use a desktop window to configure connections and the streaming profile. Live controls remain available on your phone.</p>
+   <p class="desktop-only-note">Ingestion keys, destination setup and profile changes require desktop. Use Live on your phone to switch destination delivery and operate prepared media.</p>
    <div class="settings-desktop">
    <section id="ingestion-settings" class="panel settings-ingestion" data-ingestion-settings aria-label="OBS ingestion"></section>
    <section class="panel settings-profile" aria-label="Streaming profile">
@@ -167,7 +170,8 @@
   <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
    <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Browse exact revisions</h2></div><span id="library-count" class="badge">Loading</span></div>
    <p class="library-help">Browse and preview an exact revision before selecting or activating it. Saved selections affect the next use; current and suspended playback retain their revision.</p>
-   <a class="preview-button" href="/studio?collection=media">Upload &amp; prepare in Studio Media</a>
+   <a class="preview-button remote-desktop" href="/studio?collection=media">Upload &amp; prepare in Studio Media</a>
+   <p class="remote-only library-help">Uploads and preparation require desktop. You can preview exact prepared revisions, select stage media and play clips here.</p>
    <p id="library-empty" class="library-help" hidden>No prepared media yet. Prepare an upload or generate a design in Studio, then return here to review and select it.</p>
    <p id="library-error" class="notice" role="alert" hidden></p>
    <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>

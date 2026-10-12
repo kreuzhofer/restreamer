@@ -182,6 +182,14 @@ never starts or stops a broadcast. Profile drafts survive Live/Settings switches
 leaving a page with unsaved edits prompts before discarding them. Streaming-profile
 setup requires a desktop window and an OFF broadcast, including no rehearsal.
 
+On phones, Live is a broadcast remote: **Operate** keeps the outgoing preview,
+stages, Return/Stop and pinned clips together. **Signals & destinations** opens
+delivery switches, readiness, OBS preview and diagnostics on demand. Preview
+pause controls reduce browser video traffic without changing the broadcast.
+**Browse prepared media** supports exact previews and saved stage selections.
+Text edits, uploads, generation, theme editing, ingestion credentials, destination
+setup and streaming-profile changes require desktop.
+
 Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Create or
 open a design to use its scene list, quick preview, and properties. Properties
 switch between the selected **Scene**, whole **Design** settings (including exact
