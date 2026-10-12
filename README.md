@@ -182,6 +182,14 @@ uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
 the dashboard and status API return 503 while RTMP input continues operating.
 A broadcast starts only through the authenticated dashboard/API.
 
+Use **Live** (`/live`) for operation, **Studio** (`/studio`) for media authoring,
+and **Settings** (`/settings`) for the shared streaming profile. The original `/`
+and `/generator?id=…` bookmarks still work. Each workspace shows the server's
+selected stage, on-air source, delivery mode, and status freshness. Navigation
+never starts or stops a broadcast. Profile drafts survive Live/Settings switches;
+leaving a page with unsaved edits prompts before discarding them. Streaming-profile
+setup requires a desktop window and an OFF broadcast, including no rehearsal.
+
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
 dedicated hostname at `/` (subpath hosting is not supported). A proxy on the same
