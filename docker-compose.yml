@@ -7,7 +7,8 @@ services:
       - "${RTMP_BIND_ADDRESS:-0.0.0.0}:1935:1935"
       - "${STATUS_BIND_ADDRESS:-127.0.0.1}:${STATUS_PORT:-8080}:8080"
     environment:
-      INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:?Set INGEST_STREAM_KEY in .env}
+      # Optional one-time legacy migration; remove after the managed key is stored.
+      INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:-}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       TARGET_STATE_FILE: /data/targets.json

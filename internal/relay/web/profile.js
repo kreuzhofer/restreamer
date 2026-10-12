@@ -8,6 +8,8 @@
 
   function renderProfile() {
     el('input-profile').hidden = !snapshot?.brb?.ready || !saved;
+    el('profile-unavailable').hidden = !el('input-profile').hidden;
+    el('profile-unavailable').textContent = !connected ? 'Streaming profile unavailable while disconnected. Retrying automatically.' : 'Enable and prepare BRB on the server to configure the shared streaming profile.';
     if (!saved) return;
     el('profile-active').textContent = `Active saved profile: ${saved.width} × ${saved.height} · ${saved.fps} fps · ${saved.sample_rate / 1000} kHz stereo`;
     const resolution = `${draft.width}x${draft.height}`;
@@ -58,6 +60,9 @@
       pending = false;
       render();
     }
+  });
+  window.addEventListener('beforeunload', event => {
+    if (dirty() || pending) { event.preventDefault(); event.returnValue = ''; }
   });
   window.streamProfile = {
     isPending: () => pending,

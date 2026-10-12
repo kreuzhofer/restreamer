@@ -89,8 +89,8 @@ func (s *Server) initializeDestinations() error {
 	if path == "" {
 		return nil
 	}
-	if s.cfg.StateFile != "" && filepath.Clean(path) == filepath.Clean(s.cfg.StateFile) {
-		return errors.New("destination credentials and switch state require separate files")
+	if (s.cfg.StateFile != "" && filepath.Clean(path) == filepath.Clean(s.cfg.StateFile)) || (s.cfg.IngestionKeyFile != "" && filepath.Clean(path) == filepath.Clean(s.cfg.IngestionKeyFile)) {
+		return errors.New("destination credentials, ingestion keys, and switch state require separate files")
 	}
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {

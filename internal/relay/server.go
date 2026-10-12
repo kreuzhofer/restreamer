@@ -3,8 +3,6 @@ package relay
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net"
@@ -18,6 +16,8 @@ import (
 )
 
 type Server struct {
+	ingestionMu           sync.Mutex
+	ingestion             ingestionCredential
 	library               *videoLibrary
 	generator             *generatorStore
 	cfg                   config.Config
@@ -164,15 +164,13 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 			s.active.Store(false)
 		}
 	}()
-	expected := sha256.Sum256([]byte(s.cfg.StreamKey))
 	authorizationReason := ""
 	c, err := rtmp.Accept(n, func(app, key string) bool {
-		provided := sha256.Sum256([]byte(key))
 		if app != s.cfg.Application {
 			authorizationReason = "application_mismatch"
 			return false
 		}
-		if subtle.ConstantTimeCompare(expected[:], provided[:]) != 1 {
+		if !s.authorizeIngestion(key) {
 			authorizationReason = "stream_key_mismatch"
 			return false
 		}
@@ -197,7 +195,7 @@ func (s *Server) handle(ctx context.Context, n net.Conn) {
 			case "application_mismatch":
 				hint = "OBS Server must end with /" + s.cfg.Application + "; enter the stream key separately"
 			case "stream_key_mismatch":
-				hint = "OBS Stream Key must match INGEST_STREAM_KEY in the running container"
+				hint = "Copy the current ingestion key from desktop Settings into OBS Stream Key"
 			case "publisher_already_connected":
 				hint = "Stop the existing publisher or wait for its connection to expire"
 			}

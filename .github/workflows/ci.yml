@@ -30,15 +30,14 @@ jobs:
       - run: go vet ./...
       - run: make cross-build
       - run: |
-          INGEST_STREAM_KEY=ci-test-key-123456 docker compose config --quiet
-          INGEST_STREAM_KEY=ci-test-key-123456 docker compose config --quiet
-          INGEST_STREAM_KEY=ci-test-key-123456 docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
       - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
           env_args=(-e INGEST_STREAM_KEY=ci-test-key-123456)
-          docker run --rm -e INGEST_STREAM_KEY=ci-test-key-123456 restreamer:test -config /etc/restreamer/config.json -check-config
+          docker run --rm restreamer:test -config /etc/restreamer/config.json -check-config
           docker run --rm "${env_args[@]}" restreamer:test -config /etc/restreamer/config.json -check-config
           docker volume create restreamer-smoke-state
           trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke; docker volume rm restreamer-smoke-state' EXIT

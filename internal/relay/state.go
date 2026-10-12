@@ -23,6 +23,10 @@ func (s *Server) initialize() error {
 			s.initErr = err
 			return
 		}
+		if err := s.initializeIngestion(); err != nil {
+			s.initErr = err
+			return
+		}
 		if err := s.initializeBRB(); err != nil {
 			s.initErr = err
 			return

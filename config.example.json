@@ -2,6 +2,7 @@
   "listen": ":1935",
   "health_listen": ":8080",
   "application": "live",
+  "ingestion_key_file": "/data/ingestion-key.json",
   "stream_key": "${INGEST_STREAM_KEY}",
   "queue_bytes": 16777216,
   "dashboard_username": "${DASHBOARD_USERNAME}",

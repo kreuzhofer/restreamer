@@ -181,3 +181,12 @@ func TestManagedDestinationsIgnoreRemovedLegacyEnvironment(t *testing.T) {
 		t.Fatal("managed file did not supersede legacy definitions", err)
 	}
 }
+
+func TestManagedIngestionConfigurationNeedsNoEnvironmentKey(t *testing.T) {
+	for _, legacy := range []string{"", `,"stream_key":"${RESTREAMER_TEST_UNSET_987}"`, `,"stream_key":"legacy-ingest-key-123456"`} {
+		c, err := loadText(t, `{"ingestion_key_file":"/private/ingestion-key.json","targets":[{"name":"disabled"}]`+legacy+`}`)
+		if err != nil || c.IngestionKeyFile != "/private/ingestion-key.json" {
+			t.Fatal("managed configuration requires legacy key", err)
+		}
+	}
+}
