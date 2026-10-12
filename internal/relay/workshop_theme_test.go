@@ -127,6 +127,12 @@ func TestWorkshopGeneratedEndingHoldsPastMasterAndFinishesBlack(t *testing.T) {
 	d.Scenes[0].FontSize = 0
 	fade := 1.0
 	d.EndingFadeSeconds = &fade
+	// An overlapping text change must not restart the one-shot backdrop.
+	next := d.Scenes[0]
+	next.ID, next.DurationSeconds = "follow-up", 14.4
+	d.Scenes[0].DurationSeconds = 2
+	d.Scenes[0].Transition = &mediaauthor.Transition{Kind: "crossfade", DurationSeconds: .4}
+	d.Scenes = append(d.Scenes, next)
 	raw, _ := json.Marshal(d)
 	saved := dashboardRequest(s, "PUT", "/api/generator/designs/"+d.ID, string(raw))
 	if saved.Code != 200 {
@@ -137,6 +143,20 @@ func TestWorkshopGeneratedEndingHoldsPastMasterAndFinishesBlack(t *testing.T) {
 	expected, err := png.Decode(expectedResponse.Body)
 	if err != nil {
 		t.Fatal(expectedResponse.Code, err)
+	}
+	globalFrame := dashboardRequest(s, "POST", "/api/generator/preview?frame=65", saved.Body.String())
+	nextScene := dashboardRequest(s, "POST", "/api/generator/preview?scene=1&frame=25", saved.Body.String())
+	if globalFrame.Code != 200 || !bytes.Equal(globalFrame.Body.Bytes(), nextScene.Body.Bytes()) {
+		t.Fatal("crossfade scene preview did not use composition timing")
+	}
+	resetFrame := dashboardRequest(s, "POST", "/api/generator/preview?frame=25", saved.Body.String())
+	resetExpected, err := png.Decode(bytes.NewReader(resetFrame.Body.Bytes()))
+	if err != nil {
+		t.Fatal(resetFrame.Code, err)
+	}
+	earlyExpected, err := png.Decode(bytes.NewReader(globalFrame.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
 	}
 	generatorServe(t, s)
 	job := waitGeneratorJob(t, s, submitGenerator(t, s, d).ID)
@@ -149,6 +169,13 @@ func TestWorkshopGeneratedEndingHoldsPastMasterAndFinishesBlack(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "ending.mp4")
 	os.WriteFile(path, media.Body.Bytes(), 0600)
+	actualEarly := workshopDecodedFrame(t, path, 65)
+	alignedDelta := scenePixelDifference(actualEarly, earlyExpected)
+	resetDelta := scenePixelDifference(actualEarly, resetExpected)
+	if alignedDelta >= resetDelta {
+		t.Fatalf("ending animation restarted at crossfade: aligned %f, reset %f", alignedDelta, resetDelta)
+	}
+
 	if delta := scenePixelDifference(workshopDecodedFrame(t, path, 325), expected); delta > 8 {
 		t.Fatalf("ending restarted instead of holding: %f", delta)
 	}
@@ -173,7 +200,20 @@ func TestWorkshopEndingHoldsBehindRepeatingInsetVideo(t *testing.T) {
 	}
 	var d mediaauthor.Design
 	json.Unmarshal(created.Body.Bytes(), &d)
-	preview := dashboardRequest(s, "POST", "/api/generator/preview?frame=325", created.Body.String())
+	// The goodbye happens once, before the later inset scene starts.
+	d.Scenes = append([]mediaauthor.Scene{{ID: "thanks", Layout: "title", Text: "THANK YOU", DurationSeconds: 8}}, d.Scenes...)
+	raw, _ := json.Marshal(d)
+	saved := dashboardRequest(s, "PUT", "/api/generator/designs/"+d.ID, string(raw))
+	if saved.Code != 200 {
+		t.Fatal(saved.Code, saved.Body.String())
+	}
+	json.Unmarshal(saved.Body.Bytes(), &d)
+	firstInset := dashboardRequest(s, "POST", "/api/generator/preview?scene=1&frame=0", saved.Body.String())
+	settledInset := dashboardRequest(s, "POST", "/api/generator/preview?frame=200", created.Body.String())
+	if firstInset.Code != 200 || !bytes.Equal(firstInset.Body.Bytes(), settledInset.Body.Bytes()) {
+		t.Fatal("ending preview restarted its goodbye at the next scene", firstInset.Code)
+	}
+	preview := dashboardRequest(s, "POST", "/api/generator/preview?scene=1&frame=125", saved.Body.String())
 	expected, err := png.Decode(preview.Body)
 	if err != nil {
 		t.Fatal(preview.Code, err)

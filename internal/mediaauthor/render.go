@@ -117,10 +117,16 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	if math.IsNaN(rw) || math.IsInf(rw, 0) || math.IsNaN(rh) || math.IsInf(rh, 0) || rw < 30 || rw > 90 || rh < 12 || rh > 90 {
 		return fail("content_region", "Content width must be 30–90% and height 12–90% (blank inherits the theme).")
 	}
-	regionWidth, regionHeight := int(float64(width)*rw/100), int(float64(height)*rh/100)
+	// Workshop lettering follows the contained 16:9 sign, including letterboxing.
+	contentWidth, contentHeight := width, height
+	if IsWorkshopArtwork(style.Artwork) && scene.Layout != "media" {
+		scale := math.Min(float64(width)/16, float64(height)/9)
+		contentWidth, contentHeight = int(16*scale), int(9*scale)
+	}
+	regionWidth, regionHeight := int(float64(contentWidth)*rw/100), int(float64(contentHeight)*rh/100)
 	offset := 0
 	if scene.Layout != "media" {
-		offset = int(float64(height) * style.ContentOffsetYPercent / 100)
+		offset = int(float64(contentHeight) * style.ContentOffsetYPercent / 100)
 	}
 	result.region = image.Rect((width-regionWidth)/2, (height-regionHeight)/2+offset, (width+regionWidth)/2, (height+regionHeight)/2+offset)
 	if !result.region.In(image.Rect(0, 0, width, height)) {
@@ -167,9 +173,9 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	var face font.Face
 	var err error
 	if scene.Font == "arcade-pixel" {
-		face = newPixelFace(size * float64(height) / 1080)
+		face = newPixelFace(size * float64(contentHeight) / 1080)
 	} else {
-		face, err = opentype.NewFace(f, &opentype.FaceOptions{Size: size * float64(height) / 1080, DPI: 72, Hinting: font.HintingNone})
+		face, err = opentype.NewFace(f, &opentype.FaceOptions{Size: size * float64(contentHeight) / 1080, DPI: 72, Hinting: font.HintingNone})
 	}
 	if err != nil {
 		return fail("font", "Cannot load the selected font.")

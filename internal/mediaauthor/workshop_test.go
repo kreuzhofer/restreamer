@@ -97,3 +97,26 @@ func TestWorkshopFrozenBackdropKeepsHardPixelEdges(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkshopSignTracksContainedArtwork(t *testing.T) {
+	style := WorkshopTheme("maker-workshop").Style
+	scene := Scene{Layout: "title", Text: "STARTING SOON"}
+	reference, _, message := layoutSceneStyled(scene, 640, 360, style)
+	if message != "" {
+		t.Fatal(message)
+	}
+	defer reference.face.Close()
+	for _, profile := range []struct {
+		width, height int
+		offset        image.Point
+	}{{640, 480, image.Pt(0, 60)}, {960, 360, image.Pt(160, 0)}} {
+		got, _, message := layoutSceneStyled(scene, profile.width, profile.height, style)
+		if message != "" {
+			t.Fatal(message)
+		}
+		defer got.face.Close()
+		if got.region != reference.region.Add(profile.offset) || got.face.Metrics() != reference.face.Metrics() {
+			t.Fatalf("sign moved away from contained artwork at %dx%d: %v, want %v", profile.width, profile.height, got.region, reference.region.Add(profile.offset))
+		}
+	}
+}

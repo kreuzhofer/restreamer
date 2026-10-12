@@ -932,7 +932,9 @@ BRB and prestream use complete **12-second** cycles. The supplied prestream
 starter uses 12-second scenes; other durations or crossfades remain available.
 Ending holds its settled final frame if a scene exceeds the master duration, then
 the existing ending fade applies. An inset video can keep playing over that held
-background. Every scene starts its stage animation independently.
+background. Ending motion continues across scene changes on one timeline; BRB
+and prestream scenes start their own cycles. The editable sign follows the
+contained artwork on non-widescreen profiles.
 
 The nine masters are embedded and require only the existing FFmpeg runtime.
 Authoring uses Blender; production does not. Pixel artwork uses nearest-neighbor

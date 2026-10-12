@@ -245,7 +245,12 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if animatedArtwork(theme.Style) {
-		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, frame, theme.Style, draft.Stage)
+		artworkFrame := frame
+		if draft.Stage == "ending" && mediaauthor.IsWorkshopArtwork(theme.Style.Artwork) {
+			plan, _ := mediaauthor.PlanTiming(draft, profile.FPS)
+			artworkFrame += plan.Scenes[sceneIndex].Start
+		}
+		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, artworkFrame, theme.Style, draft.Stage)
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

@@ -142,7 +142,7 @@ func (s *Server) encodeBRBSettings(ctx context.Context, settings brbSettings, di
 	args := []string{"-filter_threads", "1", "-filter_complex_threads", "1", "-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", filepath.Join(dir, "base.png")}
 	style := settings.Theme.Style
 	if animatedArtwork(style) {
-		args, err = artworkOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style, "brb")
+		args, err = artworkOverlayArgs(dir, filepath.Join(dir, "base.png"), p, style, "brb", 0)
 		if err != nil {
 			return nil, err
 		}

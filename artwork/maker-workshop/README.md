@@ -10,8 +10,9 @@ BRB builds, assembles and greets with a robot in a repeating 12-second cycle.
 Prestream opens on the welcoming mascot and cycles through the production line.
 Ending waves goodbye, parks the printer, stops the conveyor and settles the CAD
 screen. It holds its final pose for longer scenes; the existing design ending
-fade still finishes the output in black. Each generator scene starts its own
-stage master. Use 12-second multiples for uninterrupted prestream motion; the
+fade still finishes the output in black. Ending scenes share one continuous
+artwork timeline, including crossfades; the goodbye never restarts at a text
+change. Each prestream scene starts its own cycle. Use 12-second multiples for uninterrupted prestream motion; the
 included prestream starter uses three 12-second scenes. The ending starter uses
 two 12-second scenes and a final two-second fade.
 
@@ -19,7 +20,8 @@ Halloween includes witch hats, a floating ghost and haunted workshop decor.
 Christmas includes Santa hats, a scarf, moving parcels and festive workshop decor.
 The upper sign stays blank in the artwork: all headlines, lists and links are
 rendered by the app using the embedded pixel font. The default sign region is
-58% wide and 19% high, offset upward by 33%, with a smaller list font. Overflow
+58% wide and 19% high, offset upward by 33%, with a smaller list font. The sign and lettering follow the contained artwork
+on non-widescreen profiles. Overflow
 is validated; text is never silently truncated or shrunk. Long agendas should be
 split into more scenes. Existing themes and retained revisions remain unchanged.
 

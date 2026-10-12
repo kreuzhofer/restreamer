@@ -97,7 +97,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 			progress(int(min(60, max(0, (float64(completedFrames)+seconds*float64(p.FPS))/float64(totalFrames)*60))))
 		}
 		if scene.IsVideo() {
-			if err := s.renderVideoSegment(ctx, scene, p, segment, dir, maxGeneratorOutputBytes-segmentBytes, sceneProgress, theme.Style, inputs, j.Design.Stage); err != nil {
+			if err := s.renderVideoSegment(ctx, scene, p, segment, dir, maxGeneratorOutputBytes-segmentBytes, sceneProgress, theme.Style, inputs, j.Design.Stage, plan.Scenes[i].Start); err != nil {
 				return "", err
 			}
 		} else {
@@ -108,7 +108,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 				"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
 			}
 			if animatedArtwork(theme.Style) {
-				artworkArgs, err := artworkOverlayArgs(dir, still, p, theme.Style, j.Design.Stage)
+				artworkArgs, err := artworkOverlayArgs(dir, still, p, theme.Style, j.Design.Stage, plan.Scenes[i].Start)
 				if err != nil {
 					return "", err
 				}

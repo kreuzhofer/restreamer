@@ -42,6 +42,12 @@ type preparedArtwork struct {
 	holdEnding   bool
 }
 
+// Each ending scene advances the same one-shot master on the composition timeline.
+// Clamp seeks to its final frame, then hold within the caller's output frame cap.
+func (art preparedArtwork) endingTailFilter(fps, startFrame int) string {
+	return fmt.Sprintf(",tpad=stop_mode=clone:stop_duration=3600,trim=start_frame=%d,setpts=PTS-STARTPTS", min(startFrame, art.seconds*fps-1))
+}
+
 func themeArtwork(id string) (preparedArtwork, bool) {
 	return themeArtworkForStage(id, "brb")
 }
@@ -117,7 +123,7 @@ func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, st
 
 // artworkOverlayArgs composes transparent content over the immutable artwork loop.
 // It only writes into the caller-owned, bounded preparation workspace.
-func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style, stage string) ([]string, error) {
+func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style, stage string, startFrame int) ([]string, error) {
 	art, ok := themeArtworkForStage(style.Artwork, stage)
 	if !ok {
 		return nil, errors.New("The selected artwork is unavailable.")
@@ -129,7 +135,7 @@ func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style media
 	backdrop := artworkBackdropFilter(p, style)
 	args := []string{"-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", foreground, "-threads", "2"}
 	if art.holdEnding {
-		backdrop += ",tpad=stop_mode=clone:stop_duration=3600"
+		backdrop += art.endingTailFilter(p.FPS, startFrame)
 	} else {
 		args = append(args, "-stream_loop", "-1")
 	}
@@ -139,7 +145,7 @@ func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style media
 
 // Normalize only the clip range first, then repeat it over the full background
 // cycle. Repeating a one-second inset must not restart the sixteen-second sky.
-func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs, stage string) error {
+func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaauthor.Scene, p config.BRBProfile, dst, dir string, budget int64, progress func(float64), style mediaauthor.Style, inputs mediaauthor.RenderInputs, stage string, startFrame int) error {
 	source, meta, err := s.openVideoAsset(scene)
 	if err != nil {
 		return err
@@ -199,7 +205,7 @@ func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaautho
 	args = append(generatorBaseArgs(), "-threads", "2")
 	backdrop := artworkBackdropFilter(p, style)
 	if art.holdEnding {
-		backdrop += ",tpad=stop_mode=clone:stop_duration=3600"
+		backdrop += art.endingTailFilter(p.FPS, startFrame)
 	} else {
 		args = append(args, "-stream_loop", "-1")
 	}
