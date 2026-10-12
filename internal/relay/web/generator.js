@@ -115,7 +115,7 @@
   }
   async function listDesigns() {
     const designs = await (await request('/api/generator/designs')).json();
-    $('design-list-state').textContent = designs.length ? `${designs.length} saved design${designs.length === 1 ? '' : 's'}` : 'No saved designs yet. Create your first design below.';
+    $('design-list-state').textContent = designs.length ? `${designs.length} saved design${designs.length === 1 ? '' : 's'}` : 'No saved designs yet. Create your first design on desktop.';
     $('design-list').replaceChildren();
     for (const design of designs) {
       const button = document.createElement('button');

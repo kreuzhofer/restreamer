@@ -14,6 +14,7 @@
  <script src="/library.js" defer></script>
  <script src="/preview.js" defer></script>
  <link rel="stylesheet" href="/workspace.css">
+ <link rel="stylesheet" href="/live-console.css">
  <script src="/workspace.js" defer></script>
 </head>
 <body>
@@ -28,11 +29,11 @@
   <span>Stage <strong id="workspace-stage">Unknown</strong></span><span>On-air source <strong id="workspace-source">Unknown</strong></span><span id="workspace-mode">Connecting to server</span><span id="workspace-freshness">Awaiting first update</span>
  </div>
   <div id="live-workspace" data-workspace-panel="live">
-  <section class="intro">
-   <div><p class="eyebrow">STREAM OVERVIEW</p><h1>One stream. Every destination.</h1><p class="subtitle">Monitor your signal and control where you go live.</p></div>
-   <div class="window"><span class="window-dot"></span> Rolling 15 minutes <span class="window-detail">· sampled every second</span></div>
-  </section>
+  <h1 class="visually-hidden" tabindex="-1">Live broadcast console</h1>
   <div id="notice" class="notice" role="alert" hidden></div>
+  <div id="live-console" class="live-console">
+   <div class="live-primary" aria-label="Broadcast operation">
+  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><p class="eyebrow">ACTUAL SELECTED FEED</p><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
   <section class="panel stage-panel" aria-labelledby="stage-title">
    <div class="panel-heading"><div><p class="eyebrow">SHOW CONTROL</p><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
    <div id="delivery-banner" class="delivery-banner" role="status" hidden></div>
@@ -51,27 +52,54 @@
     <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled><span>03</span> BRB<small>Stay on a deliberate break</small></button>
     <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled><span>04</span> End stream<small>Play ending, then stop</small></button>
    </div>
-   <div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div>
+   <div class="live-clips"><h3>Clip shortcuts</h3><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
    <div class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div><label id="rehearsal-label" class="check-label"><input id="stage-rehearsal" type="checkbox"> Start a preview-only rehearsal</label></div>
    <p id="stage-help" class="stage-help">Only Prestream and Go live can start a broadcast. Starts OFF after every server restart. OBS input preview stays available.</p>
    <p id="command-status" class="stage-help" role="status"></p>
   </section>
-  <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
-  <div class="input-grid">
-  <section class="panel input-panel" aria-labelledby="input-title">
-   <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
-   <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
-   <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
-   <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
-
-  </section>
+   </div>
+   <aside class="live-sidebar" aria-label="Input and preparation">
   <section class="panel preview-panel" aria-labelledby="preview-title">
-   <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">Input preview</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
+   <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">OBS input</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
    <div class="preview-screen"><video id="preview-video" controls autoplay muted playsinline aria-label="Live input preview"></video></div>
    <p id="preview-status" class="preview-status" role="status">Waiting for OBS input</p>
-   <div class="panel-footer"><span>Original input · audio starts muted</span><span>Preview stays on while forwarding is off</span></div>
+
   </section>
-  </div>
+<section id="live-readiness" class="live-readiness" aria-label="Before going on air">
+   <h2>Before going on air</h2><dl><div><dt>OBS input</dt><dd id="readiness-input">Checking…</dd></div><div><dt>Prepared media</dt><dd id="readiness-media">Checking…</dd></div><div><dt>Destinations</dt><dd id="readiness-destinations">Checking…</dd></div></dl>
+   <p class="library-help">OBS is optional for Prestream. Rehearsal blocks destination delivery.</p>
+  </section>
+   <details id="live-destinations" class="live-disclosure" open><summary>Destination delivery</summary>
+  <section class="destinations" aria-labelledby="destinations-title">
+   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
+   <div id="targets" class="target-grid"></div>
+  </section>
+   </details>
+   <details id="live-media-tools" class="live-disclosure"><summary>Prepared media &amp; playback</summary>
+  <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
+   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>
+   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Preparing content creates a ready media revision. Saving a selection affects its next use; current and suspended playback keep their selected revision until you confirm a replacement.</p>
+   <form id="library-upload"><label>MP4 file <input id="library-file" type="file" accept=".mp4,video/mp4" required></label><button id="library-upload-button" class="preview-button" type="submit">Upload MP4</button><button id="library-upload-cancel" class="preview-button" type="button" hidden>Cancel upload</button></form>
+   <p id="library-upload-status" role="status" class="library-help"></p>
+   <p id="library-error" class="notice" role="alert" hidden></p>
+   <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>
+    <form id="stage-selections-form"><div class="selection-fields"><label>Starting soon <select id="selection-prestream"></select></label><label>Ending video <select id="selection-ending"></select></label></div><div class="shortcut-editor"><h3>Clip shortcuts</h3><div id="selection-shortcuts"></div><button id="selection-add-shortcut" class="preview-button" type="button">Add clip shortcut</button></div><p id="selection-warning" class="library-help"></p><div class="library-actions"><button id="selection-save" class="preview-button" type="submit">Save selections</button><button id="selection-cancel" class="preview-button" type="button">Discard changes</button></div><p id="selection-status" class="library-help" role="status"></p></form>
+   </details>
+   <section id="media-intent" class="media-intent" aria-labelledby="media-intent-title" hidden><h3 id="media-intent-title">Generated result</h3><p id="media-intent-detail" class="library-help"></p><p id="media-intent-status" class="library-help" role="status"></p><div class="library-actions"><button id="media-intent-review" class="preview-button" type="button" disabled>Review requested action</button><button id="media-intent-dismiss" class="preview-button" type="button">Dismiss request and choose another action</button></div></section>
+   <div class="library-grid">
+    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p><label>Media revision <select id="library-revision"></select></label>
+     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-preview" class="preview-button" type="button">Preview revision</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
+     <p id="playback-status" role="status" class="library-help">No file playing</p>
+     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>
+     <label class="check-label"><input id="playback-loop" type="checkbox"> Loop current clip until stopped</label>
+     <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
+     <p class="library-help">Release the seek bar to resume at a decodable keyframe. Pause shows BRB. Deliberate BRB suspends the clip until Return. Stop clip restores its recorded return stage. PRESTREAM loops automatically; ENDING cannot be paused or scrubbed.</p>
+    </div>
+    <div class="candidate-preview"><h3>Ready revision preview</h3><video id="candidate-video" controls muted playsinline aria-label="Ready revision preview" hidden></video><p id="candidate-status" class="library-help">Choose a ready video and Preview revision to review its exact content.</p><div class="library-actions"><button id="library-replace-now" class="preview-button" type="button" disabled>Replace now</button><button id="library-replace-return" class="preview-button" type="button" disabled>Replace on return</button></div><p class="library-help">Replacement starts this revision at the beginning. Current media keeps playing during preparation and preview.</p></div>
+   </div>
+  </section>
+   </details>
+   <details id="live-brb-tools" class="live-disclosure"><summary>BRB readiness &amp; preparation</summary>
   <section class="panel brb-panel" aria-labelledby="brb-title">
    <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
    <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div></div>
@@ -105,34 +133,20 @@
     <section id="brb-theme-candidate" hidden><h3>Prepared BRB · not active</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button><button id="brb-theme-discard" class="preview-button" type="button">Discard candidate</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview shows four seconds of the exact video and audio. The four-second visual loop and your complete music track loop independently on air. Theme preparation never changes the music volume or duration.</p></section>
    </div></details>
   </section>
-  <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
-   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Video library</h2></div><span id="library-count" class="badge">Loading</span></div>
-   <p class="library-help">Upload MP4s or add them to the persistent originals folder. Preparing content creates a ready media revision. Saving a selection affects its next use; current and suspended playback keep their selected revision until you confirm a replacement.</p>
-   <form id="library-upload"><label>MP4 file <input id="library-file" type="file" accept=".mp4,video/mp4" required></label><button id="library-upload-button" class="preview-button" type="submit">Upload MP4</button><button id="library-upload-cancel" class="preview-button" type="button" hidden>Cancel upload</button></form>
-   <p id="library-upload-status" role="status" class="library-help"></p>
-   <p id="library-error" class="notice" role="alert" hidden></p>
-   <details id="stage-selections"><summary>Saved stage media &amp; clip shortcuts</summary>
-    <form id="stage-selections-form"><div class="selection-fields"><label>Starting soon <select id="selection-prestream"></select></label><label>Ending video <select id="selection-ending"></select></label></div><div class="shortcut-editor"><h3>Clip shortcuts</h3><div id="selection-shortcuts"></div><button id="selection-add-shortcut" class="preview-button" type="button">Add clip shortcut</button></div><p id="selection-warning" class="library-help"></p><div class="library-actions"><button id="selection-save" class="preview-button" type="submit">Save selections</button><button id="selection-cancel" class="preview-button" type="button">Discard changes</button></div><p id="selection-status" class="library-help" role="status"></p></form>
    </details>
-   <section id="media-intent" class="media-intent" aria-labelledby="media-intent-title" hidden><h3 id="media-intent-title">Generated result</h3><p id="media-intent-detail" class="library-help"></p><p id="media-intent-status" class="library-help" role="status"></p><div class="library-actions"><button id="media-intent-review" class="preview-button" type="button" disabled>Review requested action</button><button id="media-intent-dismiss" class="preview-button" type="button">Dismiss request and choose another action</button></div></section>
-   <div class="library-grid">
-    <div><label>Video <select id="library-select" aria-describedby="library-file-info"><option value="">No videos yet</option></select></label><p id="library-file-info" class="library-help"></p><label>Media revision <select id="library-revision"></select></label>
-     <div class="library-actions"><button id="library-once" class="preview-button" type="button">Play once</button><button id="library-loop" class="preview-button" type="button">Play on loop</button><button id="library-preview" class="preview-button" type="button">Preview revision</button><button id="library-prepare" class="preview-button" type="button">Prepare again</button></div>
-     <p id="playback-status" role="status" class="library-help">No file playing</p>
-     <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>
-     <label class="check-label"><input id="playback-loop" type="checkbox"> Loop current clip until stopped</label>
-     <label class="seek-label">Playback position <input id="playback-seek" type="range" min="0" max="0" step="1" value="0"></label><p id="playback-position" class="library-help">0:00 / 0:00</p>
-     <p class="library-help">Release the seek bar to resume at a decodable keyframe. Pause shows BRB. Deliberate BRB suspends the clip until Return. Stop clip restores its recorded return stage. PRESTREAM loops automatically; ENDING cannot be paused or scrubbed.</p>
-    </div>
-    <div class="candidate-preview"><h3>Ready revision preview</h3><video id="candidate-video" controls muted playsinline aria-label="Ready revision preview" hidden></video><p id="candidate-status" class="library-help">Choose a ready video and Preview revision to review its exact content.</p><div class="library-actions"><button id="library-replace-now" class="preview-button" type="button" disabled>Replace now</button><button id="library-replace-return" class="preview-button" type="button" disabled>Replace on return</button></div><p class="library-help">Replacement starts this revision at the beginning. Current media keeps playing during preparation and preview.</p></div>
-   </div>
-  </section>
-  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><p class="eyebrow">ACTUAL SELECTED FEED</p><h2 id="broadcast-title">Broadcast preview</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="library-help">Selected feed · audio starts muted. Available during rehearsal and with no destinations. Relay delivery does not confirm platform-side playback. Preview controls affect only this browser.</p></section>
-  <section class="destinations" aria-labelledby="destinations-title">
-   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence">Loading saved target states…</p></div>
-   <div id="targets" class="target-grid"></div>
+   <details id="live-diagnostics" class="live-disclosure"><summary>Signal diagnostics</summary>
+  <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
+  <section class="panel input-panel" aria-labelledby="input-title">
+   <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
+   <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
+   <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
+   <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
+
   </section>
   <footer class="page-footer"><span>Passthrough · original video &amp; audio</span><span>FPS and drops are measured at the relay; OBS and platform playback statistics are unavailable.</span><span id="updated">Awaiting first update</span></footer>
+   </details>
+   </aside>
+  </div>
   </div>
   <section id="settings-workspace" data-workspace-panel="settings" class="settings-workspace" aria-labelledby="settings-title" hidden>
    <p class="eyebrow">CONNECTIONS &amp; SETUP</p><h1 id="settings-title" tabindex="-1">Settings</h1>
@@ -165,11 +179,13 @@
  <template id="target-template">
   <article class="panel target-panel">
    <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span></div>
+   <details class="target-diagnostics"><summary>Signal details</summary>
    <div class="target-stats"><div><span class="metric target-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong class="target-peak">—</strong><span>Mbps peak · 15 min</span></div></div>
    <div class="frame-stats"><div><strong class="target-fps">—</strong><span>FPS written</span></div><div><strong class="target-drops">—</strong><span>Relay drops · since restart</span></div></div>
    <p class="target-graph-label graph-label">Bitrate · Mbps</p>
    <div class="chart target-chart"></div>
    <details class="frame-details"><summary>Frame counters · since restart</summary><dl><div><dt>Written to target</dt><dd class="frames-sent">—</dd></div><div><dt>Omitted while paused</dt><dd class="frames-paused">—</dd></div><div><dt>Skipped during startup / resync / shutdown</dt><dd class="frames-skipped">—</dd></div></dl><p>Drops count failed writes, discarded queues, and frames omitted during an outage. Written frames are not a playback acknowledgment.</p></details>
+   </details>
    <div class="target-detail"><span class="target-message"></span><span class="attempts"></span></div>
    <div class="issue" hidden></div>
    <div class="target-control"><div><strong class="switch-label">Target enabled</strong><p class="switch-help">Ready when your input goes live.</p></div><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>

@@ -76,7 +76,7 @@
 .studio-collections button[aria-current], .studio-tabs button[aria-pressed="true"], .studio-panel-switch button[aria-pressed="true"] { background: #242b38; border-color: #404c66; color: var(--text); }
 .studio-app button:focus-visible, .studio-app a:focus-visible { outline: 2px solid #a6b8ff; outline-offset: 2px; }
 #resume-design { margin-left: auto; color: #a6b8ff; }
-.studio-mobile-note { display: none; }
+.studio-mobile-note, .collection-mobile-note { display: none; }
 .studio-app .generator-grid { flex: 1; min-height: 0; grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); align-items: stretch; gap: 16px; padding-bottom: 16px; }
 .studio-app .studio-collection { overflow: auto; margin: 0; padding: 20px; }
 .studio-collection:not(.generator-sidebar) { grid-column: 1 / -1; }
@@ -135,17 +135,17 @@
   .studio-scenes { border-right: 0; }
 }
 @media (max-width: 600px) {
-  .studio-mobile-note { display: block; font-size: 12px; line-height: 1.6; margin: 0 0 10px; color: var(--muted); }
+  .studio-mobile-note, .collection-mobile-note { display: block; font-size: 12px; line-height: 1.6; margin: 0 0 10px; color: var(--muted); }
   .studio-collections { gap: 0; }
   .studio-collections button { padding: 10px 9px; min-height: 44px; }
   .studio-app .generator-grid { padding-bottom: 8px; }
   .studio-app .generator-sidebar { padding: 16px; }
   .studio-app #new-design, .studio-app .delete-button, .studio-app #asset-upload,
-  .studio-app #studio-themes > :not(h2), .studio-app #studio-templates > :not(h2),
+  .studio-app #studio-themes > :not(h2):not(.collection-mobile-note), .studio-app #studio-templates > :not(h2):not(.collection-mobile-note),
   .studio-app .studio-scenes, .studio-app .studio-inspector, .studio-app .studio-panel-switch,
   .studio-app .studio-monitor > .studio-tabs, .studio-app #studio-scene-preview,
   .studio-app #generate-design, .studio-app .generator-asset button, .studio-app .studio-authoring, .studio-app #save-actions { display: none !important; }
-  .studio-app #studio-themes::after, .studio-app #studio-templates::after { content: "Open Studio on desktop to manage this collection."; color: var(--muted); font-size: 13px; }
+  .studio-app .generator-job .preview-button, .studio-app #design-list button { min-height: 44px; }
   .studio-app .studio-monitor { display: flex !important; }
   .studio-app #studio-results { display: block !important; }
   .studio-editor-heading { padding: 10px; flex-wrap: wrap; gap: 10px; }

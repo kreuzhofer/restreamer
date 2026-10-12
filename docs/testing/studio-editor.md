@@ -15,3 +15,18 @@ Approved seam: authenticated application browser, backed by real HTTP state and 
 ## Red observation
 
 2026-10-12, baseline `3cc6778`, authenticated browser on disposable `localhost:18839/studio`: no collection navigation; creation, themes, templates and uploads share a long sidebar. The focused editor workflow and mobile boundary are absent.
+
+## Green observations
+
+2026-10-12, disposable fixture `localhost:18842` with documented test credentials:
+
+- Created an independent prestream design; authored title and list content, reordered scenes, and observed saved versions. Reload restored the content and scene order.
+- Switched to Media and Templates and resumed the open design without losing content. Zero duration remained visible with both scene and field validation after navigation; correcting it restored preview.
+- Verified Design properties retain Retro revision 1 explicitly while offering an update, soundtrack selection and complete-cycle controls. Scene properties retain all four layout choices, duration, transitions and overrides.
+- Two authenticated tabs produced a real server version conflict. The first tab retained its local title and offered recovery; Save local work as a copy produced a separate saved design. Reload restored the copied title.
+- Saved a reusable content template from Template properties and saw its new version in the update selector.
+- Generated a two-second saved design, observed running then ready status, and played its exact media revision. Persistent broadcast status remained OFF; prepared output remained unselected.
+- DOM geometry confirmed document dimensions exactly match 1920×1080, 1440×900, 1024×768 and 390×844. At 1024, Preview/Properties buttons kept content reachable. At phone size, design browsing and exact-preview/selection links remain visible, while creation, scene fields, uploads and generation actions are absent with a desktop-required explanation.
+- Browser screenshots are in `screenshots/studio-editor-{wide,desktop,narrow,phone}.jpg`. The narrow screenshot includes an intentionally invalid duration. These use real disposable designs and generated media.
+
+The existing authenticated generator, conflict, theme revision, deletion/physical cleanup, and local RTMP regression suites remain the automated behavioral coverage; this layout change adds no new server mutation contract. Final integration owns the exact-SHA CI and release gate.
