@@ -14,7 +14,7 @@ function setup() {
   };
   let data = {forwarding: false, stage: {stage: 'OFF', mode: 'off'}, brb: {ready: true}, brb_profile: {width: 1280, height: 720, fps: 25, sample_rate: 48000}};
   let online = true, busy = false, response = {ok: true}, requests = [];
-  const context = vm.createContext({window: {}, document: {getElementById: el}, Option: function(text, value) {this.value = value;}, FormData, AbortSignal,
+  const context = vm.createContext({window: {addEventListener() {}}, document: {getElementById: el}, Option: function(text, value) {this.value = value;}, FormData, AbortSignal,
     location: {origin: 'http://localhost'}, fetch: async (url, init) => {requests.push(init);return response;},
     refresh: async () => update(), render: () => update()});
   vm.runInContext(readFileSync(new URL('../internal/relay/web/profile.js', import.meta.url), 'utf8'), context);

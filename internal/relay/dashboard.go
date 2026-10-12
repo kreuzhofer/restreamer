@@ -30,6 +30,17 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/stage/commands/{id}", s.stageCommandOutcomeHTTP)
 	private.HandleFunc("GET /api/preview", s.preview)
 	private.HandleFunc("GET /api/broadcast-preview", s.preview)
+	for _, route := range []string{"/live", "/settings", "/studio"} {
+		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
+			page := "web/index.html"
+			if r.URL.Path == "/studio" {
+				page = "web/generator.html"
+			}
+			data, _ := dashboardFiles.ReadFile(page)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(data)
+		})
+	}
 	private.HandleFunc("GET /generator", func(w http.ResponseWriter, r *http.Request) {
 		data, _ := dashboardFiles.ReadFile("web/generator.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

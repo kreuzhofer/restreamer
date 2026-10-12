@@ -124,6 +124,7 @@ function render() {
 }
 function connection(ok, message) {
  connected = ok;
+ window.workspace?.update(snapshot, ok);
  $('#connection').textContent = ok ? 'Dashboard connected' : 'Connection lost';
  $('#connection-dot').className = `dot ${ok ? 'online' : 'offline'}`;
  const text = message || controlError;
@@ -159,7 +160,7 @@ function renderBRB() {
  $('#brb-settings').hidden = !brb.ready;
  const profile = snapshot.brb_profile;
  $('#brb-active-profile').hidden = !brb.ready || !profile;
- if (profile) $('#brb-active-profile').textContent = `Shared profile · managed in OBS input: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
+ if (profile) $('#brb-active-profile').textContent = `Shared profile · managed in Settings: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;
  $('#brb-unsaved').hidden = !brb.ready || !assetsDirty || assetsPending;
  $('#brb-save').classList.toggle('needs-save', assetsDirty && !assetsPending);
  $('#brb-error').hidden = !brb.error;
@@ -218,3 +219,7 @@ document.querySelectorAll('[data-metric]').forEach(button => {
 });
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 100); });
 poll();
+
+window.addEventListener('beforeunload', event => {
+ if (assetsDirty || assetsPending) { event.preventDefault(); event.returnValue = ''; }
+});

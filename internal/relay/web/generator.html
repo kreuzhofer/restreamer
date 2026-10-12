@@ -5,9 +5,18 @@
  <title>Restreamer · Media generator</title>
  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/generator.css">
  <script src="/generator.js" defer></script>
+ <link rel="stylesheet" href="/workspace.css">
+ <script src="/workspace.js" defer></script>
 </head>
 <body><main>
- <header class="topbar"><a class="brand" href="/">↗ restreamer</a><a class="generator-back" href="/">Back to live control</a></header>
+ <header class="workspace-header">
+  <a class="brand" href="/live" aria-label="Restreamer Live"><span class="brand-mark" aria-hidden="true">↗</span> restreamer <span class="workspace-wordmark">/ studio</span></a>
+  <nav class="workspace-nav" aria-label="Workspace"><a href="/live" data-workspace="live">Live</a><a href="/studio" data-workspace="studio">Studio</a><a href="/settings" data-workspace="settings">Settings</a></nav>
+  <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Connecting…</span></div>
+ </header>
+ <div id="workspace-status" class="workspace-status" role="status" aria-label="Broadcast status">
+  <span>Stage <strong id="workspace-stage">Unknown</strong></span><span>On-air source <strong id="workspace-source">Unknown</strong></span><span id="workspace-mode">Connecting to server</span><span id="workspace-freshness">Awaiting first update</span>
+ </div>
  <section class="intro"><div><p class="eyebrow">AUTHOR MEDIA</p><h1>Design your show.</h1><p class="subtitle">Independent drafts for prestream and ending. Saving a design does not change what is on air.</p></div></section>
  <p id="generator-notice" class="notice" role="alert" hidden></p>
  <div class="generator-grid">
