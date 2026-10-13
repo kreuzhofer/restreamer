@@ -44,6 +44,14 @@ def stage_command(action, **options):
     assert result['state'] in ('completed', 'pending'), result
     return result
 
+if '--verify-pacman' in sys.argv:
+    saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
+    probe = json.loads(Path(sys.argv[sys.argv.index('--verify-pacman') + 1]).read_text())
+    assert len(probe['streams']) == 1, probe
+    assert int(probe['streams'][0]['nb_read_frames']) == saved['pacman_frames'], probe
+    print('Decoded complete Pac-Man loop:', saved['pacman_frames'], 'frames')
+    sys.exit(0)
+
 if '--verify-video' in sys.argv:
     saved = json.loads(Path(os.environ['GENERATOR_SMOKE_STATE']).read_text())
     probe = json.loads(Path(sys.argv[sys.argv.index('--verify-video') + 1]).read_text())
@@ -188,6 +196,20 @@ brb_current = request('/api/dashboard')['brb_assets']
 assert brb_current['generation'] == brb_candidate['id'], brb_current
 assert request('/api/brb/theme/candidate') is None
 
+# Exercise the new 40-second master in both packaged architectures. Preparation
+# is asynchronous so the HTTP read deadline is independent of encoding speed.
+pacman_before = brb_current
+request('/api/brb/theme/prepare', 'POST', {'theme': {'id': 'pacman-maze', 'revision': 1}, 'base_generation': pacman_before['generation'], 'async': True})
+pacman_preparation = wait_for('/api/brb/theme/preparation', lambda item: item['state'] != 'running')
+assert pacman_preparation['state'] == 'ready', pacman_preparation
+pacman_candidate = request('/api/brb/theme/candidate')
+assert pacman_candidate['video_duration'] == 40, pacman_candidate
+assert request('/api/dashboard')['brb_assets'] == pacman_before
+output.with_name(output.stem + '-pacman.mp4').write_bytes(request('/api/brb/theme/candidate/preview?id=' + pacman_candidate['id'], raw=True))
+request('/api/brb/theme/activate', 'POST', {'id': pacman_candidate['id'], 'base_generation': pacman_before['generation']})
+brb_current = request('/api/dashboard')['brb_assets']
+assert brb_current['theme']['id'] == 'pacman-maze' and brb_current['generation'] == pacman_candidate['id'], brb_current
+
 status = request('/status')
 assert status['stage']['stage'] == 'OFF' and not status['forwarding'], status
 request('/api/stage-media', 'PUT', {'prestream': revision, 'ending': ending_job['media_revision'], 'shortcuts': []})
@@ -199,7 +221,7 @@ wait_for('/api/stage', lambda state: state['stage'] == 'OFF', timeout=15)
 status = request('/status')
 assert not status['forwarding'] and all(target['attempts'] == 0 for target in status['outputs']), status
 result = {'job': job['id'], 'revision': revision, 'preview': str(output), 'stage': status['stage']['stage'], 'video_job': video_job['id'], 'video_revision': video_job['media_revision'], 'video_asset': asset_ref, 'music_asset': music_ref, 'logo_asset': logo_ref, 'theme': theme_ref, 'sample_rate': video_job['profile']['sample_rate'], 'video_expected_frames': video_expected_frames, 'video_preview': str(video_output)}
-result.update(brb_generation=brb_current['generation'], brb_theme=brb_current['theme'])
+result.update(brb_generation=brb_current['generation'], brb_theme=brb_current['theme'], pacman_frames=40 * brb_current['profile']['fps'])
 result.update(ending_job=ending_job['id'], ending_revision=ending_job['media_revision'], ending_duration=ending_job['duration'], ending_frames=round(ending_job['duration'] * ending_job['profile']['fps']))
 if os.environ.get('GENERATOR_SMOKE_STATE'):
     Path(os.environ['GENERATOR_SMOKE_STATE']).write_text(json.dumps(result))

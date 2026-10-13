@@ -1,4 +1,4 @@
-.PHONY: build test check check-web cross-build brb-artwork check-brb-artwork check-arcade-artwork check-neon-artwork check-workshop-artwork
+.PHONY: build test check check-web cross-build brb-artwork check-brb-artwork check-arcade-artwork check-neon-artwork check-workshop-artwork pacman-artwork check-pacman-artwork
 brb-artwork:
 	node artwork/brb/render.mjs
 check-brb-artwork:
@@ -10,11 +10,16 @@ check-neon-artwork:
 	node artwork/neon-night/verify.mjs
 check-workshop-artwork:
 	node artwork/maker-workshop/verify.mjs
+pacman-artwork:
+	node artwork/pacman-maze/render.mjs
+check-pacman-artwork:
+	node --test artwork/pacman-maze/motion.test.mjs
+	node artwork/pacman-maze/render.mjs --check
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/restreamer ./cmd/restreamer
 test:
 	go test -race -timeout 20m ./...
-check: test check-web check-arcade-artwork check-neon-artwork check-workshop-artwork
+check: test check-web check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
 	go vet ./...
 check-web:
 	node --test tests/*.test.mjs

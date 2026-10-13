@@ -30,7 +30,7 @@
     $('brb-theme-empty').textContent = candidateCurrent ? 'No prepared candidate. Prepare an exact theme revision in Studio; current BRB remains ready.' : 'Prepared BRB status unavailable or loading.';
     if (!candidate) return;
     const stale = candidate.base_generation !== current.generation;
-    $('brb-theme-candidate-detail').textContent = `${candidate.settings.theme.name} · revision ${candidate.settings.theme.revision} · ${candidate.settings.custom_image ? 'saved custom image' : candidate.settings.text} · ${candidate.settings.music ? `music at ${candidate.settings.volume}%` : 'silent audio'}${stale ? ' · BRB settings changed: prepare again before activation.' : ''}`;
+    $('brb-theme-candidate-detail').textContent = `${candidate.settings.theme.name} · revision ${candidate.settings.theme.revision} · ${candidate.video_duration}-second visual loop · ${candidate.settings.custom_image ? 'saved custom image' : candidate.settings.text} · ${candidate.settings.music ? `music at ${candidate.settings.volume}%` : 'silent audio'}${stale ? ' · BRB settings changed: prepare again before activation.' : ''}`;
     $('brb-theme-activate').disabled = !candidateCurrent || !connected || stale || preparing || operation || otherPending || reviewed !== candidate.id;
     if ($('brb-theme-discard')) $('brb-theme-discard').disabled = !desktop.matches || !connected || !candidateCurrent || preparing || operation;
     $('brb-theme-preview').disabled = !connected || !candidateCurrent || preparing || operation;
