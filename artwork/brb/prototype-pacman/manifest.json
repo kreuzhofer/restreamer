@@ -2,17 +2,18 @@
   "width": 1920,
   "height": 1080,
   "fps": 30,
-  "seconds": 32,
+  "seconds": 40,
   "hashes": {
-    "animation.mjs": "77c62fd73b560bb5712edb0c18f12746395b371d105a312d42da6176fb57956f",
+    "animation.mjs": "80cba75de520e3db6c066b22a9c7e96eff26a65a417505c2eb51e9d7902c26a8",
+    "motion.test.mjs": "605763d8b4e84b2dde0f16ef421fb31b5396dbac0485a167a1cb2389aaaf2765",
     "original.mjs": "95c59d693795b3d56b07be95184e7de351ef16cb2949dcdae7f56860c17848fc",
     "font.json": "68762478d69edf4c1f6ae5787366d91d41243244bbd1aaa9725feed05228da88",
-    "render.mjs": "b09430d5f3191e1f9cca54129ce55aaf6eaafa7375cf478e55c23f7684a6755d",
-    "preview.html": "7b55ae10c2a8b98b04afd5240aee01b3d6cfed1b23cdfed2972eb47eaca8bd40",
+    "render.mjs": "91613f3e1de8befca08b7ebc6b1d9374e9e823cb2ac9e5368322424448bc3eb6",
+    "preview.html": "a3e8c8d3100f1ee4e8b84aaa3352ea18274a527d084c4974eb273e26b95a8eda",
     "assets/maze.png": "b51165136a3a5da68cc5143da07763aaf7d245b223803f81e4e8a556308b5b74",
     "assets/cabinet.png": "b64b061f57ef5e4e6da6edc2444642529b7e6e32a86f1d0f5922a398f4f8a828",
     "assets/prompts.json": "c069f48a4beb46e718fd08dda6f62cd8fbd2f077f163ed7bf07b4b6cf4941bb9",
-    "B.mp4": "4c7e2e201aa6c83b167d0f264429cbb6505f8366fae63d411e8076ec0cd1af30",
-    "C.mp4": "3d6edd9c06e838e2cf0edfc8d48fd535ac1ba8c95830016c89f2b93cec1e92ef"
+    "B.mp4": "6d59a37ada530a7ec88fc734d069cea949cd5ea26fb04c343cd138a7fcbf44ee",
+    "C.mp4": "dd1b6cb85f4b64bae46afa347b7d1c010046f08a61a749a654b428a5fb30e2ed"
   }
 }

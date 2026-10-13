@@ -46,6 +46,6 @@ for(const variant of ['B','C']){
  execFileSync(ffmpeg,['-y','-v','error','-ss','3','-i',out,'-frames:v','1',dir+variant+'.png']);
  console.log(variant,metadata,'exact endpoint and full decode verified');
 }
-const names=['animation.mjs','original.mjs','font.json','render.mjs','preview.html','assets/maze.png','assets/cabinet.png','assets/prompts.json','B.mp4','C.mp4'];
+const names=['animation.mjs','motion.test.mjs','original.mjs','font.json','render.mjs','preview.html','assets/maze.png','assets/cabinet.png','assets/prompts.json','B.mp4','C.mp4'];
 const hashes={};for(const name of names)hashes[name]=createHash('sha256').update(await readFile(dir+name)).digest('hex');
 await writeFile(dir+'manifest.json',JSON.stringify({width:1920,height:1080,fps:FPS,seconds:DURATION,hashes},null,2)+'\n');
