@@ -117,9 +117,9 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	if math.IsNaN(rw) || math.IsInf(rw, 0) || math.IsNaN(rh) || math.IsInf(rh, 0) || rw < 30 || rw > 90 || rh < 12 || rh > 90 {
 		return fail("content_region", "Content width must be 30–90% and height 12–90% (blank inherits the theme).")
 	}
-	// Workshop lettering follows the contained 16:9 sign, including letterboxing.
+	// Pixel artwork lettering follows the contained 16:9 sign, including letterboxing.
 	contentWidth, contentHeight := width, height
-	if IsWorkshopArtwork(style.Artwork) && scene.Layout != "media" {
+	if IsPixelArtwork(style.Artwork) && scene.Layout != "media" {
 		scale := math.Min(float64(width)/16, float64(height)/9)
 		contentWidth, contentHeight = int(16*scale), int(9*scale)
 	}

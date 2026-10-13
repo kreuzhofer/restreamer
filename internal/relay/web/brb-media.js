@@ -28,7 +28,7 @@
       if (generation !== assets.generation) {
         generation = assets.generation; el('brb-image').src = `/api/brb/image?v=${encodeURIComponent(generation)}`; el('brb-image').hidden = false;
       }
-      el('brb-asset-status').textContent = `${assets.theme ? `${assets.theme.name} · revision ${assets.theme.revision} · 4-second visual loop` : assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
+      el('brb-asset-status').textContent = `${assets.theme ? `${assets.theme.name} · revision ${assets.theme.revision} · visual loop · still preview` : assets.custom_image ? 'Custom image · static screen' : 'Default arcade animation · 32-second loop · still preview'} · ${assets.music ? `Looping music at ${assets.volume}%` : 'Silent audio'}`;
       if (!dirty && !pending) { el('brb-text').value = assets.text ?? 'BE RIGHT BACK'; el('brb-volume').value = assets.volume; }
     }
   }

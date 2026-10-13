@@ -107,6 +107,25 @@ func WorkshopTheme(id string) Theme {
 	return Theme{ID: id, Revision: 1, Name: name, Builtin: true, Style: s}
 }
 
+// PacmanMazeTheme keeps the approved chase independent of legacy arcade media.
+func PacmanMazeTheme() Theme {
+	s := RetroTheme(1).Style
+	s.Font, s.FontSize, s.ListFontSize = "arcade-pixel", 64, 32
+	s.Artwork, s.Effect = "pacman-maze", "pacman-motion"
+	s.BackgroundColor, s.TextColor, s.AccentColor = "#06111e", "#fff0c8", "#18abef"
+	s.BorderStyle = "none"
+	s.ContentRegion = ContentRegion{40, 19}
+	s.ContentOffsetYPercent = -3
+	s.LineSpacingPercent, s.ListSpacingPercent = 100, 0
+	return Theme{ID: "pacman-maze", Revision: 1, Name: "Pac-Man Maze", Builtin: true, Style: s}
+}
+
+// Pixel artwork uses nearest-neighbor scaling and ties its content to the
+// contained 16:9 illustration, including letterboxed output profiles.
+func IsPixelArtwork(id string) bool {
+	return IsWorkshopArtwork(id) || id == "pacman-maze"
+}
+
 func IsWorkshopArtwork(id string) bool {
 	return id == "maker-workshop" || id == "maker-halloween" || id == "maker-christmas"
 }
@@ -116,7 +135,7 @@ func BuiltinThemes() []Theme {
 	arcadeList, neonList := arcade, neon
 	arcadeList.Revision, neonList.Revision = 2, 2
 	arcadeList.Style.ListFontSize, neonList.Style.ListFontSize = 64, 64
-	return []Theme{RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList, WorkshopTheme("maker-workshop"), WorkshopTheme("maker-halloween"), WorkshopTheme("maker-christmas")}
+	return []Theme{PacmanMazeTheme(), RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList, WorkshopTheme("maker-workshop"), WorkshopTheme("maker-halloween"), WorkshopTheme("maker-christmas")}
 }
 func IsBuiltinTheme(id string) bool {
 	for _, t := range BuiltinThemes() {
@@ -152,7 +171,7 @@ func ParseColor(value string) (color.RGBA, error) {
 func ValidateStyle(s Style) []Issue {
 	issues := make([]Issue, 0)
 	add := func(field, message string) { issues = append(issues, Issue{"style." + field, message}) }
-	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" && !IsWorkshopArtwork(s.Artwork) {
+	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" && !IsPixelArtwork(s.Artwork) {
 		add("artwork", "Choose an available built-in artwork.")
 	}
 	if s.Artwork != "" && s.Background != nil {
@@ -166,6 +185,9 @@ func ValidateStyle(s Style) []Issue {
 	}
 	if s.Effect == "workshop-motion" && !IsWorkshopArtwork(s.Artwork) {
 		add("effect", "Workshop motion requires workshop artwork.")
+	}
+	if s.Effect == "pacman-motion" && s.Artwork != "pacman-maze" {
+		add("effect", "Pac-Man motion requires Pac-Man Maze artwork.")
 	}
 	if s.TextEdgeColor != "" {
 		if _, err := ParseColor(s.TextEdgeColor); err != nil {
@@ -207,8 +229,8 @@ func ValidateStyle(s Style) []Issue {
 	if !validRange(s.BorderWidth, 1, 12) {
 		add("border_width", "Use 1–12 at 1080p.")
 	}
-	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" && s.Effect != "neon-palette" && s.Effect != "workshop-motion" {
-		add("effect", "Choose none, pixel-trail, arcade-palette, neon-palette or workshop-motion.")
+	if s.Effect != "none" && s.Effect != "pixel-trail" && s.Effect != "arcade-palette" && s.Effect != "neon-palette" && s.Effect != "workshop-motion" && s.Effect != "pacman-motion" {
+		add("effect", "Choose none, pixel-trail, arcade-palette, neon-palette, workshop-motion or pacman-motion.")
 	}
 	if s.EffectSpeed < 1 || s.EffectSpeed > 12 {
 		add("effect_speed", "Use 1–12 pixel steps per second.")
@@ -275,7 +297,7 @@ func ThemeBackdrop(width, height int, s Style, inputs RenderInputs) *image.RGBA 
 	accent, _ := ParseColor(s.AccentColor)
 	if !inputs.TransparentBackdrop {
 		draw.Draw(img, img.Bounds(), image.NewUniform(bg), image.Point{}, draw.Src)
-		if IsWorkshopArtwork(s.Artwork) {
+		if IsPixelArtwork(s.Artwork) {
 			fitImageWithScaler(img, img.Bounds(), inputs.Background, xdraw.NearestNeighbor)
 		} else {
 			fitImage(img, img.Bounds(), inputs.Background)

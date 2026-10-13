@@ -1,0 +1,21 @@
+{
+  "width": 1920,
+  "height": 1080,
+  "source_width": 960,
+  "source_height": 540,
+  "fps": 30,
+  "duration": 40,
+  "hashes": {
+    "artwork/pacman-maze/animation.mjs": "68a270e54552a9fdbc63b4d2a6c675ccc122530dc64e3a16b7b68ef9c27cf49a",
+    "artwork/pacman-maze/motion.test.mjs": "c1ac4d10ab764910de3586c6707e08a0cbdb84039107ed85cc4da23d2c8d5485",
+    "artwork/pacman-maze/raster.mjs": "315e84e935de0fac66b43cfb6f59740a755b72a0c8819174ae8f6768f18e5547",
+    "artwork/pacman-maze/render.mjs": "c4bf3e8cdf3f3e371f37e91b30bbcf7f65dd4e712b8db2a028d4527c207a328b",
+    "artwork/pacman-maze/background.png": "b51165136a3a5da68cc5143da07763aaf7d245b223803f81e4e8a556308b5b74",
+    "artwork/pacman-maze/prompts.json": "c069f48a4beb46e718fd08dda6f62cd8fbd2f077f163ed7bf07b4b6cf4941bb9",
+    "artwork/brb/font.json": "68762478d69edf4c1f6ae5787366d91d41243244bbd1aaa9725feed05228da88",
+    "internal/relay/artwork/pacman-maze/brb.mp4": "74f1d19e882fad7becb405b81e77a3035de692a7b4aa685257ccfdbb1488ef98",
+    "internal/relay/artwork/pacman-maze/brb.png": "d0ba620795e83cced43935149c25fb83827f3a62bf5c8b3fe87f69d955c7a41d",
+    "internal/relay/artwork/pacman-maze/loop.mp4": "4e0e83c2ad2ec7f4abe8fc9d9b4fb26dc22fa490cd95cc18576cae0d730ddbd2",
+    "internal/relay/artwork/pacman-maze/loop.png": "37c4a10f414ad50441a478bbc0e4e13fa09926ea985fe8dfb5aa94c354c5f873"
+  }
+}

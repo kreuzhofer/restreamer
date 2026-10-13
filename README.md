@@ -574,6 +574,14 @@ Expand **BRB screen & music** in Studio:
   profile overrides the initial JSON profile on restart. Assets/profile persist;
   deliberate BRB selection does not persist across application restarts.
 
+**Pac-Man Maze · revision 1** is an opt-in 40-second BRB theme with the detailed
+maze, ghost regeneration, staggered exits and a continuous chase. Select it under
+**Shared style theme**, choose **Prepare theme preview**, review the full exact
+preview, then **Activate prepared BRB**. Existing default arcade media and retained
+shared-theme selections remain available. Its centered sign uses editable Arcade
+Pixel text; long messages follow shared-theme overflow validation. The same artwork
+is available for authored scenes without the BRB-only “STREAM PAUSED” caption.
+
 Expand **Shared style theme** to select an exact built-in or named theme revision
 from the same library used by prestream and ending. Customize named variants in
 **Studio → Themes**, then explicitly refresh the BRB choices. A theme edit never
@@ -595,9 +603,11 @@ existing `/api/brb/assets` prepare-and-save contract remains available.
 
 Shared-theme BRB uses the same embedded typography, images/logos, palette,
 spacing, borders, and decorative effect renderer as authored scenes. It supports
-up to 1920 × 1080 at 30 fps with a four-second visual loop. The complete uploaded
-music track retains its own independent loop and selected volume; it is never
-trimmed to four seconds. The exact preview shows the first four seconds. Existing
+up to 1920 × 1080 at 30 fps. Plain styles use a four-second visual loop; illustrated
+themes retain their full motion cycle (16 seconds for Arcade After Hours/Neon Night,
+12 seconds for Workshop, and 40 seconds for Pac-Man Maze). The complete uploaded
+music track retains its own independent loop and selected volume. The exact preview
+shows one full visual cycle. Existing
 legacy styling keeps its original profile support and 32-second arcade or
 two-second custom-image loop. Restore legacy styling before choosing a profile
 outside the measured shared-theme limits.
@@ -856,6 +866,7 @@ The generator's **Style theme library** offers Retro revision 1 (the original
 static appearance), Retro revision 2 (pixel corners and an animated pixel
 trail), **Arcade After Hours · revision 2** (the illustrated arcade city,
 vivid stars, chasing lights, cabinet highlights and animated canal reflections),
+**Pac-Man Maze · revision 1** (the detailed maze and continuous 40-second chase),
 and **Neon Night · revision 2** (a neon skyline, rooftop cat, shimmering river,
 changing window lights, cyan/magenta trims and vivid stars).
 Revision 2 of both illustrated themes keeps the 120-point title lettering and

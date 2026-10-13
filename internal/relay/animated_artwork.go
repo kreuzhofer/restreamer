@@ -35,6 +35,9 @@ var neonNightPoster []byte
 //go:embed artwork/maker-workshop/*/*.mp4 artwork/maker-workshop/*/*.png
 var workshopMedia embed.FS
 
+//go:embed artwork/pacman-maze/*.mp4 artwork/pacman-maze/*.png
+var pacmanMedia embed.FS
+
 type preparedArtwork struct {
 	loop, poster []byte
 	effect       string
@@ -54,6 +57,20 @@ func themeArtwork(id string) (preparedArtwork, bool) {
 
 func themeArtworkForStage(id, stage string) (preparedArtwork, bool) {
 	switch id {
+	case "pacman-maze":
+		if stage != "brb" && stage != "prestream" && stage != "ending" {
+			return preparedArtwork{}, false
+		}
+		name := "loop"
+		if stage == "brb" {
+			name = "brb"
+		}
+		loop, loopErr := pacmanMedia.ReadFile("artwork/pacman-maze/" + name + ".mp4")
+		poster, posterErr := pacmanMedia.ReadFile("artwork/pacman-maze/" + name + ".png")
+		if loopErr != nil || posterErr != nil {
+			return preparedArtwork{}, false
+		}
+		return preparedArtwork{loop: loop, poster: poster, effect: "pacman-motion", seconds: 40}, true
 	case "arcade-after-hours":
 		return preparedArtwork{loop: afterHoursLoop, poster: afterHoursPoster, effect: "arcade-palette", seconds: 16}, true
 	case "neon-night":
@@ -87,7 +104,7 @@ func themedBRBSeconds(style mediaauthor.Style) int {
 // profiles. Colors have already passed six-digit validation before rendering.
 func artworkBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string {
 	filter := "area"
-	if mediaauthor.IsWorkshopArtwork(style.Artwork) {
+	if mediaauthor.IsPixelArtwork(style.Artwork) {
 		filter = "neighbor"
 	}
 	return fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=%s,format=rgb24,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x%s,setsar=1", p.Width, p.Height, filter, p.Width, p.Height, strings.TrimPrefix(style.BackgroundColor, "#"))
