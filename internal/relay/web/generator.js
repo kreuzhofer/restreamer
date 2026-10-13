@@ -5,6 +5,9 @@
   let templates = [];
   let themes = [];
   let editingTheme = null;
+  const pinnedThemes = new Map();
+  let themePreviewSequence = 0, themePreviewTimer, themePreviewAbort, themePreviewURL = '', themeDownloadName = '';
+  let themeView = 'border';
   let themeDirty = false;
   let themeSaving = false;
   let templateSaving = false;
@@ -42,6 +45,7 @@
       if (button.dataset.studioCollection === name) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     });
+    if (name === 'themes' && editingTheme) scheduleThemePreview();
     if (focus) document.querySelector(`[data-studio-collection="${name}"]`).focus();
   }
   function showEditor() {
@@ -177,6 +181,7 @@
   function openDraft(value) {
     clearTimeout(saveTimer);
     draft = value; dirty = false; conflict = false; editSequence++;
+    loadPinnedTheme(value.theme);
     selectedScene = 0; validationIssues = [];
     stopGeneratedPreview();
     $('generation-history').open = false;
@@ -948,9 +953,9 @@
   function renderDesignTheme() {
     const value = draft ? themeKey(draft.theme) : '';
     $('design-theme').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
-    if (value && !themes.some(theme => themeKey(theme) === value)) $('design-theme').add(new Option('Unavailable pinned theme', value));
+    if (value && !themes.some(theme => themeKey(theme) === value)) $('design-theme').add(new Option(pinnedThemes.has(value) ? `${pinnedThemes.get(value).name} · revision ${draft.theme.revision} (retired)` : 'Loading pinned theme…', value));
     $('design-theme').value = value;
-    const selected = themes.find(theme => themeKey(theme) === value);
+    const selected = themes.find(theme => themeKey(theme) === value) || pinnedThemes.get(value);
     const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
     $('apply-theme-update').hidden = !latest || latest.revision <= draft.theme.revision;
     $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
@@ -972,6 +977,7 @@
       const value = ['width_percent','height_percent'].includes(key) ? theme.style.content_region[key] : theme.style[key];
       $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? (key === 'content_offset_y_percent' ? 0 : '');
     }
+    scheduleThemePreview();
     $('theme-publish').disabled = theme.builtin;
     $('theme-delete').disabled = theme.builtin;
     renderCollectionContext();
@@ -988,6 +994,55 @@
     }
     return theme;
   }
+  async function loadPinnedTheme(ref) {
+    const key = themeKey(ref);
+    if (themes.some(theme => themeKey(theme) === key) || pinnedThemes.has(key)) return;
+    try {
+      const theme = await (await request(`/api/generator/themes/${encodeURIComponent(ref.id)}/revisions/${ref.revision}`)).json();
+      pinnedThemes.set(key, theme);
+      if (draft && themeKey(draft.theme) === key) renderDesignTheme();
+    } catch (error) { if (draft && themeKey(draft.theme) === key) notify(`Pinned theme unavailable: ${error.message}`); }
+  }
+  function scheduleThemePreview() {
+    const sequence = ++themePreviewSequence;
+    clearTimeout(themePreviewTimer); themePreviewAbort?.abort();
+    if (themePreviewURL) URL.revokeObjectURL(themePreviewURL);
+    themePreviewURL = ''; $('theme-download').removeAttribute('href'); $('theme-download').setAttribute('aria-disabled', 'true'); $('theme-download').tabIndex = -1;
+    const canvas = $('theme-preview-canvas'); canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    if (!editingTheme || $('studio-themes').hidden) return;
+    $('theme-preview-status').textContent = 'Rendering preview…';
+    $('theme-preview-help').textContent = themeView === 'border'
+      ? '1920 × 1080 PNG with a transparent center. Add as an Image source in OBS. Each artwork has one fixed frame; colors and logos apply to scene samples only. Checkerboard is preview-only.'
+      : '1920 × 1080 still sample with example text and your current settings. Animated backgrounds remain animated in generated shows and BRB media.';
+    themePreviewTimer = setTimeout(() => renderThemePreview(sequence), 300);
+  }
+  async function renderThemePreview(sequence) {
+    const controller = new AbortController(); themePreviewAbort = controller;
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const theme = localTheme();
+      const response = await request('/api/generator/themes/preview', 'POST', {style: theme.style, view: themeView}, controller.signal);
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+      if (sequence !== themePreviewSequence) { bitmap.close(); return; }
+      const canvas = $('theme-preview-canvas');
+      canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
+      themePreviewURL = URL.createObjectURL(blob);
+      themeDownloadName = `${theme.id}-r${theme.revision}-${themeView}.png`;
+      $('theme-download').href = themePreviewURL; $('theme-download').download = themeDownloadName;
+      $('theme-download').setAttribute('aria-disabled', 'false'); $('theme-download').tabIndex = 0;
+      $('theme-preview-status').textContent = `${theme.name} · ${themeView === 'border' ? 'OBS frame · alpha transparency' : 'scene sample'}${themeDirty ? ' · unpublished settings' : ''}`;
+    } catch (error) {
+      if (sequence === themePreviewSequence) $('theme-preview-status').textContent = `Preview unavailable: ${error.name === 'AbortError' ? 'render timed out; refresh to retry.' : error.message}`;
+    } finally { clearTimeout(timer); }
+  }
+  $('theme-views').addEventListener('click', event => {
+    const button = event.target.closest('[data-theme-view]'); if (!button) return;
+    themeView = button.dataset.themeView;
+    document.querySelectorAll('[data-theme-view]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    scheduleThemePreview();
+  });
+  $('theme-preview-retry').addEventListener('click', scheduleThemePreview);
   async function loadThemes() {
     $('themes-state').textContent = 'Loading theme revisions…';
     try { themes = await (await request('/api/generator/themes')).json(); }
@@ -995,9 +1050,9 @@
     $('themes-state').textContent = `${themes.length} immutable revisions · ${new Set(themes.map(theme => theme.id)).size} themes`;
     const selection = $('new-theme').value;
     $('new-theme').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
-    $('new-theme').value = themes.some(theme => themeKey(theme) === selection) ? selection : 'retro:2';
+    $('new-theme').value = themes.some(theme => themeKey(theme) === selection) ? selection : 'arcade-after-hours:2';
     $('theme-library').replaceChildren(...themes.map(theme => new Option(`${theme.name} · revision ${theme.revision}`, themeKey(theme))));
-    if (!editingTheme) editTheme(themes.find(theme => theme.id === 'retro' && theme.revision === 2));
+    if (!editingTheme) editTheme(themes.find(theme => theme.id === 'arcade-after-hours' && theme.revision === 2));
     else $('theme-library').value = themeKey(editingTheme);
     renderDesignTheme();
   }
@@ -1005,7 +1060,7 @@
     if (themeSaving || (themeDirty && !window.confirm('Discard unpublished theme settings?'))) { $('theme-library').value = themeKey(editingTheme); return; }
     editTheme(themes.find(theme => themeKey(theme) === $('theme-library').value));
   });
-  $('theme-form').addEventListener('input', () => { themeDirty = true; $('theme-status').textContent = 'Unpublished theme settings. Save as a new theme or publish a revision.'; });
+  $('theme-form').addEventListener('input', () => { themeDirty = true; scheduleThemePreview(); $('theme-status').textContent = 'Unpublished theme settings. Save as a new theme or publish a revision.'; });
   async function publishTheme(duplicate) {
     if (!editingTheme || themeSaving) return;
     if (!$('theme-form').reportValidity()) return;

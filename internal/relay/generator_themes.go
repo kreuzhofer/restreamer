@@ -23,7 +23,7 @@ const maxThemeRevisions = 200
 
 func (g *generatorStore) loadThemes() error {
 	g.themes = map[mediaauthor.ThemeRef]mediaauthor.Theme{}
-	for _, t := range mediaauthor.BuiltinThemes() {
+	for _, t := range append(mediaauthor.BuiltinThemes(), mediaauthor.ArchivedThemes()...) {
 		g.themes[mediaauthor.ThemeRef{ID: t.ID, Revision: t.Revision}] = t
 	}
 	files, err := os.ReadDir(g.themesRoot)
@@ -38,7 +38,7 @@ func (g *generatorStore) loadThemes() error {
 		if readMediaJSON(filepath.Join(g.themesRoot, f.Name()), &t) != nil || !validDesignID(t.ID) || t.Revision < 1 || t.Builtin || !validThemeName(t.Name) || len(mediaauthor.ValidateStyle(t.Style)) > 0 || f.Name() != fmt.Sprintf("%s-%d.json", t.ID, t.Revision) {
 			return errors.New("invalid saved theme revision")
 		}
-		if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes()) {
+		if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes())+len(mediaauthor.ArchivedThemes()) {
 			return errors.New("theme revision limit exceeded")
 		}
 		g.themes[mediaauthor.ThemeRef{ID: t.ID, Revision: t.Revision}] = t
@@ -111,6 +111,9 @@ func (s *Server) generatorThemesHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		out := make([]mediaauthor.Theme, 0, len(g.themes))
 		for _, t := range g.themes {
+			if mediaauthor.IsRetiredTheme(t) {
+				continue
+			}
 			out = append(out, t)
 		}
 		sort.Slice(out, func(i, j int) bool {
@@ -150,7 +153,7 @@ func (s *Server) generatorThemesHTTP(w http.ResponseWriter, r *http.Request) {
 	s.saveThemeHTTP(w, g, base, 201)
 }
 func (s *Server) saveThemeHTTP(w http.ResponseWriter, g *generatorStore, t mediaauthor.Theme, status int) {
-	if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes()) {
+	if len(g.themes) >= maxThemeRevisions+len(mediaauthor.BuiltinThemes())+len(mediaauthor.ArchivedThemes()) {
 		http.Error(w, "Theme history limit reached (200 custom revisions)", 409)
 		return
 	}

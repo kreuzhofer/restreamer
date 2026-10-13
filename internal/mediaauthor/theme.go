@@ -135,10 +135,24 @@ func BuiltinThemes() []Theme {
 	arcadeList, neonList := arcade, neon
 	arcadeList.Revision, neonList.Revision = 2, 2
 	arcadeList.Style.ListFontSize, neonList.Style.ListFontSize = 64, 64
-	return []Theme{PacmanMazeTheme(), RetroTheme(1), RetroTheme(2), arcade, arcadeList, neon, neonList, WorkshopTheme("maker-workshop"), WorkshopTheme("maker-halloween"), WorkshopTheme("maker-christmas")}
+	return []Theme{PacmanMazeTheme(), arcadeList, neonList, WorkshopTheme("maker-workshop"), WorkshopTheme("maker-halloween"), WorkshopTheme("maker-christmas")}
 }
+
+// Archived revisions remain available to pinned designs and retained media.
+func ArchivedThemes() []Theme {
+	return []Theme{RetroTheme(1), RetroTheme(2), ArcadeAfterHoursTheme(), NeonNightTheme()}
+}
+func IsRetiredTheme(t Theme) bool {
+	for _, old := range ArchivedThemes() {
+		if t.Builtin && t.ID == old.ID && t.Revision == old.Revision {
+			return true
+		}
+	}
+	return false
+}
+func DefaultThemeRef() ThemeRef { return ThemeRef{ID: "arcade-after-hours", Revision: 2} }
 func IsBuiltinTheme(id string) bool {
-	for _, t := range BuiltinThemes() {
+	for _, t := range append(BuiltinThemes(), ArchivedThemes()...) {
 		if t.ID == id {
 			return true
 		}

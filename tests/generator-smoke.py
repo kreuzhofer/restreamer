@@ -118,7 +118,21 @@ if '--verify-restart' in sys.argv:
     print('Generated revision and captured inputs survived restart')
     sys.exit(0)
 
-draft = request('/api/generator/designs', 'POST', {'name': 'Generated smoke title', 'stage': 'prestream'})
+# The packaged binary embeds all six purpose-designed alpha frames.
+catalog = request('/api/generator/themes')
+current = [theme for theme in catalog if theme['builtin']]
+assert len(current) == 6, current
+for theme in current:
+    assert theme['id'] != 'retro', theme
+    assert theme['revision'] == (2 if theme['id'] in ('arcade-after-hours', 'neon-night') else 1), theme
+    png = request('/api/generator/themes/preview', 'POST', {'style': theme['style'], 'view': 'border'}, raw=True)
+    assert png[:8] == b'\x89PNG\r\n\x1a\n', theme
+    assert struct.unpack('>IIBB', png[16:26]) == (1920, 1080, 8, 6), theme
+assert request('/api/generator/themes/retro/revisions/1')['revision'] == 1
+print('Verified six full-HD RGBA frame downloads and archived-theme compatibility')
+
+# Keep the original multi-alphabet font fixture pinned as the default evolves.
+draft = request('/api/generator/designs', 'POST', {'name': 'Generated smoke title', 'stage': 'prestream', 'theme': {'id': 'retro', 'revision': 1}})
 draft['scenes'][0]['text'] = 'Welcome\nGrüße ΩЖ'
 draft['scenes'][0]['duration_seconds'] = 1.2
 draft = request('/api/generator/designs/' + draft['id'], 'PUT', draft)

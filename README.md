@@ -862,9 +862,7 @@ Built-in starters are immutable sources; their copied scenes are fully editable.
 
 ### Versioned style themes
 
-The generator's **Style theme library** offers Retro revision 1 (the original
-static appearance), Retro revision 2 (pixel corners and an animated pixel
-trail), **Arcade After Hours · revision 2** (the illustrated arcade city,
+The generator's **Style theme library** offers **Arcade After Hours · revision 2** (the illustrated arcade city,
 vivid stars, chasing lights, cabinet highlights and animated canal reflections),
 **Pac-Man Maze · revision 1** (the detailed maze and continuous 40-second chase),
 and **Neon Night · revision 2** (a neon skyline, rooftop cat, shimmering river,
@@ -872,7 +870,7 @@ changing window lights, cyan/magenta trims and vivid stars).
 Revision 2 of both illustrated themes keeps the 120-point title lettering and
 uses a separate 64-point default for list scenes, so the agenda and follow-up
 starters fit without manual changes. For existing revision-1 designs, click
-**Apply updated theme**, then regenerate. Revision 1 remains available; already
+**Apply updated theme**, then regenerate. Revision 1 remains resolvable for saved designs but is retired from new selections; already
 prepared media is unchanged. Explicit scene font sizes still override the theme.
 The theme editor exposes **List font size**; leaving it blank inherits the
 normal default. Whitespace-only titles render empty, and validation identifies
@@ -921,6 +919,12 @@ prompts and rebuild instructions are in [Arcade After Hours](artwork/arcade-afte
 and [Neon Night](artwork/neon-night/README.md).
 Neon Night uses pale aqua lettering with magenta edges and purple shadows;
 its artwork and animation remain independent of Arcade After Hours.
+
+### Theme previews and OBS frames
+
+In **Studio → Themes**, choose a current theme and switch between **OBS frame**, **Starting soon**, **Agenda**, **BRB**, and **Ending**. Download PNG exports at 1920×1080 on desktop or phone. Scene samples use example text and the current editor settings without publishing a revision. Each built-in artwork has a dedicated thin OBS frame with a transparent center; add it as an Image source in OBS. Frame artwork has fixed colors and excludes custom logos. Custom styles without built-in artwork do not have a frame.
+
+The catalog offers Pac-Man Maze, Arcade After Hours revision 2, Neon Night revision 2, and Maker Workshop normal, Christmas and Halloween. Retro and superseded Arcade/Neon revision 1 are retired from selectors. Saved designs and retained media keep their exact old revisions; no generated or uploaded files are deleted by this change.
 
 ### Maker Workshop and seasonal sets
 

@@ -56,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	private.HandleFunc("GET /api/generator/themes", s.generatorThemesHTTP)
 	private.HandleFunc("POST /api/generator/themes", s.generatorThemesHTTP)
+	private.HandleFunc("POST /api/generator/themes/preview", s.generatorThemePreviewHTTP)
 	private.HandleFunc("PUT /api/generator/themes/{id}", s.generatorThemeHTTP)
 	private.HandleFunc("DELETE /api/generator/themes/{id}", s.generatorThemeDelete)
 	private.HandleFunc("GET /api/generator/themes/{id}/revisions/{revision}", s.generatorThemeHTTP)
