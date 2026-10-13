@@ -25,7 +25,7 @@ func TestGeneratorDraftSurvivesRestartAndCopiesAreIndependent(t *testing.T) {
 	}
 	id := draft["id"].(string)
 	scene := draft["scenes"].([]any)[0].(map[string]any)
-	if scene["duration_seconds"] != float64(10) || draft["theme"].(map[string]any)["id"] != "retro" {
+	if scene["duration_seconds"] != float64(10) || draft["theme"].(map[string]any)["id"] != "arcade-after-hours" {
 		t.Fatal("blank defaults", draft)
 	}
 	scene["text"] = "Welcome, München!\nMixed CASE café"
@@ -91,7 +91,7 @@ func TestGeneratorConflictPreservesNewerDraftAndStorageFailureIsNotAcknowledged(
 
 func TestGeneratorPreviewValidatesGlyphsDurationAndOverflow(t *testing.T) {
 	s := libraryServer(t)
-	w := dashboardRequest(s, "POST", "/api/generator/designs", `{"name":"Preview","stage":"prestream"}`)
+	w := dashboardRequest(s, "POST", "/api/generator/designs", `{"name":"Preview","stage":"prestream","theme":{"id":"retro","revision":1}}`)
 	var draft map[string]any
 	json.Unmarshal(w.Body.Bytes(), &draft)
 	scene := draft["scenes"].([]any)[0].(map[string]any)
@@ -171,7 +171,7 @@ func TestGeneratorPreviewFitsEveryStreamingResolutionWithoutChangingText(t *test
 		t.Run(fmt.Sprint(resolution), func(t *testing.T) {
 			// Existing library profile seam supplies the active streaming dimensions.
 			s.library.setProfile(config.BRBProfile{Width: resolution[0], Height: resolution[1], FPS: 25, SampleRate: 48000})
-			w := dashboardRequest(s, "POST", "/api/generator/designs", `{"name":"Resolution","stage":"ending"}`)
+			w := dashboardRequest(s, "POST", "/api/generator/designs", `{"name":"Resolution","stage":"ending","theme":{"id":"retro","revision":1}}`)
 			var d map[string]any
 			json.Unmarshal(w.Body.Bytes(), &d)
 			scene := d["scenes"].([]any)[0].(map[string]any)

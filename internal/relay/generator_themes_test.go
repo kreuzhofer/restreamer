@@ -297,7 +297,7 @@ func TestGeneratorThemeAdoptionRevalidatesTypography(t *testing.T) {
 
 func TestGeneratorThemeRoutesPreserveControlSecurity(t *testing.T) {
 	s := libraryServer(t)
-	for _, route := range []struct{ method, path string }{{"GET", "/api/generator/themes"}, {"POST", "/api/generator/themes"}, {"GET", "/api/generator/themes/retro/revisions/1"}, {"PUT", "/api/generator/themes/retro"}} {
+	for _, route := range []struct{ method, path string }{{"GET", "/api/generator/themes"}, {"POST", "/api/generator/themes"}, {"POST", "/api/generator/themes/preview"}, {"GET", "/api/generator/themes/retro/revisions/1"}, {"PUT", "/api/generator/themes/retro"}} {
 		r := httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`))
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)

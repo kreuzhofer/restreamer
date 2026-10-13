@@ -65,7 +65,7 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 		if draft.Scenes == nil {
 			draft.Scenes = []mediaauthor.Scene{{ID: "scene-1", Layout: "title", DurationSeconds: 10}}
 			if draft.Theme.ID == "" && draft.Theme.Revision == 0 {
-				draft.Theme = mediaauthor.ThemeRef{ID: "retro", Revision: 1}
+				draft.Theme = mediaauthor.DefaultThemeRef()
 			}
 		}
 		if !designBounds(draft) {

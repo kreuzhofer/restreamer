@@ -38,7 +38,7 @@
   async function loadThemes() {
     if (!authoring) return;
     themes = await (await request('/api/generator/themes')).json();
-    const previous = $('brb-theme-select').value || (current?.theme ? `${current.theme.id}:${current.theme.revision}` : 'retro:2');
+    const previous = $('brb-theme-select').value || (current?.theme ? `${current.theme.id}:${current.theme.revision}` : 'arcade-after-hours:2');
     $('brb-theme-select').replaceChildren();
     for (const theme of themes) $('brb-theme-select').add(new Option(`${theme.name} · revision ${theme.revision}`, `${theme.id}:${theme.revision}`));
     if ([...$('brb-theme-select').options].some(option => option.value === previous)) $('brb-theme-select').value = previous;
