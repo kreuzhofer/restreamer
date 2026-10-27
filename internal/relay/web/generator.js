@@ -37,6 +37,12 @@
   let assetUploading = false;
   let assetUploadRequest;
   function showCollection(name, focus = false) {
+    if (name !== 'brb') $('brb-theme-video').pause();
+    $('generated-video').pause(); $('source-video').pause();
+    $('shared-editor-nav').hidden = name !== 'brb';
+    document.body.dataset.studioView = name;
+    if (name === 'music') loadAssets();
+    if (name === 'setup') window.showSetup?.refresh();
     document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = panel.dataset.collectionPanel !== name; });
     $('design-editor').hidden = true;
     renderCollectionContext();
@@ -46,9 +52,13 @@
       else button.removeAttribute('aria-current');
     });
     if (name === 'themes' && editingTheme) scheduleThemePreview();
-    if (focus) document.querySelector(`[data-studio-collection="${name}"]`).focus();
+    if (focus) document.querySelector(`[data-studio-collection="${name}"]`)?.focus();
+    history.replaceState(null, '', name === 'brb' ? '/studio?editor=brb' : `/studio?collection=${name}`);
   }
   function showEditor() {
+    $('brb-theme-video').pause();
+    $('shared-editor-nav').hidden = false;
+    document.body.dataset.studioView = 'editor';
     document.querySelectorAll('[data-collection-panel]').forEach(panel => { panel.hidden = true; });
     $('design-editor').hidden = false;
     $('resume-design').hidden = true;
@@ -63,17 +73,21 @@
     document.querySelectorAll('[data-editor-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editorPanel === name)));
   }
   function showPreviewPanel(name) {
+    if (name === 'results') $('generation-history').open = true;
     $('studio-scene-preview').hidden = name !== 'scene';
     $('studio-results').hidden = name !== 'results';
     document.querySelectorAll('[data-preview-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.previewPanel === name)));
   }
   document.querySelectorAll('[data-studio-collection]').forEach(button => button.addEventListener('click', () => showCollection(button.dataset.studioCollection)));
-  const requestedCollection = new URLSearchParams(location.search).get('collection');
-  if (['designs', 'media', 'themes', 'templates', 'brb'].includes(requestedCollection)) showCollection(requestedCollection);
+  const initialParams = new URLSearchParams(location.search);
+  const requestedCollection = initialParams.get('editor') === 'brb' ? 'brb' : initialParams.get('collection') || 'setup';
+  // Defer routing until the editor has loaded the requested design.
+  const requestedDesign = initialParams.get('id');
+  if (['prestream','ending'].includes(initialParams.get('stage'))) $('new-stage').value = initialParams.get('stage');
   document.querySelectorAll('[data-inspector]').forEach(button => button.addEventListener('click', () => showInspector(button.dataset.inspector)));
   document.querySelectorAll('[data-editor-panel]').forEach(button => button.addEventListener('click', () => showEditorPanel(button.dataset.editorPanel)));
   document.querySelectorAll('[data-preview-panel]').forEach(button => button.addEventListener('click', () => showPreviewPanel(button.dataset.previewPanel)));
-  $('back-to-designs').addEventListener('click', () => showCollection('designs', true));
+  $('back-to-designs').addEventListener('click', () => showCollection('setup', true));
   $('resume-design').addEventListener('click', () => { showEditor(); $('editor-heading').focus(); });
   const mobileStudio = matchMedia('(max-width: 600px)');
   function updateStudioDevice() {
@@ -186,6 +200,7 @@
     stopGeneratedPreview();
     $('generation-history').open = false;
     $('design-name').value = draft.name;
+    $('editor-heading').textContent = draft.name;
     $('loop-controls').hidden = draft.stage !== 'prestream';
     $('loop-transition').value = draft.loop_transition?.kind || 'cut';
     $('loop-duration').value = draft.loop_transition?.duration_seconds || 0.5;
@@ -570,6 +585,7 @@
     } catch (error) { $('template-status').textContent = `${error.message} Your current draft is retained.`; }
   });
 
+  let historySignature = '';
   function renderJobs() {
     const focused = document.activeElement;
     const focusJob = focused?.closest('[data-job-id]')?.dataset.jobId;
@@ -591,6 +607,7 @@
       row.append(label, cancel); $('generation-queue').append(row);
     }
     if (!draft) {
+      historySignature = '';
       if (focusContainer === 'generation-queue') $('generation-status').focus({preventScroll: true});
       return;
     }
@@ -600,11 +617,14 @@
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
     const stagePhase = stageStatus.stage === 'ENDING' && stageStatus.ending?.draining ? 'ENDING · finishing destination writes' : stageStatus.stage === 'OFF' && stageStatus.ending?.completed ? 'Ending completed · destination results are in live control' : stageStatus.stage || 'Status unavailable';
     $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
+    const nextHistory = JSON.stringify([jobs, draft, dirty, saving, conflict, deleting, jobRequest, jobsCurrent, stageSelections, stageStatus.stage, stageStatus.source, stageStatus.mode, stageStatus.media, stageStatus.return_stage, stageStatus.return_media, stageStatus.ending, mediaRevisions]);
+    if (nextHistory === historySignature) return;
+    historySignature = nextHistory;
     const relevant = jobs.filter(job => job.design_snapshot.id === draft.id).sort((a, b) => b.sequence - a.sequence);
     const latest = relevant[0];
     lastReadyJob = relevant.find(job => job.state === 'ready') || null;
     const readyMedia = mediaRevisions.find(media => media.id === lastReadyJob?.media_revision);
-    const shortRevision = revision => revision ? revision.slice(0, 12) : 'None';
+    const shortRevision = revision => window.mediaPresentation.label(revision, jobs, mediaRevisions);
     const selectedRevision = stageSelections[draft.stage];
     const activeRevision = stageStatus.source === 'file' ? stageStatus.media?.revision : null;
     const summary = [
@@ -630,9 +650,13 @@
     }
     for (const job of relevant) {
       const row = document.createElement('article'); row.className = 'generator-job'; row.dataset.jobId = job.id; row.dataset.state = job.state;
-      const title = document.createElement('strong'); title.textContent = `${job.design_snapshot.name} · ${job.design_snapshot.stage.toUpperCase()} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
+      const title = document.createElement('strong'); title.textContent = `${window.mediaPresentation.renderName(job)} · ${window.mediaPresentation.date(job.created_at)} · ${job.state}${job.queue_position ? ` #${job.queue_position} in queue` : ''} · captured draft v${job.design_snapshot.version} · ${job.duration.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds`;
       const identity = document.createElement('p'); identity.textContent = `Design revision ${job.design_revision.slice(0, 12)} · theme ${job.design_snapshot.theme.id} revision ${job.design_snapshot.theme.revision} · ${job.profile.width} × ${job.profile.height} · ${job.profile.fps} fps${job.retry_of ? ' · retry of captured inputs' : ''}`;
-      row.append(title, identity);
+      const technical = document.createElement('details'); technical.className = 'render-technical';
+      const technicalHeading = document.createElement('summary'); technicalHeading.textContent = 'Technical details';
+      technical.append(technicalHeading, identity);
+      const changes = document.createElement('p'); changes.textContent = window.mediaPresentation.changes(job, relevant[relevant.indexOf(job) + 1]);
+      row.append(title, changes, technical);
       if (job.mix_gain != null) {
         const gain = document.createElement('p');
         gain.textContent = `Whole-mix gain: ${(job.mix_gain * 100).toFixed(2)}%${job.mix_gain < 1 ? ' · fixed peak protection; relative levels preserved' : ' · requested levels retained'}`;
@@ -656,8 +680,10 @@
         const onAir = stageStatus.source === 'file' && stageStatus.media?.revision === job.media_revision;
         const returning = stageStatus.return_media?.revision === job.media_revision;
         const newer = job.design_snapshot.id === draft.id && job.design_snapshot.version < draft.version;
-        detail.textContent = `Media ${job.media_revision} · ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
+        detail.textContent = ` ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
         const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+        if (media?.state === 'ready') { const thumbnail = document.createElement('video'); thumbnail.className = 'render-thumbnail'; thumbnail.muted = true; thumbnail.playsInline = true; thumbnail.preload = 'metadata'; thumbnail.src = `/api/library/revisions/${encodeURIComponent(job.media_revision)}/preview#t=0.1`; thumbnail.setAttribute('aria-label', window.mediaPresentation.renderName(job)); row.prepend(thumbnail); }
+        const mediaID = document.createElement('code'); mediaID.textContent = job.media_revision; technical.append(mediaID);
         const kind = job.design_snapshot.stage, stageName = kind.toUpperCase();
         if (media?.state === 'ready' && ['prestream', 'ending'].includes(kind)) {
           const actions = document.createElement('div'); actions.className = 'generator-actions';
@@ -665,7 +691,7 @@
             const link = document.createElement('a'); link.className = 'preview-button'; link.target = '_blank'; link.rel = 'noopener'; link.textContent = text;
             const params = {media_revision: job.media_revision, media_stage: kind, media_action: action};
             if (action !== 'select_next') Object.assign(params, {server_id: stageStatus.server_id, context: stageStatus.context});
-            link.href = `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
+            link.href = action === 'select_next' ? `/studio?collection=setup&stage=${kind}&render=${encodeURIComponent(job.media_revision)}` : `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
           };
           addLink('select_next', `Select for next ${stageName}`);
           if (stageStatus.stage === stageName && stageStatus.media?.revision && stageStatus.media.revision !== job.media_revision && (kind !== 'ending' || (!stageStatus.ending?.draining && !stageStatus.ending?.completed))) addLink('replace_now', `Review Replace ${stageName} now`);
@@ -703,6 +729,7 @@
     try {
       const [nextJobs, selections, stage, catalog] = await Promise.all(['/api/generator/jobs', '/api/stage-media', '/api/stage', '/api/library'].map(async path => (await request(path)).json()));
       jobs = nextJobs; jobsLoaded = true; jobsCurrent = true; stageSelections = selections; stageStatus = stage; mediaRevisions = catalog.revisions || [];
+      document.querySelectorAll('[data-editor-stage]').forEach(link => { const job = window.mediaPresentation.jobFor(stageSelections[link.dataset.editorStage], jobs); link.href = job ? `/studio?id=${encodeURIComponent(job.design_snapshot.id)}` : `/studio?collection=designs&stage=${link.dataset.editorStage}`; });
       queueError('');
       if ($('generation-error').textContent.startsWith('Generation status unavailable:')) generationError('');
       renderJobs();
@@ -713,7 +740,7 @@
     reviewedRevision = job.media_revision;
     $('generated-preview').hidden = false;
     const passes = job.design_snapshot.stage === 'prestream' && job.exact_timing ? 2 : 1;
-    $('generated-identity').textContent = `${passes === 2 ? `Two passes · ${job.duration}s per complete cycle. ` : 'One pass. '}Captured draft v${job.design_snapshot.version} · media revision ${reviewedRevision}. Preview does not change the broadcast.`;
+    $('generated-identity').textContent = `${passes === 2 ? `Two passes · ${job.duration}s per complete cycle. ` : 'One pass. '}${window.mediaPresentation.renderName(job)} · ${window.mediaPresentation.date(job.created_at)}. Preview does not change the broadcast.`;
     const video = $('generated-video');
     video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview${passes === 2 ? "?passes=2" : ""}`;
     $('generated-playback-status').textContent = 'Loading exact prepared output…';
@@ -721,9 +748,9 @@
     $('generated-preview').scrollIntoView({block: 'nearest'});
     video.focus({preventScroll: true});
   }
-  $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${reviewedRevision.slice(0, 12)}.`; });
-  $('generated-video').addEventListener('ended', () => { $('generated-playback-status').textContent = `Finished exact revision ${reviewedRevision.slice(0, 12)}. Playback and selected broadcast media are unchanged.`; });
-  $('generated-video').addEventListener('pause', () => { if (reviewedRevision && !$('generated-video').ended) $('generated-playback-status').textContent = `Preview paused · exact revision ${reviewedRevision.slice(0, 12)}. Broadcast playback is unchanged.`; });
+  $('generated-video').addEventListener('playing', () => { $('generated-playback-status').textContent = `Playing exact revision ${window.mediaPresentation.label(reviewedRevision, jobs, mediaRevisions)}.`; });
+  $('generated-video').addEventListener('ended', () => { $('generated-playback-status').textContent = `Finished exact revision ${window.mediaPresentation.label(reviewedRevision, jobs, mediaRevisions)}. Playback and selected broadcast media are unchanged.`; });
+  $('generated-video').addEventListener('pause', () => { if (reviewedRevision && !$('generated-video').ended) $('generated-playback-status').textContent = `Preview paused · exact revision ${window.mediaPresentation.label(reviewedRevision, jobs, mediaRevisions)}. Broadcast playback is unchanged.`; });
   $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
   $('generate-design').addEventListener('click', async () => {
     if (!draft || deleting || dirty || saving || conflict || jobRequest) return;
@@ -735,7 +762,7 @@
   setInterval(loadJobs, 2000);
 
 
-  function assetError(message) { $('asset-error').textContent = message; $('asset-error').hidden = !message; }
+  function assetError(message) { $('asset-error').textContent = message; $('asset-error').hidden = !message; $('music-error').textContent = message; $('music-error').hidden = !message; }
   function renderImagePicker() {
     const scene = draft?.scenes[selectedScene]; if (!scene) return;
     $('scene-image-controls').hidden = scene.layout === 'media' && scene.media_kind === 'video' || !scene.image && !['text-image', 'media'].includes(scene.layout);
@@ -753,10 +780,17 @@
     $('asset-upload-target').value = assets.some(asset => asset.id === target) ? target : '';
     const opened = new Set([...$('asset-list').querySelectorAll('details[open]')].map(card => card.dataset.assetId));
     $('asset-list').replaceChildren();
-    $('asset-list-state').textContent = assets.length ? `${assets.length} uploaded asset${assets.length === 1 ? '' : 's'} · exact revisions retained` : 'No scene assets uploaded. Add an image, video or music file on desktop to use it in your designs.';
+    const musicOpened = new Set([...$('music-list').querySelectorAll('details[open]')].map(card => card.dataset.assetId));
+    $('music-list').replaceChildren();
+    $('music-list-state').textContent = `${assets.filter(asset => asset.kind === 'audio').length} uploaded tracks`;
+    $('asset-list-state').textContent = assets.length ? `${assets.filter(asset => asset.kind !== 'audio').length} images / videos · music is in the Music collection` : 'No scene assets uploaded. Add an image, video or music file on desktop to use it in your designs.';
     for (const asset of assets) {
-      const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id; card.open = opened.has(asset.id);
-      const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind} · ready · ${asset.uses.length} reference(s)`;
+      const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id; card.open = (asset.kind === 'audio' ? musicOpened : opened).has(asset.id);
+      const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind === 'audio' ? `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds` : asset.kind} · ${asset.uses.length ? `Used by ${[...new Set(asset.uses.map(use => use.name))].join(', ')}` : 'Not used'}`;
+      if (asset.kind === 'audio') {
+        summary.replaceChildren(); summary.className = 'music-row-summary';
+        for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? [...new Set(asset.uses.map(use => use.name))].join(', ') : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
+      }
       const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       img.addEventListener('error', () => assetError(`Preview unavailable for ${asset.name}. Refresh assets to check its exact revision.`));
       const revisionLabel = document.createElement('label'); revisionLabel.textContent = 'Preview exact revision';
@@ -775,10 +809,11 @@
         try { await request(`/api/generator/assets/${asset.id}`, 'DELETE', {}); assetError(''); await loadAssets(); }
         catch (error) { assetError(error.message); await loadAssets(); }
       });
-      card.append(summary, revisionLabel, img, referenceStatus, list, remove); $('asset-list').append(card);
+      card.append(summary, revisionLabel, img, referenceStatus, list, remove); $(asset.kind === 'audio' ? 'music-list' : 'asset-list').append(card);
     }
     renderImagePicker(); renderVideoPicker(); renderMusicPicker(); renderThemeAssets();
   }
+  $('music-upload-open').addEventListener('click', () => { showCollection('media'); $('asset-kind').value = 'audio'; $('asset-kind').dispatchEvent(new Event('change')); $('asset-file').focus(); });
   async function loadAssets() {
     if (assetsFetching) return;
     assetsFetching = true;
@@ -897,7 +932,8 @@
       if (xhr.status === 201) {
         try {
           const asset = JSON.parse(xhr.responseText); $('asset-file').value = '';
-          $('asset-status').textContent = `${asset.name} ready as revision ${asset.revision}. Choose its exact revision in a scene or soundtrack to use it.`;
+          $('asset-status').textContent = `${asset.name} ready as revision ${asset.revision}. Choose it in a scene or soundtrack to use it.`;
+          if (asset.kind === 'audio') showCollection('music');
         } catch (_) { assetError('Upload response could not be read. Refresh assets to check whether it was saved.'); }
       } else { assetError(xhr.responseText.trim() || 'Upload failed.'); $('asset-status').textContent = 'Asset was not acknowledged as saved. Previous revisions remain unchanged.'; }
     };
@@ -1114,9 +1150,8 @@
       await listDesigns();
       await loadTemplates();
       await loadThemes();
-      const id = new URLSearchParams(location.search).get('id');
-      if (id) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(id)}`)).json());
-      if (new URLSearchParams(location.search).get('collection') === 'media') showCollection('media');
+      if (requestedDesign) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(requestedDesign)}`)).json());
+      else showCollection(['setup','designs','media','music','themes','templates','brb'].includes(requestedCollection) ? requestedCollection : 'setup');
     } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
   })();
 })();

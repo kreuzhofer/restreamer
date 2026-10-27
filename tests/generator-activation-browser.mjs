@@ -39,16 +39,10 @@ try {
   await link.waitFor(); // Red: ready results have no activation path before #31.
   const pages=context.waitForEvent('page');await link.click();const page=await pages;
   await page.waitForLoadState('domcontentloaded');
-  await page.locator('#media-intent').waitFor({state:'visible'});
-  assert.equal(await page.locator('#library-revision').inputValue(),b.revision);
-  assert.deepEqual(await api('/api/stage-media'),initial);
+  await page.locator('#show-chooser').waitFor({state:'visible'});
+  assert.deepEqual(await api('/api/stage-media'),initial,'Opening the chooser is not a save');
   assert.equal((await stage()).stage,'OFF');
-  assert.equal(await page.locator('#library-prepare').count(),0);
-  assert.equal(await page.getByRole('link',{name:'Upload & prepare in Studio Media'}).getAttribute('href'),'/studio?collection=media');
-  await page.locator('#media-intent-review').click();
-  assert.equal(await page.locator('#selection-prestream').inputValue(),b.revision);
-  assert.deepEqual(await api('/api/stage-media'),initial,'Opening and staging are not saves');
-  await page.locator('#selection-save').click();
+  await page.locator(`[data-revision="${b.revision}"]`).getByRole('button',{name:'Use for Prestream',exact:true}).click();
   await eventually(async()=> (await api('/api/stage-media')).prestream===b.revision);
   assert.equal((await stage()).stage,'OFF');
   assert.equal((await api('/api/stage-media')).ending,a.revision);
@@ -69,7 +63,7 @@ try {
   await control.locator('#media-intent-review').click();
   await control.locator('#stage-dialog').waitFor({state:'visible'});
   assert((await control.locator('#stage-dialog-effect').textContent()).includes('Preview only'));
-  assert((await control.locator('#stage-dialog-context').textContent()).includes(b.revision));
+  assert((await control.locator('#stage-dialog-context').textContent()).includes('Activation correction'));
   await control.locator('#stage-dialog').screenshot({path:output+'/desktop-prestream-review.png'});
   await eventually(async()=> (await stage()).playback.position>0.4);
   assert.equal(await control.locator('#stage-dialog-confirm').isDisabled(),false,'Ordinary progress must retain review');
@@ -118,12 +112,14 @@ try {
     await editor.setViewportSize({width,height});
     await row.scrollIntoViewIfNeeded();await editor.screenshot({path:output+'/'+label+'-generator.png',fullPage:true});
     await control.setViewportSize({width,height});await control.goto(base+await link.getAttribute('href'));
-    await control.locator('#library-preview').click();await control.waitForFunction(()=>document.querySelector('#candidate-video').readyState>=2);
+    await control.locator(`[data-revision="${b.revision}"]`).getByRole('button',{name:'Preview',exact:true}).click();await control.waitForFunction(()=>document.querySelector('#show-preview-video').readyState>=2);
+    await control.locator('#show-preview-close').click();
     assert(await control.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Dashboard overflows viewport');
     assert(await editor.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Generator overflows viewport');
     await control.screenshot({path:output+'/'+label+'-candidate.png',fullPage:true});
     if (width === 390) {
-      await control.locator('#media-intent-review').click();await control.locator('#selection-save').click();
+      const use = control.locator(`[data-revision="${b.revision}"]`).getByRole('button',{name:'Use for Prestream',exact:true});
+      if (await use.isEnabled()) await use.click();
       await eventually(async()=> (await api('/api/stage-media')).prestream===b.revision);
       await command('prestream',{mode:'preview_only'});
       const observed=await stage();
@@ -146,11 +142,9 @@ try {
     await command('prestream',{mode:'preview_only'});await command('end_stream');
     await control.setViewportSize({width,height});await endingEditor.setViewportSize({width,height});
     await control.goto(base+await endingSelection.getAttribute('href'));
-    await control.locator('#media-intent').waitFor({state:'visible'});
+    await control.locator('#show-chooser').waitFor({state:'visible'});
     assert.equal((await stage()).media.revision,endingA.revision);
-    await control.locator('#media-intent-review').click();
-    assert.equal(await control.locator('#selection-ending').inputValue(),endingB.revision);
-    await control.locator('#selection-save').click();
+    await control.locator(`[data-revision="${endingB.revision}"]`).getByRole('button',{name:'Use for Ending',exact:true}).click();
     await eventually(async()=> (await api('/api/stage-media')).ending===endingB.revision);
     assert.equal((await stage()).media.revision,endingA.revision,'Next selection replaced the running ending');
     const observed=await stage(), replaceEnding=endingRow.getByRole('link',{name:'Review Replace ENDING now'});
@@ -159,7 +153,7 @@ try {
     await control.waitForFunction(()=>document.querySelector('#candidate-video').readyState>=2);
     await control.locator('#media-intent-review').click();
     assert((await control.locator('#stage-dialog-effect').textContent()).includes('postpones shutdown'));
-    assert((await control.locator('#stage-dialog-context').textContent()).includes(endingB.revision));
+    assert((await control.locator('#stage-dialog-context').textContent()).includes('Ending correction'));
     await control.locator('#stage-dialog').screenshot({path:output+'/'+label+'-ending-review.png'});
     if(label==='desktop') await eventually(async()=> (await stage()).playback.position>5.8);
     await control.locator('#stage-dialog-confirm').click();await eventually(async()=> (await stage()).media.revision===endingB.revision);

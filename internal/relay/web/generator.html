@@ -4,7 +4,10 @@
  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
  <title>Restreamer · Studio</title>
  <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/generator.css">
+ <script src="/media-presentation.js" defer></script>
  <script src="/generator.js" defer></script>
+ <script src="/show-setup.js" defer></script>
+ <link rel="stylesheet" href="/show-setup.css">
  <script src="/studio-media.js" defer></script>
  <script src="/brb-theme.js" defer></script>
  <script src="/brb-media.js" defer></script>
@@ -26,14 +29,18 @@
  </div>
  <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
  <nav class="studio-collections" aria-label="Studio collections">
-  <button type="button" data-studio-collection="designs" aria-current="page">Designs</button><button type="button" data-studio-collection="media">Media</button><button type="button" data-studio-collection="themes">Themes</button><button type="button" data-studio-collection="templates">Templates</button>
-  <button type="button" data-studio-collection="brb">BRB</button><button id="resume-design" type="button" hidden>Return to open design</button>
+  <button type="button" data-studio-collection="setup" aria-current="page">Show setup</button><button type="button" data-studio-collection="designs">Designs</button><button type="button" data-studio-collection="music">Music</button><button type="button" data-studio-collection="media">Media</button><button type="button" data-studio-collection="themes">Themes</button><button type="button" data-studio-collection="templates">Templates</button>
+  <button id="resume-design" type="button" hidden>Return to open design</button>
  </nav>
  <details class="studio-queue"><summary id="generation-status">Shared queue · loading…</summary><div id="generation-queue" aria-label="Shared generation queue"></div><p id="generation-queue-error" class="notice" role="alert" hidden></p></details>
  <p class="studio-mobile-note">Text edits, uploads, generation and theme editing require desktop. Browse prepared results here, or open Live to operate your broadcast.</p>
  <p id="generator-notice" class="notice" role="alert" hidden></p>
+ <nav id="shared-editor-nav" class="studio-collections" aria-label="Design editor" hidden><a class="preview-button" href="/studio">← Show setup</a><strong>Design editor</strong><a class="preview-button" data-editor-stage="prestream" href="/studio?collection=designs&stage=prestream">Prestream</a><a class="preview-button" href="/studio?editor=brb">BRB</a><a class="preview-button" data-editor-stage="ending" href="/studio?collection=designs&stage=ending">Ending</a></nav>
  <div class="generator-grid">
- <aside class="panel generator-sidebar studio-collection" data-collection-panel="designs" aria-labelledby="designs-heading"><h2 id="designs-heading">Show designs</h2>
+ <section id="show-setup" class="panel studio-collection" data-collection-panel="setup" aria-labelledby="show-setup-heading"><div class="panel-heading"><div><p class="eyebrow">YOUR BROADCAST</p><h1 id="show-setup-heading">Show setup</h1><p class="stage-help">Choose what plays before, during a break, and after your show.</p></div><button id="show-setup-refresh" class="preview-button" type="button">Refresh</button></div><p id="show-setup-error" class="notice" role="alert" hidden></p><p id="show-setup-status" class="stage-help" role="status"></p><div id="show-setup-cards" class="show-cards"></div><p class="stage-help">Assignments choose what plays next. Generating a new render does not change your selected Prestream or Ending. BRB activation is reviewed explicitly.</p></section>
+ <dialog id="show-chooser" class="show-dialog"><div class="panel-heading"><h2 id="show-chooser-heading">Choose a render</h2><button id="show-chooser-close" class="preview-button" type="button">Close</button></div><p id="show-chooser-status" class="stage-help" role="status"></p><div id="show-chooser-list"></div></dialog>
+ <dialog id="show-preview" class="show-dialog"><div class="panel-heading"><h2 id="show-preview-heading">Preview</h2><button id="show-preview-close" class="preview-button" type="button">Close preview</button></div><video id="show-preview-video" controls playsinline preload="metadata"></video><p id="show-preview-error" class="notice" role="alert" hidden>This render could not be loaded. Refresh Show setup and check its readiness.</p><p class="stage-help">Preview only. Your broadcast is unchanged.</p></dialog>
+ <aside class="panel generator-sidebar studio-collection" data-collection-panel="designs" hidden aria-labelledby="designs-heading"><h2 id="designs-heading">Show designs</h2>
   <form id="new-design"><label>New design name<input id="new-name" maxlength="180" value="Untitled show" required></label><label>Generator<select id="new-stage"><option value="prestream">Prestream</option><option value="ending">Ending</option></select></label><label>Content starting point<select id="new-template"><option value="">Blank design</option></select></label><label>Style theme<select id="new-theme"><option value="retro:1">Retro · revision 1</option></select></label><button class="preview-button" type="submit">Create show design</button></form>
   <p id="design-list-state" class="stage-help" role="status">Loading designs…</p><nav id="design-list" aria-label="Saved show designs"></nav>
  </aside>
@@ -89,51 +96,55 @@
   <section id="studio-templates" class="panel studio-collection generator-templates" data-collection-panel="templates" hidden><h2>Templates</h2><p class="collection-mobile-note">Open Studio on desktop to create designs and manage templates.</p><p class="stage-help">Reusable scenes, content, timing and overrides. Each new design is independent and chooses its style theme separately.</p><button id="templates-refresh" class="preview-button" type="button">Refresh templates</button><p id="templates-state" class="stage-help" role="status">Loading templates…</p><div class="studio-template-grid"><div id="template-list"></div><div>  <section id="template-authoring" class="studio-authoring" aria-labelledby="template-heading"><h3 id="template-heading">Save content from the open design</h3><p id="template-source" class="stage-help"></p><p class="stage-help">Draft autosave never updates a template. Save scenes, content, timing and overrides explicitly; choose the style theme separately when creating a show.</p><label>Template name<input id="template-name" maxlength="180" placeholder="Weekly show"></label><div class="generator-actions"><button id="save-template" class="preview-button" type="button">Save as new template</button></div><label>Template to update<select id="update-template"><option value="">Choose a saved template</option></select></label><div class="generator-actions"><button id="update-template-button" class="preview-button" type="button" disabled>Update selected template</button><button id="reload-template" class="preview-button" type="button" hidden>Reload latest template as a new design</button></div><p id="template-status" class="stage-help" role="status" aria-live="polite"></p></section></div></div></section>
 
   <section id="studio-brb" class="panel brb-panel studio-collection" data-collection-panel="brb" hidden aria-labelledby="brb-title">
-   <div class="panel-heading"><div><p class="eyebrow">STUDIO · BRB</p><h2 id="brb-title">BRB screen &amp; music</h2><p class="stage-help">Standalone fallback media, separate from prestream and ending scene designs.</p></div><span id="brb-badge" class="badge">Loading</span></div>
-   <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div></div>
-   <p id="brb-active-profile" class="brb-active-profile" hidden></p>
-   <div id="brb-unsaved" class="brb-unsaved studio-authoring" role="status" hidden><strong>Unsaved changes — not active yet</strong><p>Click <b>Prepare &amp; activate BRB</b> to prepare and then activate your changes. If BRB is on air, its playback restarts. The shared streaming profile is managed in Settings.</p></div>
-   <p id="brb-error" class="notice" role="alert" hidden></p>
-   <details id="brb-settings" class="studio-authoring" open><summary>BRB screen &amp; music</summary>
-    <form id="brb-form">
-     <div class="brb-assets">
-      <div><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status">Default screen · silent audio</p></div>
-      <div class="brb-fields">
-       <label>BRB message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Shown when no custom image is selected. Legacy arcade text sizes automatically; shared themes validate the chosen font and layout. Up to 40 characters: A–Z, 0–9, ÄÖÜß, spaces and . , ! ? : ' - / ( ) + &amp;. Displayed in uppercase. Click Prepare &amp; activate BRB to apply.</small>
-       <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels. Fitted without cropping.</small>
-       <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Remove the custom image and use the BRB message</label>
-       <label class="check-label"><input name="reset_theme" type="checkbox" value="true"> Restore legacy arcade/custom-image styling</label>
-       <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes. Loops during BRB.</small>
-       <label class="check-label"><input name="remove_music" type="checkbox" value="true"> Remove music and use silent audio</label>
+   <div class="panel-heading"><div><p class="eyebrow">DESIGN EDITOR · BRB</p><h2 id="brb-title">BRB design</h2></div><span id="brb-badge" class="badge">Loading</span></div>
+   <p><strong id="brb-status" role="status">Waiting for server data</strong></p><p id="brb-error" class="notice" role="alert" hidden></p>
+   <div class="brb-editor-grid">
+    <section class="brb-editor-preview" aria-label="BRB preview and renders"><h3>Assigned screen</h3><img id="brb-image" alt="Current BRB screen" hidden><p id="brb-asset-status" class="stage-help">Default screen · silent audio</p>
+     <p class="stage-help">BRB keeps the assigned screen and one prepared preview. Preparing another preview replaces the previous candidate, never the assigned screen.</p>
+     <p id="brb-theme-status" class="library-help" role="status" aria-live="polite"></p><p id="brb-theme-error" class="notice" role="alert" hidden></p><p id="brb-theme-empty" class="library-help" role="status">Loading prepared BRB…</p>
+     <section id="brb-theme-candidate" hidden><h3>Prepared preview · not assigned</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button><button id="brb-theme-discard" class="preview-button studio-authoring" type="button">Discard candidate</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview plays one visual cycle. The visual and complete music track loop independently on air.</p></section>
+     <details><summary>Playback &amp; profile</summary><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p><p id="brb-active-profile" class="brb-active-profile" hidden></p></details>
+    </section>
+    <section class="brb-editor-properties" aria-label="BRB design properties">
+     <div id="brb-unsaved" class="brb-unsaved studio-authoring" role="status" hidden><strong>Draft changes · not active</strong><p>Prepare a preview, then review and activate it explicitly.</p></div>
+     <details id="brb-settings" class="studio-authoring" open><summary>Content &amp; music</summary>
+      <form id="brb-form"><div class="brb-fields">
+       <label>BRB message <input id="brb-text" name="text" type="text" maxlength="40" value="BE RIGHT BACK" required aria-describedby="brb-text-help"></label><small id="brb-text-help">Up to 40 characters. Displayed in uppercase when no custom image is selected. The selected theme validates font and layout.</small>
        <label>Music volume (%) <input id="brb-volume" name="volume" type="number" min="0" max="100" value="50" required></label>
+       <details class="brb-upload-apply"><summary>Upload files / legacy styling</summary><p class="stage-help">Uploads and resets use the separate activation action below. It restarts playback if BRB is on air. Message, theme and volume changes can use Prepare preview instead.</p>
+        <label>Custom image <input id="brb-image-file" name="image" type="file" accept="image/png,image/jpeg"></label><small>PNG or JPEG · up to 10 MiB and 20 megapixels.</small>
+        <label class="check-label"><input name="reset_image" type="checkbox" value="true"> Remove the custom image and use the message</label>
+        <label class="check-label"><input name="reset_theme" type="checkbox" value="true"> Restore legacy arcade/custom-image styling</label>
+        <label>Break music <input id="brb-music-file" name="music" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"></label><small>MP3 or WAV · up to 32 MiB and 10 minutes.</small>
+        <label class="check-label"><input name="remove_music" type="checkbox" value="true"> Remove music and use silent audio</label>
+        <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Apply uploads &amp; activate</button></div>
+       </details>
+       <p id="brb-save-status" role="status" class="stage-help">Your assigned BRB stays active while a preview is prepared.</p>
+      </div></form>
+     </details>
+     <details id="brb-theme-settings" open><summary>Appearance</summary><div class="brb-fields"><p id="brb-theme-current" class="library-help"></p>
+      <div class="studio-authoring"><label>Style theme<select id="brb-theme-select"></select></label><p class="library-help">Captures the message and volume above. Existing image and music stay. <a href="/studio?collection=themes">Customize themes</a>.</p>
+       <p id="brb-theme-profile-limit" class="notice" role="status" hidden>Shared themes support up to 1920 × 1080 and 30 fps. Change the shared profile while stopped before preparing a shared theme.</p>
+       <div class="brb-save"><button id="brb-theme-prepare" class="preview-button" type="button">Prepare preview</button><button id="brb-theme-refresh" class="preview-button" type="button">Refresh themes</button><button id="brb-theme-cancel" class="preview-button" type="button" hidden>Cancel preparation</button></div>
       </div>
-     </div>
-     <div class="brb-save"><button id="brb-save" class="preview-button" type="submit">Prepare &amp; activate BRB</button><span id="brb-save-status" role="status">Your current BRB stays active during preparation. Successful saving activates the new screen and music immediately.</span></div>
-    </form>
-   </details>
-   <details id="brb-theme-settings" open><summary>Shared style theme</summary><div class="brb-fields">
-    <p id="brb-theme-current" class="library-help"></p>
-    <div class="studio-authoring"><p class="library-help">Choose the same immutable themes as prestream and ending. <a href="/studio?collection=themes">Customize themes in Studio</a>. Preparing captures the saved BRB message, custom image and music; unsaved form edits must be saved first.</p>
-    <p id="brb-theme-profile-limit" class="notice" role="status" hidden>Shared themes support up to 1920 × 1080 and 30 fps. Your legacy BRB remains usable. Change the shared profile while stopped before preparing a shared theme.</p>
-    <label>Exact theme revision<select id="brb-theme-select"></select></label>
-    <div class="brb-save"><button id="brb-theme-refresh" class="preview-button" type="button">Refresh theme choices</button><button id="brb-theme-prepare" class="preview-button" type="button">Prepare theme preview</button><button id="brb-theme-cancel" class="preview-button" type="button" hidden>Cancel preparation</button></div>
-    </div><p id="brb-theme-status" class="library-help" role="status" aria-live="polite"></p>
-    <p id="brb-theme-error" class="notice" role="alert" hidden></p><p id="brb-theme-empty" class="library-help" role="status">Loading prepared BRB…</p><section id="brb-theme-candidate" hidden><h3>Prepared BRB · not active</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button><button id="brb-theme-discard" class="preview-button studio-authoring" type="button">Discard candidate</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview shows one complete visual cycle with the captured audio. The visual cycle and your complete music track loop independently on air. Theme preparation never changes the music volume or duration.</p></section>
-   </div></details>
+     </div></details>
+    </section>
+   </div>
   </section>
+ <section id="studio-music" class="panel studio-collection" data-collection-panel="music" hidden><div class="panel-heading"><div><p class="eyebrow">STUDIO LIBRARY</p><h2>Music</h2><p class="stage-help">Uploaded tracks, duration and uses. Expand a track to listen, inspect versions or delete it when unused.</p></div><button id="music-upload-open" class="preview-button studio-authoring" type="button">Upload music</button></div><p id="music-list-state" class="stage-help" role="status">Loading music…</p><p id="music-error" class="notice" role="alert" hidden></p><div id="music-list"></div></section>
  <section id="design-editor" class="panel generator-editor" aria-labelledby="editor-heading" hidden>
-  <div class="panel-heading studio-editor-heading"><button id="back-to-designs" class="preview-button" type="button">← Designs</button><div><p class="eyebrow" id="design-stage">DRAFT</p><h2 id="editor-heading" tabindex="-1">Show design</h2></div><span id="save-state" role="status" aria-live="polite">Saved</span></div>
+  <div class="panel-heading studio-editor-heading"><button id="back-to-designs" class="preview-button" type="button">← Show setup</button><div><p class="eyebrow" id="design-stage">DRAFT</p><h2 id="editor-heading" tabindex="-1">Show design</h2></div><span id="save-state" role="status" aria-live="polite">Saved</span></div>
   <p id="save-error" class="notice" role="alert" hidden></p>
   <div id="save-actions" class="generator-actions" hidden><button id="save-retry" class="preview-button" type="button">Retry save</button><button id="save-reload" class="preview-button" type="button">Reload saved draft</button><button id="save-copy" class="preview-button" type="button">Save local work as a copy</button></div>
 <nav class="studio-panel-switch" aria-label="Editor panels"><button type="button" data-editor-panel="scenes" aria-pressed="false">Scenes</button><button type="button" data-editor-panel="preview" aria-pressed="true">Preview</button><button type="button" data-editor-panel="properties" aria-pressed="false">Properties</button></nav>
  <div class="studio-editor-grid" data-panel="preview"><aside class="studio-scenes" aria-label="Scenes">  <section class="generator-sequence" aria-labelledby="sequence-heading"><h3 id="sequence-heading">Scene sequence</h3><p id="sequence-duration" class="stage-help" role="status"></p><nav id="scene-list" aria-label="Scene sequence"></nav><div class="generator-actions"><button id="add-title-scene" class="preview-button" type="button">Add title scene</button><button id="add-list-scene" class="preview-button" type="button">Add list scene</button></div><p class="stage-help">Up to 20 scenes. Quick scene previews support authored durations up to 3600 seconds; generation requires at most 600 seconds before overlaps. Scenes play in order with cuts or crossfades; durations round to the nearest video frame.</p><div id="scene-issues" role="status" aria-label="Composition validation"></div></section>
-</aside><section class="studio-monitor" aria-label="Design preview and results"><nav class="studio-tabs" aria-label="Preview view"><button type="button" data-preview-panel="scene" aria-pressed="true">Scene preview</button><button type="button" data-preview-panel="results" aria-pressed="false">Results &amp; queue</button></nav><div class="studio-monitor-scroll"><div id="studio-scene-preview">  <div class="generator-preview-heading"><h3>Quick scene preview</h3><span id="preview-profile"></span></div><canvas id="scene-preview" width="1280" height="720" role="img" aria-label="Quick title scene preview" hidden></canvas>
+</aside><section class="studio-monitor" aria-label="Design preview and results"><nav class="studio-tabs" aria-label="Preview view"><button type="button" data-preview-panel="scene" aria-pressed="true">Scene preview</button><button type="button" data-preview-panel="results" aria-pressed="false">Render history</button></nav><div class="studio-monitor-scroll"><div id="studio-scene-preview">  <div class="generator-preview-heading"><h3>Quick scene preview</h3><span id="preview-profile"></span></div><canvas id="scene-preview" width="1280" height="720" role="img" aria-label="Quick title scene preview" hidden></canvas>
   <label id="preview-time-control" hidden>Effect preview time (seconds)<input id="preview-time" type="number" min="0" max="3600" step="0.1" value="0"></label>
   <div id="source-video-preview" hidden><h4>Source timing and audio preview</h4><video id="source-video" playsinline preload="none"></video><button id="source-video-play" class="preview-button" type="button">Play selected range</button><button id="source-video-stop" class="preview-button" type="button">Stop preview</button><p id="source-video-status" class="stage-help" role="status">Review the selected source range here; the exact generated composition is below.</p></div>
   <p id="preview-state" class="stage-help" role="status">Enter your title to preview the scene.</p>
   <p class="stage-help">Quick scene preview uses the captured streaming profile. It is separate from exact generated output below.</p>
 </div>  <section class="generator-generation" id="studio-results" hidden aria-labelledby="generation-heading">
-   <div class="generator-preview-heading"><h3 id="generation-heading">Design results</h3><button id="generate-design" class="preview-button" type="button">Generate saved draft</button></div>
+   <div class="generator-preview-heading"><h3 id="generation-heading">Render history</h3><button id="generate-design" class="preview-button" type="button">Generate saved draft</button></div>
    <p id="generation-save-hint" class="stage-help">Generation captures the saved draft. Later edits leave its result unchanged.</p>
    <p id="generation-error" class="notice" role="alert" hidden></p>
    <dl id="generation-summary" class="generation-summary" aria-label="Design and broadcast revisions"></dl>
@@ -178,6 +189,6 @@
   </form>
   <section data-inspector-panel="template" hidden><h3>Reusable content</h3><p class="stage-help">Save or update content templates explicitly in Templates. Draft autosave keeps templates unchanged.</p><button id="open-template-collection" class="preview-button" type="button">Manage templates</button></section>
 </div></aside></div></section>
- <section id="generator-empty" class="panel generator-empty" data-collection-panel="designs"><h2>Start your show design</h2><p>Choose an editable starter, a saved content template, or a blank design. Text scenes start at 10 seconds.</p></section>
+ <section id="generator-empty" class="panel generator-empty" data-collection-panel="designs" hidden><h2>Start your show design</h2><p>Choose an editable starter, a saved content template, or a blank design. Text scenes start at 10 seconds.</p></section>
  </div>
  </main></body></html>

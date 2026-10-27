@@ -122,7 +122,7 @@ jobs:
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
           ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=width,height,nb_read_frames,duration -of json /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.json
           ending_last=$(jq '.ending_frames - 1' "$GENERATOR_SMOKE_STATE")
-          ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf "select=eq(n\,$ending_last)" -vsync 0 -frames:v 1 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
+          ffmpeg -v error -xerror -i /tmp/generated-smoke-ending.mp4 -vf "select=eq(n\,$ending_last)" -fps_mode passthrough -frames:v 1 -pix_fmt rgb24 -f rawvideo /tmp/generated-smoke-ending.rgb
           ffmpeg -v error -i /tmp/generated-smoke-ending.mp4 -map 0:a:0 -ac 1 -f s16le /tmp/generated-smoke-ending.pcm
           python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           # A real prepared MP4 drives the normal sequence in isolated rehearsal.
@@ -246,7 +246,7 @@ jobs:
           python3 tests/generator-smoke.py --verify-audio /tmp/generated-smoke-audio.pcm
           docker exec -i restreamer-arm64-smoke ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=width,height,nb_read_frames,duration -of json -i pipe:0 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.json
           ending_last=$(jq '.ending_frames - 1' "$GENERATOR_SMOKE_STATE")
-          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -vf "select=eq(n\,$ending_last)" -vsync 0 -frames:v 1 -pix_fmt rgb24 -f rawvideo pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.rgb
+          docker exec -i restreamer-arm64-smoke ffmpeg -v error -xerror -i pipe:0 -vf "select=eq(n\,$ending_last)" -fps_mode passthrough -frames:v 1 -pix_fmt rgb24 -f rawvideo pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.rgb
           docker exec -i restreamer-arm64-smoke ffmpeg -v error -i pipe:0 -map 0:a:0 -ac 1 -f s16le pipe:1 < /tmp/generated-smoke-ending.mp4 > /tmp/generated-smoke-ending.pcm
           python3 tests/generator-smoke.py --verify-ending /tmp/generated-smoke-ending
           docker rm -f restreamer-arm64-smoke

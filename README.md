@@ -192,7 +192,19 @@ pause controls reduce browser video traffic without changing the broadcast.
 Text edits, uploads, generation, theme editing, ingestion credentials, destination
 setup and streaming-profile changes require desktop.
 
-Studio separates **Designs**, **Media**, **Themes**, and **Templates**. Themes browses
+Studio opens **Show setup**, with Prestream, BRB and Ending together. Use **Change**
+to choose a design or uploaded video, inspect its render history, then explicitly
+assign the desired result. **Edit design** opens the dedicated editor; its shared
+navigation reaches all three stage types. Live has a direct **Show setup** link.
+New renders never silently replace assigned Prestream or Ending media. Render
+numbers are stable queue sequence numbers (gaps are normal), with dates, captured
+change summaries and exact video thumbnails; hashes are under Technical details.
+
+**Music** displays uploaded tracks as rows with duration and uses. Expand a row to
+listen, inspect retained upload revisions or delete an unused track. Music remains
+separate from playlist/runtime-audio work.
+
+Studio also includes **Designs**, **Media**, **Themes**, and **Templates**. Themes browses
 immutable revisions and explicitly adopts a saved revision into the open design;
 publishing shared styling alone leaves existing designs pinned. Create or
 open a design to use its scene list, quick preview, and properties. Properties
@@ -534,13 +546,17 @@ The broadcast still starts OFF after every application restart.
   cancelling a dialog, or pressing Escape never stops a broadcast. Application
   shutdown or loss of the relay's own connectivity cannot be protected by BRB.
 
-Open **Studio → BRB** for screen, music and theme preparation. BRB is standalone
-fallback media, separate from prestream/ending scene-sequence designs. **Live → BRB
+Open **Studio → Show setup → BRB → Edit design** for screen, music and theme
+preparation. BRB shares the editor navigation but retains its bounded storage:
+one assigned screen and one prepared candidate. It does not yet keep a full
+multi-design render history. **Prepare preview** captures the edited message,
+volume and selected theme without activation. Review and explicitly activate the
+candidate; preparing again replaces only the previous candidate. **Live → BRB
 readiness & activation** retains readiness, exact candidate review, and explicit
 activation, with a direct link back to Studio. Phones can review and activate a
 prepared candidate; editing, uploads and preparation require desktop.
 
-Expand **BRB screen & music** in Studio:
+Expand **Content & music** in the BRB editor. File uploads and legacy styling are under **Upload files / legacy styling**:
 
 - The default is a **32-second pixel-art arcade loop**: ghosts chase Pac-Man,
   a power pellet reverses the chase, frightened ghosts scatter and returning
@@ -549,14 +565,14 @@ Expand **BRB screen & music** in Studio:
   The dashboard shows a labelled still preview of this animation.
 - Upload a PNG/JPEG image up to 10 MiB and 20 megapixels for a static screen,
   or select **Remove the custom image and use the BRB message** and
-  **Prepare & activate BRB** to restore the message screen. Select **Restore legacy
+  **Apply uploads & activate** to restore the message screen. Select **Restore legacy
   arcade/custom-image styling** as well to return from a shared theme to the
   original animation. Images fit inside the output without cropping.
   Existing default-screen installations receive the animation on restart;
   custom images and music are preserved.
   To change sprites, colours or choreography, use the editable Canvas source and
   browser preview described in [the artwork guide](artwork/brb/README.md).
-- Edit **BRB message**, then click **Prepare & activate BRB** to change the text
+- Edit **BRB message**, choose a theme and **Prepare preview** to review the text
   and its still preview. With legacy styling, the message stays on one centred line and automatically
   shrinks in whole-pixel steps to fit clear of the animation. Up to 40 characters
   are supported: A–Z, 0–9, ÄÖÜß, spaces and `. , ! ? : ' - / ( ) + &`.
@@ -568,7 +584,7 @@ Expand **BRB screen & music** in Studio:
 - Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
   remove it. Music loops during BRB; without music, the relay sends silent AAC.
   Preparing and saving audio restarts the BRB loop if already active.
-- **Prepare & activate BRB** validates and encodes assets before atomically activating
+- **Apply uploads & activate** validates and encodes assets before atomically activating
   them. During a show, confirmation explains that success immediately replaces BRB
   and restarts its playback if on air. Failed uploads preserve the previous working assets. The saved dashboard
   profile overrides the initial JSON profile on restart. Assets/profile persist;

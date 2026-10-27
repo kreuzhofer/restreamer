@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
@@ -107,9 +108,11 @@ func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Theme mediaauthor.ThemeRef `json:"theme"`
-		Base  string               `json:"base_generation"`
-		Async bool                 `json:"async"`
+		Theme  mediaauthor.ThemeRef `json:"theme"`
+		Base   string               `json:"base_generation"`
+		Async  bool                 `json:"async"`
+		Text   *string              `json:"text,omitempty"`
+		Volume *int                 `json:"volume,omitempty"`
 	}
 	if !generatorDecode(w, r, &input) {
 		return
@@ -138,6 +141,21 @@ func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
 	if settings.Profile.Width > 1920 || settings.Profile.Height > 1080 || settings.Profile.FPS > 30 {
 		http.Error(w, "Shared BRB themes support up to 1920 × 1080 and 30 fps; legacy BRB is unchanged", 422)
 		return
+	}
+	if input.Text != nil {
+		normalized, err := normalizeBRBText(*input.Text)
+		if err != nil || strings.TrimSpace(*input.Text) == "" {
+			http.Error(w, "Choose a valid non-empty BRB message", 422)
+			return
+		}
+		settings.Text = normalized
+	}
+	if input.Volume != nil {
+		if *input.Volume < 0 || *input.Volume > 100 {
+			http.Error(w, "Music volume must be between 0 and 100", 422)
+			return
+		}
+		settings.Volume = *input.Volume
 	}
 	// Hold catalog protection until captured references become visible to deletion checks.
 	s.generator.mu.Lock()
