@@ -21,7 +21,7 @@
     el('brb-unsaved').hidden = !brb.ready || !dirty || pending;
     el('brb-save').classList.toggle('needs-save', dirty && !pending);
     el('brb-save').disabled = !desktop.matches || !connected || !brb.ready || pending;
-    el('brb-save').textContent = pending ? 'Preparing for activation…' : 'Prepare & activate BRB';
+    el('brb-save').textContent = pending ? 'Preparing for activation…' : 'Apply uploads & activate';
     form.querySelectorAll('input').forEach(input => { input.disabled = pending || !desktop.matches; });
     const assets = snapshot.brb_assets;
     if (brb.ready && assets) {
@@ -53,9 +53,9 @@
       pending = false; render();
     }
   });
-  function changed() { dirty = true; el('brb-save-status').textContent = 'Not active yet. Prepare & activate BRB applies these changes after preparation.'; render(); }
+  function changed() { dirty = true; el('brb-save-status').textContent = 'Not active yet. Use Prepare preview to review message/theme/volume changes before activation.'; render(); }
   form?.addEventListener('input', changed); form?.addEventListener('change', changed);
   window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || pending)) { event.preventDefault(); event.returnValue = ''; } });
   desktop.addEventListener('change', render);
-  window.brbMedia = {update(data, online) { snapshot = data; connected = online; render(); }};
+  window.brbMedia = {accepted(settings) { if (form && el('brb-text').value === settings.text && Number(el('brb-volume').value) === settings.volume && !el('brb-image-file').files.length && !el('brb-music-file').files.length && ![...form.querySelectorAll('input[type=checkbox]')].some(input => input.checked)) { dirty = false; el('brb-save-status').textContent = 'Reviewed BRB activated.'; } }, update(data, online) { snapshot = data; connected = online; render(); }};
 })();

@@ -5,6 +5,8 @@
   let saved = {prestream: '', ending: '', shortcuts: []}, draft, saving = false, previewRevision = '';
   const clock = seconds => { const n = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`; };
   const selected = () => catalog.files.find(file => file.id === el('library-select').value);
+  let renderJobs = [];
+  const mediaLabel = id => window.mediaPresentation.label(id, renderJobs, catalog.revisions);
   const revision = () => catalog.revisions.find(item => item.id === el('library-revision').value);
   const ready = item => item?.state === 'ready';
   const copy = value => JSON.parse(JSON.stringify(value));
@@ -41,7 +43,7 @@
     if (!intent) return;
     const candidate = revision(), problem = intentProblem(), selecting = intent.media_action === 'select_next';
     el('media-intent-title').textContent = intentError ? 'Generated result request' : intentLabel();
-    el('media-intent-detail').textContent = `Exact candidate: ${candidate?.name || 'Unavailable result'} · ${intent.media_revision}`;
+    el('media-intent-detail').textContent = `Exact candidate: ${mediaLabel(intent.media_revision)}`;
     el('media-intent-status').textContent = problem || (selecting ? 'Opening this result changes no saved selection or playback. Add it to the settings below, then explicitly Save selections.' : `Preview this exact revision, then review ${intentLabel()}. Current playback continues until confirmation.${intent.media_stage === 'ending' ? ' Replacing the ending restarts it from the beginning and postpones shutdown.' : ''} ${snapshot.stage.mode === 'preview_only' ? 'PREVIEW ONLY — NOT BROADCASTING.' : 'Real broadcast session.'}`);
     el('media-intent-review').textContent = selecting ? `Use for next ${intentKind()}` : `Review ${intentLabel()}`;
     el('media-intent-review').disabled = !usable || saving || !!problem || (!selecting && previewRevision !== intent.media_revision);
@@ -60,7 +62,7 @@
     const usable = connected && !window.broadcastStages?.busy(), clip = stage.stage === 'CLIP', ending = window.broadcastStages?.locked();
     el('clip-playback-controls').hidden = !clip;
     el('library-empty').hidden = catalog.revisions.length > 0;
-    el('library-revision-info').textContent = candidate ? `${candidate.state} · ${clock(candidate.duration)} · revision ${candidate.id}${candidate.error ? ` · ${candidate.error}` : ''}` : 'No exact revision selected.';
+    el('library-revision-info').textContent = candidate ? `${candidate.state} · ${clock(candidate.duration)} · ${mediaLabel(candidate.id)}${candidate.error ? ` · ${candidate.error}` : ''}` : 'No exact revision selected.';
     el('library-count').textContent = `${catalog.files.length} originals · ${catalog.revisions.length} revisions`;
     el('library-error').hidden = !(error || catalogError || catalog.error);
     el('library-error').textContent = error || catalogError || catalog.error || '';
@@ -96,8 +98,8 @@
     renderIntent(usable);
   }
   function options(select, selectedValue, allowEmpty = true) {
-    const values = catalog.revisions.map(item => new Option(`${item.name} · ${item.id.slice(0, 12)} · ${item.state}`, item.id));
-    if (selectedValue && !catalog.revisions.some(item => item.id === selectedValue)) values.push(new Option(`Unavailable revision · ${selectedValue}`, selectedValue));
+    const values = catalog.revisions.map(item => new Option(`${mediaLabel(item.id)} · ${item.state}`, item.id));
+    if (selectedValue && !catalog.revisions.some(item => item.id === selectedValue)) values.push(new Option(`Assigned render unavailable`, selectedValue));
     select.replaceChildren(...(allowEmpty ? [new Option('Not selected', ''), ...values] : values));
     select.value = selectedValue || '';
   }
@@ -125,8 +127,8 @@
     const file = selected(), select = el('library-revision');
     const previous = intent ? intent.media_revision : changedFile ? '' : select.value;
     const available = catalog.revisions.filter(item => !file || item.library_id === file.id);
-    const values = available.map(item => new Option(`${item.name} · ${item.id.slice(0, 12)} · ${item.state}`, item.id));
-    if (previous && !available.some(item => item.id === previous)) values.push(new Option(`Unavailable revision · ${previous}`, previous));
+    const values = available.map(item => new Option(`${mediaLabel(item.id)} · ${item.state}`, item.id));
+    if (previous && !available.some(item => item.id === previous)) values.push(new Option(`Assigned render unavailable`, previous));
     select.replaceChildren(...(values.length ? values : [new Option('No prepared revision yet', '')]));
     select.value = intent ? intent.media_revision : previous || file?.revision || available[0]?.id || '';
   }
@@ -134,9 +136,11 @@
     if (fetching || !connected || !snapshot?.library_enabled) return;
     fetching = true; lastFetch = Date.now();
     try {
-      const responses = await Promise.all(['/api/library', '/api/stage-media'].map(path => fetch(`${location.origin}${path}`, {cache: 'no-store', signal: AbortSignal.timeout(8000)})));
+      const responses = await Promise.all(['/api/library', '/api/stage-media', '/api/generator/jobs'].map(path => fetch(`${location.origin}${path}`, {cache: 'no-store', signal: AbortSignal.timeout(8000)})));
       if (responses.some(response => !response.ok)) throw new Error('Video library or saved selections unavailable. Retrying…');
-      const [nextCatalog, nextSelections] = await Promise.all(responses.map(response => response.json()));
+      const [nextCatalog, nextSelections, nextJobs] = await Promise.all(responses.map(response => response.json()));
+      renderJobs = nextJobs;
+      window.mediaRenderLabel = id => mediaLabel(id);
       catalog = {...nextCatalog, revisions: nextCatalog.revisions || []}; saved = {...nextSelections, shortcuts: nextSelections.shortcuts || []}; catalogError = '';
       const select = el('library-select'), previous = select.value;
       const values = catalog.files.map(file => new Option(`${file.name} — ${file.state}${file.state === 'preparing' ? ` ${file.progress}%` : ''}`, file.id));

@@ -98,7 +98,7 @@ func TestPrestreamBoundaryCrossfadeRotatesCompleteVideoCycle(t *testing.T) {
 	w = dashboardRequest(s, "GET", "/api/library/revisions/"+job.MediaRevision+"/preview?passes=2", "")
 	path := filepath.Join(t.TempDir(), "cycle.mp4")
 	os.WriteFile(path, w.Body.Bytes(), 0600)
-	pixels, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v", "-vsync", "0", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
+	pixels, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v", "-fps_mode", "passthrough", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
 	if err != nil || len(pixels) != 80*320*180*3 {
 		t.Fatal("expected two40frame cycles", err, len(pixels))
 	}

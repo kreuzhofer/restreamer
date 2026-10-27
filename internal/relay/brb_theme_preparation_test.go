@@ -244,3 +244,32 @@ func TestBRBThemePublisherDisconnectDoesNotStopPreparation(t *testing.T) {
 		t.Fatal("publisher disconnect stopped server-owned preparation", w.Code, w.Body.String())
 	}
 }
+
+func TestBRBPreparationCapturesDraftTextAndVolumeWithoutActivation(t *testing.T) {
+	s := libraryServer(t)
+	original := brbHTTPSettingsForPreparation(s)
+	body := fmt.Sprintf(`{"theme":{"id":"retro","revision":2},"base_generation":%q,"text":"SHORT BREAK","volume":23}`, original)
+	w := dashboardRequest(s, "POST", "/api/brb/theme/prepare", body)
+	if w.Code != 201 {
+		t.Fatalf("prepare: %d %s", w.Code, w.Body.String())
+	}
+	var candidate brbThemeCandidate
+	if err := json.Unmarshal(w.Body.Bytes(), &candidate); err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Settings.Text != "SHORT BREAK" || candidate.Settings.Volume != 23 {
+		t.Fatalf("draft not captured: %+v", candidate.Settings)
+	}
+	if brbHTTPSettingsForPreparation(s) != original {
+		t.Fatal("preparing draft activated BRB")
+	}
+	for _, invalid := range []string{`"volume":101`, `"text":""`} {
+		response := dashboardRequest(s, "POST", "/api/brb/theme/prepare", fmt.Sprintf(`{"theme":{"id":"retro","revision":2},"base_generation":%q,%s}`, original, invalid))
+		if response.Code != 422 {
+			t.Fatalf("invalid draft: %d %s", response.Code, response.Body.String())
+		}
+	}
+	if brbHTTPSettingsForPreparation(s) != original {
+		t.Fatal("invalid draft changed active BRB")
+	}
+}

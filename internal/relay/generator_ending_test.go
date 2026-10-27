@@ -102,7 +102,7 @@ func TestGeneratorEndingFinishFadesWholeCompositionWithoutAddingTime(t *testing.
 			if err := os.WriteFile(path, w.Body.Bytes(), 0600); err != nil {
 				t.Fatal(err)
 			}
-			rgb, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0", "-vsync", "0", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
+			rgb, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0", "-fps_mode", "passthrough", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -245,7 +245,7 @@ func TestGeneratorEndingFinishUsesFrameRoundedBoundaryAtSupportedRates(t *testin
 			d = saveMusicDesign(t, s, d)
 			generatorServe(t, s)
 			path := exactGeneratedVideo(t, s, d)
-			rgb, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0", "-vsync", "0", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
+			rgb, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0", "-fps_mode", "passthrough", "-pix_fmt", "rgb24", "-f", "rawvideo", "-").Output()
 			if err != nil {
 				t.Fatal(err)
 			}

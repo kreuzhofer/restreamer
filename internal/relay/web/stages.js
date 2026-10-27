@@ -7,7 +7,7 @@
   let selections = {prestream: '', ending: '', shortcuts: []}, revisions = [], shortcutSignature = '';
   const current = () => snapshot?.stage;
   const name = revision => revisions.find(item => item.id === revision)?.name || revision || 'No media selected';
-  const label = media => media?.name ? `${media.name} · revision ${media.revision}` : media?.revision || 'No prepared media';
+  const label = media => media?.revision ? window.mediaRenderLabel?.(media.revision) || media.name || 'Prepared media' : 'No prepared media';
   const locked = () => current()?.stage === 'ENDING' && !current()?.error;
   const sourceName = stage => ({off: 'Off', obs: 'OBS', brb: stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB', file: stage.media?.name || 'Prepared video'})[stage.source] || stage.source;
 
@@ -97,7 +97,7 @@
     review = {request, context: current().context, server_id: current().server_id};
     el('stage-dialog-title').textContent = title;
     el('stage-dialog-effect').textContent = effect;
-    el('stage-dialog-context').textContent = `Reviewed: ${current().stage} · ${sourceName(current())}${current().media?.revision ? ` · ${label(current().media)}` : ''}${request.revision ? ` → revision ${request.revision}` : ''}`;
+    el('stage-dialog-context').textContent = `Reviewed: ${current().stage} · ${sourceName(current())}${current().media?.revision ? ` · ${label(current().media)}` : ''}${request.revision ? ` → ${label({revision:request.revision})}` : ''}`;
     el('stage-dialog-confirm').textContent = request.action === 'stop_now' ? 'Stop now' : 'Confirm';
     el('stage-dialog-confirm').className = request.action === 'stop_now' ? 'danger-button' : 'preview-button';
     render(); el('stage-dialog').showModal(); el('stage-dialog-cancel').focus();
