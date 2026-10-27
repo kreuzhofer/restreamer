@@ -1369,6 +1369,11 @@ duration. Editing, generating and previewing never start or end a broadcast.
 New installations start with no destinations. Add the RTMP/RTMPS server URL and
 stream key in desktop **Settings → Destinations**, then enable the prepared
 destination from **Live**. Names use 1–64 letters, digits, underscores, or hyphens.
+For a new destination, choose **Twitch**, **YouTube**, **Kick**, or **Custom** in
+the Platform dropdown. Twitch and YouTube prefill their secure server URLs and
+names; Kick prefills its name and asks for the server URL from your Kick Creator
+Dashboard. Names and URLs remain editable. Changing to a platform preset clears
+the draft stream key so a key from another platform is not reused.
 Up to 16 destinations are supported. A destination without a key cannot send.
 Saving an edit with an empty key field preserves the stored key; enter a new key
 to replace it. Keys are masked and never returned by the management API or status.

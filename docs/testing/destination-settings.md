@@ -1,5 +1,24 @@
 # Destination Settings verification (#50)
 
+## Platform presets (2026-10-27)
+
+New destinations offer Custom, Twitch, YouTube, and Kick. Twitch's secure default
+comes from its [published ingest list](https://ingest.twitch.tv/ingests); YouTube's
+primary RTMPS address matches the [OBS service definitions](https://github.com/obsproject/obs-studio/blob/master/plugins/rtmp-services/data/services.json).
+Kick's [setup instructions](https://help.kick.com/en/articles/7066931-how-to-stream-on-kick-com)
+require the server URL from the creator dashboard, so its preset supplies the name
+and instructions without substituting an example endpoint.
+
+Test-first form-boundary regressions cover prefills, editable names/URLs, explicit
+save, key clearing on a platform change, Custom retaining entered values, failed
+save retention, edit isolation, and reset after save/cancel. All 34 web tests and
+the focused destination/Settings/workspace race tests passed, as did Go vet.
+Each preset was also driven through the actual frontend handler and authenticated
+localhost API with dummy keys; saved destinations remained disabled. No platform
+was contacted. Chrome automation timed out, so desktop/mobile visual verification
+could not be completed for this change. The separately reported unresponsive Save
+button has not been reproduced and is not claimed fixed by these presets.
+
 Verified 2026-10-12 using disposable authenticated localhost services, dummy
 credentials and synthetic OBS input. No external platform was contacted.
 

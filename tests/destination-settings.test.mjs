@@ -45,3 +45,55 @@ test('removing another destination preserves an unrelated unsaved credential dra
  await ui.button('Remove').onclick();
  assert.equal(ui.input('Unique name').value,'draft');assert.equal(ui.input('Stream key').value,'draft-key');assert.equal(ui.unload(),true);
 });
+
+test('platform selection prefills editable names and secure URLs without saving',async()=>{
+ const ui=await settings();const platform=ui.input('Platform');
+ assert.deepEqual(platform.children.map(option=>option.textContent),['Custom','Twitch','YouTube','Kick']);
+ for(const [value,name,url] of [
+   ['twitch','Twitch','rtmps://ingest.global-contribute.live-video.net:443/app'],
+   ['youtube','YouTube','rtmps://a.rtmps.youtube.com:443/live2'],
+ ]) {
+   platform.value=value;platform.onchange();
+   assert.equal(ui.input('Unique name').value,name);
+   assert.equal(ui.input('RTMP or RTMPS server URL').value,url);
+   assert.equal(ui.calls.some(call=>call.method!=='GET'),false);
+ }
+ ui.input('Unique name').value='YouTube-backup';
+ ui.input('RTMP or RTMPS server URL').value='rtmps://b.rtmps.youtube.com:443/live2';
+ ui.input('Stream key').value='dummy-key';await ui.submit();
+ const saved=JSON.parse(ui.calls.find(call=>call.method==='POST').body);
+ assert.equal(saved.name,'YouTube-backup');
+ assert.equal(saved.url,'rtmps://b.rtmps.youtube.com:443/live2');
+ assert.equal(Object.hasOwn(saved,'platform'),false);
+});
+
+test('Kick requires the dashboard URL and switching platforms clears an unrelated key',async()=>{
+ const ui=await settings();const platform=ui.input('Platform');
+ platform.value='youtube';platform.onchange();ui.input('Stream key').value='youtube-dummy-key';
+ platform.value='kick';platform.onchange();
+ assert.equal(ui.input('Unique name').value,'Kick');
+ assert.equal(ui.input('RTMP or RTMPS server URL').value,'');
+ assert.equal(ui.input('Stream key').value,'');
+ assert.ok(ui.container.all().some(element=>element.textContent.includes('Kick Creator Dashboard')));
+ ui.input('RTMP or RTMPS server URL').value='rtmps://example.invalid:443/app';
+ ui.input('Stream key').value='kick-dummy-key';
+ platform.value='custom';platform.onchange();
+ assert.equal(ui.input('RTMP or RTMPS server URL').value,'rtmps://example.invalid:443/app');
+ assert.equal(ui.input('Stream key').value,'kick-dummy-key');
+});
+
+test('presets only apply to new destinations and reset after saving or cancelling edits',async()=>{
+ const ui=await settings();const platform=ui.input('Platform');
+ platform.value='kick';platform.onchange();
+ ui.fail();await ui.submit();
+ assert.equal(platform.value,'kick','Failed saves retain the selected preset');
+ const editUI=await settings();const editPlatform=editUI.input('Platform');
+ editUI.button('Edit').onclick();
+ assert.equal(editPlatform.disabled,true);
+ assert.equal(editUI.input('Unique name').value,'local');
+ assert.equal(editUI.input('RTMP or RTMPS server URL').value,'rtmp://localhost/app');
+ editUI.button('Cancel edit').onclick();assert.equal(editPlatform.disabled,false);
+ editPlatform.value='twitch';editPlatform.onchange();await editUI.submit();
+ assert.equal(editPlatform.value,'custom');assert.equal(editUI.input('Unique name').value,'');
+ assert.equal(editUI.container.all().find(element=>element.id==='destination-platform-hint').textContent,'');
+});

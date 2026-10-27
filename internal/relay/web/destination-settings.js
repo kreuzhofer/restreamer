@@ -14,6 +14,19 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   const list = node('div'); list.className = 'destination-settings-list';
   const form = node('form');
   const fields = node('fieldset'); fields.disabled = true; fields.append(node('legend', 'Add or edit a destination'));
+  // Default ingest addresses: https://ingest.twitch.tv/ingests and OBS's
+  // plugins/rtmp-services/data/services.json. Kick supplies the URL in its dashboard.
+  const presets = {
+    twitch: {name: 'Twitch', url: 'rtmps://ingest.global-contribute.live-video.net:443/app'},
+    youtube: {name: 'YouTube', url: 'rtmps://a.rtmps.youtube.com:443/live2'},
+    kick: {name: 'Kick', url: ''},
+  };
+  const platformLabel = node('label', 'Platform');
+  const platform = node('select'); platform.name = 'destination_platform';
+  for (const [value, label] of [['custom', 'Custom'], ['twitch', 'Twitch'], ['youtube', 'YouTube'], ['kick', 'Kick']]) {
+    const option = node('option', label); option.value = value; platform.append(option);
+  }
+  platform.value = 'custom'; platformLabel.append(platform); fields.append(platformLabel);
   const input = (label, type, name) => {
     const wrapper = node('label', label);
     const field = node('input'); field.type = type; field.name = name; field.autocomplete = 'off'; field.spellcheck = false;
@@ -22,6 +35,15 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   const name = input('Unique name', 'text', 'destination_name'); name.required = true; name.pattern = '[a-zA-Z0-9_-]{1,64}'; name.maxLength = 64;
   const url = input('RTMP or RTMPS server URL', 'url', 'destination_url'); url.required = true; url.maxLength = 2048;
   const key = input('Stream key', 'password', 'destination_key'); key.autocomplete = 'new-password'; key.maxLength = 2048;
+  const platformHint = node('p'); platformHint.id = 'destination-platform-hint';
+  platform.setAttribute('aria-describedby', platformHint.id); fields.append(platformHint);
+  platform.onchange = () => {
+    const preset = presets[platform.value];
+    if (preset) { name.value = preset.name; url.value = preset.url; key.value = ''; }
+    platformHint.textContent = platform.value === 'kick'
+      ? 'Copy your server URL and stream key from Kick Creator Dashboard → Channel → Stream URL and Key.'
+      : 'You can edit the name and server URL. Paste the stream key from your platform dashboard.';
+  };
   const hint = node('p', 'New destinations start disabled. Enable delivery in Live after checking readiness.');
   const save = node('button', 'Add destination'); save.type = 'submit';
   const cancel = node('button', 'Cancel edit'); cancel.type = 'button'; cancel.hidden = true;
@@ -39,6 +61,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   }
   function reset() {
     editing = ''; form.reset(); cancel.hidden = true; save.textContent = 'Add destination'; key.placeholder = '';
+    platform.value = 'custom'; platform.disabled = false; platformLabel.hidden = false; platformHint.textContent = '';
     hint.textContent = 'New destinations start disabled. Enable delivery in Live after checking readiness.';
     baseline = JSON.stringify([name.value, url.value, key.value]);
   }
@@ -57,6 +80,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
       edit.onclick = () => {
         if (dirty() && !window.confirm('Discard the unsaved destination draft and edit this destination?')) return;
         editing = destination.name; name.value = destination.name; url.value = destination.url; key.value = '';
+        platform.disabled = true; platformLabel.hidden = true; platformHint.textContent = '';
         key.placeholder = destination.has_key ? 'Leave blank to keep stored key' : 'Enter stream key';
         hint.textContent = 'Leaving the key blank preserves the stored key. Saving an active destination reconnects only that destination.';
         save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value]); name.focus();
