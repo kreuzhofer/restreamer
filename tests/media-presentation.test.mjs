@@ -34,5 +34,7 @@ test('assignment changes only the chosen stage and preserves clip shortcuts and 
   assert.equal(next.version,7); assert.equal(next.prestream,'new'); assert.equal(next.ending,'end');
   assert.equal(JSON.stringify(next.shortcuts), JSON.stringify(saved.shortcuts));
   assert.equal(saved.prestream,'old');
-  assert.throws(() => ui.selection(saved,'brb','new'));
+  assert.equal(ui.selection(saved,'brb','new').brb,'new');
+  assert.equal(ui.selection(saved,'brb','new').ending,'end');
+  assert.throws(() => ui.selection(saved,'unknown','new'));
 });

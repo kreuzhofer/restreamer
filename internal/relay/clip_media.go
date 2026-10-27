@@ -38,9 +38,10 @@ type clipIndex struct {
 	Size                 int64
 }
 type clipReader struct {
-	file   *os.File
-	index  *clipIndex
-	offset int64
+	onClose func()
+	file    *os.File
+	index   *clipIndex
+	offset  int64
 }
 
 func clipTag(f *os.File, offset, size int64) (uint8, time.Duration, int, int64, error) {
@@ -161,7 +162,13 @@ func openClip(path string, idx *clipIndex) (*clipReader, error) {
 	}
 	return &clipReader{file: f, index: idx, offset: idx.Keys[0].Offset}, nil
 }
-func (r *clipReader) close() { r.file.Close() }
+func (r *clipReader) close() {
+	if r.onClose != nil {
+		r.onClose()
+		r.onClose = nil
+	}
+	r.file.Close()
+}
 func (r *clipReader) seek(position time.Duration) (time.Duration, error) {
 	info, err := r.file.Stat()
 	if err != nil || info.Size() != r.index.Size {

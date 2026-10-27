@@ -8,7 +8,7 @@
   const current = () => snapshot?.stage;
   const name = revision => revisions.find(item => item.id === revision)?.name || revision || 'No media selected';
   const label = media => media?.revision ? window.mediaRenderLabel?.(media.revision) || media.name || 'Prepared media' : 'No prepared media';
-  const locked = () => current()?.stage === 'ENDING' && !current()?.error;
+  const locked = () => current()?.stage === 'ENDING' && !current()?.error && !current()?.playback?.loop;
   const sourceName = stage => ({off: 'Off', obs: 'OBS', brb: stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB', file: stage.media?.name || 'Prepared video'})[stage.source] || stage.source;
 
   function remember(command) {
@@ -75,7 +75,7 @@
         const effect = stage.stage === 'CLIP' ? `Replace ${label(stage.media)} and keep its return destination: ${destination}.` : stage.stage === 'BRB' && stage.return_stage === 'CLIP' ? `Permanently discard suspended ${label(stage.return_media)}. After this clip, return to BRB; a later Return restores ${stage.return_after_discard || stage.return_playback?.return_stage || 'the original return stage'}.` : `After playback, return to ${stage.stage}.`;
         return ['Play this clip?', `Play ${name(request.revision)} ${request.loop ? 'on a loop until stopped' : 'once'}. ${effect} ${mode}`];
       }
-      case 'end_stream': return ['Play ending and stop?', `Play ${name(selections.ending)} once, finish queued destination writes for up to 10 seconds, then stop. Ordinary stage controls are locked while the ending runs. ${mode}`];
+      case 'end_stream': if (revisions.find(r => r.id === selections.ending)?.presentation?.mode === 'music') return ['Start looping ending?',`Play ${name(selections.ending)} continuously. Music and visuals repeat independently. Use Stop now or change stage when you are done. ${mode}`]; return ['Play ending and stop?', `Play ${name(selections.ending)} once, finish queued destination writes for up to 10 seconds, then stop. Ordinary stage controls are locked while the ending runs. ${mode}`];
       case 'return': return ['Return to the recorded stage?', `Restore ${destination}, resuming retained media near its saved position. An unavailable return source holds fallback BRB. ${mode}`];
       case 'retry': return ['Retry failed playback?', `Retry the selected media from its beginning. ${mode}`];
       case 'stop_clip': return ['Stop this clip?', `Stop the clip and restore ${destination}. ${mode}`];
@@ -90,6 +90,7 @@
     if (!online || inflight || refreshing || !current()) return;
     if (expected && (expected.server_id !== current().server_id || expected.context !== current().context)) return;
     if (request.action === 'prestream') request = {...request, revision: selections.prestream};
+    if (request.action === 'brb' && selections.brb) request = {...request, revision: selections.brb};
     if (request.action === 'end_stream') request = {...request, revision: selections.ending};
     if (current().stage === 'OFF' && ['prestream', 'go_live'].includes(request.action)) request = {...request, mode: el('stage-rehearsal').checked ? 'preview_only' : 'real'};
     if (!needsConfirmation || noChange(request)) { execute(request, false); return; }

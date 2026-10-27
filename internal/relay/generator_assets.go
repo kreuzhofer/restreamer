@@ -127,14 +127,18 @@ func (g *generatorStore) assetRevision(ref mediaauthor.AssetRef) (AssetRevision,
 // assetIssues is called with g.mu held, including across draft/job publication.
 func (g *generatorStore) assetIssues(d mediaauthor.Design) []mediaauthor.Issue {
 	out := make([]mediaauthor.Issue, 0)
-	if d.Soundtrack != nil {
-		ref := d.Soundtrack.Asset
-		r, ok := g.assetRevision(ref)
-		info, err := os.Lstat(g.assetPath(ref))
-		if !ok || g.assets[ref.ID].Kind != "audio" || err != nil || !info.Mode().IsRegular() || info.Size() != r.Bytes {
-			out = append(out, mediaauthor.Issue{Field: "soundtrack.asset", Message: "The selected music revision is unavailable. Choose an available audio revision explicitly."})
+	if refs, err := g.musicRefs(d.Soundtrack); err != nil {
+		out = append(out, mediaauthor.Issue{Field: "soundtrack.asset", Message: err.Error()})
+	} else {
+		for _, ref := range refs {
+			meta, ok := g.assetRevision(ref)
+			info, err := os.Lstat(g.assetPath(ref))
+			if !ok || g.assets[ref.ID].Kind != "audio" || err != nil || !info.Mode().IsRegular() || info.Size() != meta.Bytes {
+				out = append(out, mediaauthor.Issue{Field: "soundtrack.asset", Message: "The selected music revision is unavailable. Choose an available audio revision explicitly."})
+			}
 		}
 	}
+
 	for i, scene := range d.Scenes {
 		refs := map[string]*mediaauthor.AssetRef{"image": scene.Image}
 		if scene.Video != nil {
@@ -159,6 +163,15 @@ func (g *generatorStore) assetIssues(d mediaauthor.Design) []mediaauthor.Issue {
 // this scan when introduced. Keep lock order g.mu then jobsMu.
 func (g *generatorStore) assetUsesLocked(id string) ([]AssetUse, error) {
 	out := make([]AssetUse, 0)
+	for _, playlist := range g.playlists {
+		for _, revision := range playlist.Revisions {
+			for _, ref := range revision.Tracks {
+				if id == "" || ref.ID == id {
+					out = append(out, AssetUse{AssetID: ref.ID, Kind: "playlist", ID: playlist.ID, Name: revision.Name, Revision: ref.Revision})
+				}
+			}
+		}
+	}
 	designs, err := g.list()
 	if err != nil {
 		return nil, err
@@ -250,7 +263,7 @@ func (s *Server) assetUsesLocked(id string) ([]AssetUse, error) {
 		if stage.ReturnMedia != nil && stage.ReturnMedia.Revision == u.ID {
 			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "return", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
-		if selected.Prestream == u.ID || selected.Ending == u.ID {
+		if selected.Prestream == u.ID || selected.Ending == u.ID || selected.BRB == u.ID {
 			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "selection", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
 	}

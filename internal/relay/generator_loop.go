@@ -63,41 +63,10 @@ func (s *Server) prepareCircularSequence(ctx context.Context, plan mediaauthor.S
 		}
 		used -= info.Size()
 	}
-	source, err := os.Open(pcmPath)
-	if err != nil {
-		return "", used, errors.New("Cannot open complete music mix.")
-	}
-	defer source.Close()
 	inputSamples := sampleBoundary(n, p.SampleRate, p.FPS)
 	outputSamples := sampleBoundary(plan.Frames, p.SampleRate, p.FPS)
-	info, err = source.Stat()
-	if err != nil || info.Size() != inputSamples*4 {
-		return "", used, errors.New("Complete music mix timing is invalid.")
-	}
-	if outputSamples*4 >= int64(maxGeneratorOutputBytes)-used {
-		return "", used, errors.New("Circular audio reached the 512 MiB workspace limit. Shorten the design.")
-	}
-	targetPath := filepath.Join(dir, "cycle.pcm")
-	target, err := os.Create(targetPath)
-	if err != nil {
-		return "", used, errors.New("Cannot create circular audio.")
-	}
-	defer target.Close()
-	start := sampleBoundary(b, p.SampleRate, p.FPS)
-	body := sampleBoundary(n-2*b, p.SampleRate, p.FPS)
-	outgoing := &cyclicPCMReader{file: source, offset: start * 4, size: inputSamples * 4}
-	if err := copyTransitionPCM(ctx, target, outgoing, body*4); err != nil {
+	if err := rotateCircularPCM(ctx, plan, p, pcmPath, dir, int64(maxGeneratorOutputBytes)-used); err != nil {
 		return "", used, err
-	}
-	incoming := &cyclicPCMReader{file: source, size: inputSamples * 4}
-	if err := mixTransitionPCM(ctx, target, outgoing, incoming, outputSamples-body); err != nil {
-		return "", used, err
-	}
-	if target.Close() != nil {
-		return "", used, errors.New("Cannot save circular audio.")
-	}
-	if source.Close() != nil || os.Rename(targetPath, pcmPath) != nil {
-		return "", used, errors.New("Cannot retain circular audio.")
 	}
 	used += (outputSamples - inputSamples) * 4
 	result := filepath.Join(dir, "cycle.txt")
@@ -243,4 +212,48 @@ func retainCircularFLV(ctx context.Context, path string, duration time.Duration)
 		return errors.New("Cannot finish cyclic encoded output.")
 	}
 	return f.Close()
+}
+
+// Rotate/crossfade one complete PCM composition to the same visual cycle. Both
+// full rendering and music-only preparation use the identical boundary envelope.
+func rotateCircularPCM(ctx context.Context, plan mediaauthor.SequenceTiming, p config.BRBProfile, pcmPath, dir string, budget int64) error {
+	n, b := plan.CompositionFrames, plan.LoopFrames
+	source, err := os.Open(pcmPath)
+	if err != nil {
+		return errors.New("Cannot open complete music mix.")
+	}
+	defer source.Close()
+	inputSamples := sampleBoundary(n, p.SampleRate, p.FPS)
+	outputSamples := sampleBoundary(plan.Frames, p.SampleRate, p.FPS)
+	info, err := source.Stat()
+	if err != nil || info.Size() != inputSamples*4 {
+		return errors.New("Complete music mix timing is invalid.")
+	}
+	if outputSamples*4 >= budget {
+		return errors.New("Circular audio reached the 512 MiB workspace limit. Shorten the design.")
+	}
+	targetPath := filepath.Join(dir, "cycle.pcm")
+	target, err := os.Create(targetPath)
+	if err != nil {
+		return errors.New("Cannot create circular audio.")
+	}
+	defer target.Close()
+	start := sampleBoundary(b, p.SampleRate, p.FPS)
+	body := sampleBoundary(n-2*b, p.SampleRate, p.FPS)
+	outgoing := &cyclicPCMReader{file: source, offset: start * 4, size: inputSamples * 4}
+	if err := copyTransitionPCM(ctx, target, outgoing, body*4); err != nil {
+		return err
+	}
+	incoming := &cyclicPCMReader{file: source, size: inputSamples * 4}
+	if err := mixTransitionPCM(ctx, target, outgoing, incoming, outputSamples-body); err != nil {
+		return err
+	}
+	if target.Close() != nil {
+		return errors.New("Cannot save circular audio.")
+	}
+	if source.Close() != nil || os.Rename(targetPath, pcmPath) != nil {
+		return errors.New("Cannot retain circular audio.")
+	}
+
+	return nil
 }

@@ -13,6 +13,14 @@ import (
 // Paths are relative to the media library. Only explicit library deletion owns originals.
 func validDeletionPath(path string) bool {
 	parts := strings.Split(filepath.ToSlash(path), "/")
+	if len(parts) == 2 && parts[0] == "presentations" {
+		for _, suffix := range []string{"-scene.pcm", "-music.pcm"} {
+			if strings.HasSuffix(parts[1], suffix) && validRevisionID(strings.TrimSuffix(parts[1], suffix)) {
+				return true
+			}
+		}
+		return false
+	}
 	if len(parts) == 2 && parts[0] == "originals" {
 		return validClipName(parts[1])
 	}
@@ -23,12 +31,15 @@ func validDeletionPath(path string) bool {
 	if len(parts) == 2 && parts[0] == "revisions" {
 		return validRevisionID(strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))) && (filepath.Ext(parts[1]) == ".json" || filepath.Ext(parts[1]) == ".flv")
 	}
+	if len(parts) == 3 && parts[0] == "generator" && parts[1] == "captures" && strings.HasSuffix(parts[2], ".flv") {
+		return validDesignID(strings.TrimSuffix(parts[2], ".flv"))
+	}
 	if len(parts) != 3 || parts[0] != "generator" || filepath.Ext(parts[2]) != ".json" {
 		return false
 	}
 	id := strings.TrimSuffix(parts[2], ".json")
 	switch parts[1] {
-	case "designs", "jobs", "templates":
+	case "designs", "jobs", "templates", "playlists":
 		return validDesignID(id)
 	case "themes":
 		var revision int

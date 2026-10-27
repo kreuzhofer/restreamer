@@ -9,6 +9,7 @@ import (
 )
 
 type PlaybackStatus struct {
+	MusicDriven    bool    `json:"music_driven,omitempty"`
 	State          string  `json:"state"`
 	Source         string  `json:"source"`
 	ID             string  `json:"id,omitempty"`
@@ -26,6 +27,7 @@ type PlaybackStatus struct {
 }
 
 type clipPlayback struct {
+	presentation                           *presentationSource
 	loopEpoch                              time.Time
 	loopBase                               time.Duration
 	loopCount                              int64
@@ -42,6 +44,9 @@ func (p *clipPlayback) positionAt(now time.Time) time.Duration {
 	pos := p.position
 	if p.streaming {
 		pos += max(0, now.Sub(p.started))
+	}
+	if p.presentation != nil {
+		return pos
 	}
 	return min(pos, p.reader.index.Duration)
 }
@@ -67,9 +72,13 @@ func (b *broadcast) playbackStatusLocked(now time.Time) PlaybackStatus {
 	}
 	if p := b.clip; p != nil {
 		s.ID, s.Name, s.Loop = p.ID, p.Name, p.loop
+		s.MusicDriven = p.presentation != nil
 		s.Revision = p.Revision
 		s.Duration = p.reader.index.Duration.Seconds()
 		s.Position = p.positionAt(now).Seconds()
+		if p.presentation != nil {
+			s.Position = (p.positionAt(now) % p.reader.index.Duration).Seconds()
+		}
 		s.Remaining = max(0, s.Duration-s.Position)
 		s.State = "playing"
 		s.Source = "file"
@@ -111,6 +120,9 @@ func (b *broadcast) stopClip(reason string) {
 
 func (b *broadcast) startClip(now time.Time) error {
 	p := b.clip
+	if p.presentation != nil {
+		return b.startPresentation(now)
+	}
 	if p.position >= p.reader.index.Duration {
 		p.position = 0
 	}
@@ -145,11 +157,15 @@ func (b *broadcast) startClip(now time.Time) error {
 }
 
 // Bounded, paced disk reads use the same output hub as OBS and BRB. No FFmpeg
-// process or decoder is needed during playback, pause, seek or looping.
+// process or decoder is needed for ordinary clips. Music presentations use an
+// audio-only encoder and keep the same encoded-video path.
 func (b *broadcast) tickClip(now time.Time) bool {
 	p := b.clip
 	if p == nil || p.paused || b.manual || b.control.failed {
 		return false
+	}
+	if p.presentation != nil {
+		return b.tickPresentation(now)
 	}
 	if !p.streaming {
 		if p.position >= p.reader.index.Duration && !p.loop {

@@ -24,16 +24,18 @@ import (
 // A revision identifies immutable encoded content, independently of its source
 // filename. Original discovery and re-preparation never mutate these files.
 type MediaRevision struct {
-	Timing    *GeneratedTiming  `json:"timing,omitempty"`
-	ID        string            `json:"id"`
-	LibraryID string            `json:"library_id"`
-	Name      string            `json:"name"`
-	State     string            `json:"state"`
-	Duration  float64           `json:"duration"`
-	Bytes     int64             `json:"bytes"`
-	Profile   config.BRBProfile `json:"profile"`
-	Error     string            `json:"error,omitempty"`
-	index     *clipIndex
+	Presentation  *MusicPresentation `json:"presentation,omitempty"`
+	ContentDigest string             `json:"content_digest,omitempty"`
+	Timing        *GeneratedTiming   `json:"timing,omitempty"`
+	ID            string             `json:"id"`
+	LibraryID     string             `json:"library_id"`
+	Name          string             `json:"name"`
+	State         string             `json:"state"`
+	Duration      float64            `json:"duration"`
+	Bytes         int64              `json:"bytes"`
+	Profile       config.BRBProfile  `json:"profile"`
+	Error         string             `json:"error,omitempty"`
+	index         *clipIndex
 }
 
 type ClipShortcut struct {
@@ -42,6 +44,7 @@ type ClipShortcut struct {
 }
 
 type StageMediaSelections struct {
+	BRB       string         `json:"brb,omitempty"`
 	Prestream string         `json:"prestream"`
 	Ending    string         `json:"ending"`
 	Shortcuts []ClipShortcut `json:"shortcuts"`
@@ -109,7 +112,7 @@ func (l *videoLibrary) loadRevisions() error {
 			continue
 		}
 		var revision MediaRevision
-		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil || validateRevisionTiming(revision) != nil {
+		if readMediaJSON(filepath.Join(l.root, "revisions", file.Name()), &revision) != nil || revision.ID != id || revision.Profile.Validate() != nil || validateRevisionTiming(revision) != nil || validatePresentation(revision) != nil {
 			return errors.New("invalid retained media revision")
 		}
 		l.revisions[id] = &revision
@@ -233,7 +236,7 @@ func (l *videoLibrary) revisionsLocked() []MediaRevision {
 		}
 		revisions = append(revisions, r)
 	}
-	ids := []string{l.selected.Prestream, l.selected.Ending}
+	ids := []string{l.selected.Prestream, l.selected.Ending, l.selected.BRB}
 	for _, shortcut := range l.selected.Shortcuts {
 		ids = append(ids, shortcut.Revision)
 	}
@@ -257,7 +260,11 @@ func (l *videoLibrary) openRevisionLocked(id string) (*clipPlayback, config.BRBP
 		return nil, r.Profile, errors.New("Selected media revision is incompatible with the active profile")
 	}
 	path := l.revisionPath(id)
-	if digest, err := mediaDigest(path); err != nil || digest != id {
+	expectedDigest := id
+	if r.Presentation != nil {
+		expectedDigest = r.ContentDigest
+	}
+	if digest, err := mediaDigest(path); err != nil || digest != expectedDigest {
 		r.State, r.Error = "changed", "Selected media revision is missing or changed; prepare the original again"
 		return nil, r.Profile, errors.New("Selected media revision is missing or changed; prepare the original again")
 	}
@@ -276,7 +283,30 @@ func (l *videoLibrary) openRevisionLocked(id string) (*clipPlayback, config.BRBP
 	if err != nil {
 		return nil, r.Profile, errors.New("Cannot open selected media revision")
 	}
-	return &clipPlayback{ID: r.LibraryID, Name: r.Name, Revision: id, reader: reader}, r.Profile, nil
+	clip := &clipPlayback{ID: r.LibraryID, Name: r.Name, Revision: id, reader: reader}
+	if r.Presentation != nil && r.Presentation.Mode == "music" {
+		baseMeta := l.revisions[r.Presentation.VisualRevision]
+		if validatePresentation(*r) != nil || baseMeta == nil || baseMeta.Presentation != nil {
+			reader.close()
+			return nil, r.Profile, errors.New("Presentation visual revision is invalid or unavailable")
+		}
+		base, _, err := l.openRevisionLocked(r.Presentation.VisualRevision)
+		if err != nil {
+			reader.close()
+			return nil, r.Profile, err
+		}
+		base.reader.close()
+		for kind, want := range map[string]string{"scene": r.Presentation.SceneDigest, "music": r.Presentation.MusicDigest} {
+			if digest, err := mediaDigest(l.presentationPCM(id, kind)); err != nil || digest != want {
+				reader.close()
+				return nil, r.Profile, errors.New("Prepared presentation audio is missing or changed; prepare it again")
+			}
+		}
+		clip.presentation = &presentationSource{visualPath: l.revisionPath(r.Presentation.VisualRevision), scenePath: l.presentationPCM(id, "scene"), musicPath: l.presentationPCM(id, "music"), index: base.reader.index, profile: r.Profile, gain: r.Presentation.Gain}
+		reader.onClose = clip.presentation.close
+		clip.loop = true
+	}
+	return clip, r.Profile, nil
 }
 
 func (l *videoLibrary) openRevision(id string) (*clipPlayback, config.BRBProfile, error) {
@@ -289,7 +319,7 @@ func validateSelections(settings StageMediaSelections) error {
 	if len(settings.Shortcuts) > 32 {
 		return errors.New("Save at most 32 clip shortcuts")
 	}
-	for _, id := range []string{settings.Prestream, settings.Ending} {
+	for _, id := range []string{settings.Prestream, settings.Ending, settings.BRB} {
 		if id != "" && !validRevisionID(id) {
 			return errors.New("Select an exact ready media revision")
 		}
@@ -367,7 +397,7 @@ var errStageMediaPersistence = errors.New("Cannot save stage media; selections u
 
 // Caller holds l.mu through persistence and publication of the new selections.
 func (l *videoLibrary) persistSelectionsLocked(settings StageMediaSelections) (bool, error) {
-	ids := []string{settings.Prestream, settings.Ending}
+	ids := []string{settings.Prestream, settings.Ending, settings.BRB}
 	for _, shortcut := range settings.Shortcuts {
 		ids = append(ids, shortcut.Revision)
 	}
@@ -386,7 +416,7 @@ func (l *videoLibrary) persistSelectionsLocked(settings StageMediaSelections) (b
 	if err := writeState(filepath.Join(l.root, "stage-media.json"), savedStageMedia{Version: 1, Selections: settings}); err != nil {
 		return false, errStageMediaPersistence
 	}
-	changed := settings.Prestream != l.selected.Prestream || settings.Ending != l.selected.Ending || !slices.Equal(settings.Shortcuts, l.selected.Shortcuts)
+	changed := settings.BRB != l.selected.BRB || settings.Prestream != l.selected.Prestream || settings.Ending != l.selected.Ending || !slices.Equal(settings.Shortcuts, l.selected.Shortcuts)
 	return changed, nil
 }
 

@@ -289,9 +289,9 @@
     if (draft.stage === 'ending') draft.ending_fade_seconds = Number($('ending-fade').value);
     const musicValue = $('soundtrack-asset').value;
     if (musicValue) {
-      const [id, revision] = musicValue.split(':');
-      draft.soundtrack = {asset: {id, revision: Number(revision)}, mode: $('soundtrack-mode').value, volume_percent: Number($('soundtrack-volume').value), fade_in_seconds: Number($('soundtrack-fade-in').value), fade_out_seconds: Number($('soundtrack-fade-out').value)};
+      draft.soundtrack = {...window.musicSelection.decode(musicValue), mode: $('soundtrack-mode').value, volume_percent: Number($('soundtrack-volume').value), fade_in_seconds: Number($('soundtrack-fade-in').value), fade_out_seconds: Number($('soundtrack-fade-out').value)};
     } else delete draft.soundtrack;
+    if (draft.duration_mode || $('duration-mode').value === 'music') draft.duration_mode = $('duration-mode').value;
     const scene = draft.scenes[selectedScene]; if (!scene) return;
     scene.layout = $('scene-layout').value;
     scene.media_kind = $('scene-media-kind').value;
@@ -362,7 +362,7 @@
       if (sequence !== previewSequence) return;
       validationIssues = result.issues;
       renderScenes();
-      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.stage === 'prestream' ? 'per complete cycle' : 'total'} after transition overlaps at ${result.profile.fps} fps`;
+      $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.duration_mode === 'music' ? 'per music pass (live repeats until stopped)' : draft.stage === 'prestream' ? 'per complete cycle after transition overlaps' : 'total after transition overlaps'} at ${result.profile.fps} fps`;
       if (draft.stage === 'ending') {
         const fade = Math.round((draft.ending_fade_seconds ?? 1) * result.profile.fps) / result.profile.fps;
         $('ending-fade-effective').textContent = fade === 0 ? 'Final fade disabled: the final image and audio are preserved.' : `Final ${fade.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds fade to black and silence after rounding to video frames, within the total above.`;
@@ -437,10 +437,11 @@
   $('scene-form').addEventListener('submit', event => event.preventDefault());
   $('scene-form').addEventListener('input', event => {
     if (event.target.id === 'design-theme') return;
+    if (event.target.id.startsWith('soundtrack-') || event.target.id === 'duration-mode') draft.duration_mode = $('duration-mode').value;
     captureFields();
     if (event.target.id === 'scene-layout' || event.target.id === 'scene-media-kind') renderSelectedScene();
     if (event.target.id === 'scene-image') renderImagePicker();
-    if (event.target.id === 'soundtrack-asset' || event.target.id === 'soundtrack-mode') renderMusicPicker();
+    if (['soundtrack-asset','soundtrack-mode','duration-mode'].includes(event.target.id)) renderMusicPicker();
     changed();
   });
   $('save-retry').addEventListener('click', () => saveDraft());
@@ -657,6 +658,7 @@
       technical.append(technicalHeading, identity);
       const changes = document.createElement('p'); changes.textContent = window.mediaPresentation.changes(job, relevant[relevant.indexOf(job) + 1]);
       row.append(title, changes, technical);
+      if (job.visual_revision) { const reuse = document.createElement('p'); reuse.textContent = job.reused_visual ? 'Music prepared · encoded visual reused' : 'Visual and music prepared'; row.append(reuse); }
       if (job.mix_gain != null) {
         const gain = document.createElement('p');
         gain.textContent = `Whole-mix gain: ${(job.mix_gain * 100).toFixed(2)}%${job.mix_gain < 1 ? ' · fixed peak protection; relative levels preserved' : ' · requested levels retained'}`;
@@ -676,12 +678,13 @@
       if (job.state === 'ready') {
         const detail = document.createElement('p');
         const media = mediaRevisions.find(item => item.id === job.media_revision);
-        const selected = ['prestream', 'ending'].filter(kind => stageSelections[kind] === job.media_revision).map(kind => kind.toUpperCase());
+        const selected = ['prestream', 'ending', 'brb'].filter(kind => stageSelections[kind] === job.media_revision).map(kind => kind.toUpperCase());
         const onAir = stageStatus.source === 'file' && stageStatus.media?.revision === job.media_revision;
         const returning = stageStatus.return_media?.revision === job.media_revision;
         const newer = job.design_snapshot.id === draft.id && job.design_snapshot.version < draft.version;
         detail.textContent = ` ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
         const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+        const download = document.createElement('a'); download.href = `/api/library/revisions/${encodeURIComponent(job.media_revision)}/preview`; download.download = 'presentation.mp4'; download.textContent = 'Download one pass'; download.className = 'preview-button'; row.append(download);
         if (media?.state === 'ready') { const thumbnail = document.createElement('video'); thumbnail.className = 'render-thumbnail'; thumbnail.muted = true; thumbnail.playsInline = true; thumbnail.preload = 'metadata'; thumbnail.src = `/api/library/revisions/${encodeURIComponent(job.media_revision)}/preview#t=0.1`; thumbnail.setAttribute('aria-label', window.mediaPresentation.renderName(job)); row.prepend(thumbnail); }
         const mediaID = document.createElement('code'); mediaID.textContent = job.media_revision; technical.append(mediaID);
         const kind = job.design_snapshot.stage, stageName = kind.toUpperCase();
@@ -739,8 +742,8 @@
   function previewGenerated(job) {
     reviewedRevision = job.media_revision;
     $('generated-preview').hidden = false;
-    const passes = job.design_snapshot.stage === 'prestream' && job.exact_timing ? 2 : 1;
-    $('generated-identity').textContent = `${passes === 2 ? `Two passes · ${job.duration}s per complete cycle. ` : 'One pass. '}${window.mediaPresentation.renderName(job)} · ${window.mediaPresentation.date(job.created_at)}. Preview does not change the broadcast.`;
+    const passes = job.design_snapshot.duration_mode !== 'music' && job.design_snapshot.stage === 'prestream' && job.exact_timing ? 2 : 1;
+    $('generated-identity').textContent = `${passes === 2 ? `Two passes · ${job.duration}s per complete cycle. ` : job.design_snapshot.duration_mode === 'music' ? 'One music pass. On air, music and video keep looping independently until you stop or change stage. ' : 'One pass. '}${window.mediaPresentation.renderName(job)} · ${window.mediaPresentation.date(job.created_at)}. Preview does not change the broadcast.`;
     const video = $('generated-video');
     video.src = `/api/library/revisions/${encodeURIComponent(reviewedRevision)}/preview${passes === 2 ? "?passes=2" : ""}`;
     $('generated-playback-status').textContent = 'Loading exact prepared output…';
@@ -817,30 +820,42 @@
   async function loadAssets() {
     if (assetsFetching) return;
     assetsFetching = true;
-    try { assets = await (await request('/api/generator/assets')).json(); renderAssets(); }
+    try { assets = await (await request('/api/generator/assets')).json(); renderAssets(); await window.musicPlaylists?.refresh(); }
     catch (error) { assetError(`Asset library unavailable: ${error.message}`); $('asset-list-state').textContent = 'Asset status unavailable. Previously loaded references may be stale. Refresh to retry.'; $('asset-list').querySelectorAll('button').forEach(button => { button.disabled = true; }); }
     finally { assetsFetching = false; }
   }
   function renderMusicPicker() {
     if (!draft) return;
     const track = draft.soundtrack;
-    const value = track ? `${track.asset.id}:${track.asset.revision}` : '';
-    const options = [new Option('No soundtrack', '')];
-    for (const asset of assets.filter(asset => asset.kind === 'audio')) for (const revision of asset.revisions) options.push(new Option(`${asset.name} · revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, `${asset.id}:${revision.revision}`));
-    if (value && !options.some(option => option.value === value)) options.push(new Option('Unavailable selected music', value));
+    const playlists = window.musicPlaylists?.catalog() || [];
+    const value = window.musicSelection.value(track);
+    const options = window.musicSelection.choices(assets, playlists, track).map(choice => new Option(choice.label,choice.value));
+    $('duration-mode').value = draft.duration_mode || 'fixed';
+    $('duration-mode-help').textContent = draft.duration_mode === 'music' ? 'Download: one music pass, rounded up to a video frame (maximum one hour). On air: video and music repeat independently until Stop or a stage change. Music-only preparations reuse the encoded visual.' : 'Download length follows the scene sequence. Existing fixed ending behavior is preserved.';
+    $('soundtrack-mode').disabled = draft.duration_mode === 'music';
     $('soundtrack-asset').replaceChildren(...options); $('soundtrack-asset').value = value;
     $('soundtrack-settings').hidden = !track;
     $('soundtrack-mode').value = track?.mode || 'end'; $('soundtrack-volume').value = track?.volume_percent ?? 100;
     $('soundtrack-fade-in').value = track?.fade_in_seconds || 0; $('soundtrack-fade-out').value = track?.fade_out_seconds || 0;
-    const asset = assets.find(asset => asset.id === track?.asset.id);
-    const meta = asset?.revisions.find(revision => revision.revision === track.asset.revision);
-    $('soundtrack-info').textContent = meta ? `Track: ${meta.duration_seconds.toFixed(3)} seconds · pinned revision ${track.asset.revision}` : 'Select an available music revision.';
-    $('adopt-music-revision').hidden = !asset || asset.revision === track.asset.revision;
+    const asset = assets.find(asset => asset.id === track?.asset?.id);
+    const meta = asset?.revisions.find(revision => revision.revision === track.asset?.revision);
+    $('soundtrack-info').textContent = meta ? `Track: ${meta.duration_seconds.toFixed(3)} seconds · pinned revision ${track.asset?.revision}` : 'Select an available music revision.';
+    const playlist = playlists.find(p => p.id === track?.playlist?.id);
+    $('adopt-music-revision').hidden = playlist ? playlist.revision === track.playlist.revision : !asset || asset.revision === track?.asset?.revision;
+    if (track?.playlist) {
+      const ref = {...track.playlist};
+      $('soundtrack-info').textContent = `${playlist?.name || 'Saved playlist'} · pinned version ${ref.revision}. Loading duration…`;
+      request(`/api/music/playlists/${ref.id}/revisions/${ref.revision}`).then(response => response.json()).then(saved => {
+        if (draft?.soundtrack?.playlist?.id === ref.id && draft.soundtrack.playlist.revision === ref.revision) $('soundtrack-info').textContent = `${saved.name} · ${saved.duration.toFixed(3)} seconds · pinned version ${ref.revision}. Playlist edits do not change this selection.`;
+      }).catch(error => { if (draft?.soundtrack?.playlist?.id === ref.id && draft.soundtrack.playlist.revision === ref.revision) $('soundtrack-info').textContent = `Saved playlist unavailable: ${error.message}`; });
+    }
   }
   $('adopt-music-revision').addEventListener('click', () => {
-    const track = draft?.soundtrack, asset = assets.find(asset => asset.id === track?.asset.id);
-    if (!asset) return; track.asset.revision = asset.revision; renderMusicPicker(); changed();
+    const track = draft?.soundtrack, asset = assets.find(asset => asset.id === track?.asset?.id);
+    const playlist = window.musicPlaylists?.catalog().find(p => p.id === track?.playlist?.id);
+    if (playlist) track.playlist.revision = playlist.revision; else if (asset) track.asset.revision = asset.revision; else return; draft.duration_mode = $('duration-mode').value; renderMusicPicker(); changed();
   });
+  window.addEventListener('music-playlists-changed', renderMusicPicker);
   function selectedVideoMeta() {
     const ref = draft?.scenes[selectedScene]?.video?.asset;
     return assets.find(asset => asset.id === ref?.id)?.revisions.find(revision => revision.revision === ref.revision);

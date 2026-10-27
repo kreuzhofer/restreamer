@@ -29,7 +29,7 @@ func (b *broadcast) applyTargetCommand(cmd StageCommand) (bool, error) {
 	if current.Enabled == *cmd.Enabled {
 		return false, nil
 	}
-	if b.control.stage == "ENDING" && !b.control.failed && *cmd.Enabled {
+	if b.control.stage == "ENDING" && !b.control.failed && (b.clip == nil || b.clip.presentation == nil) && *cmd.Enabled {
 		return false, errors.New("Ending cannot add destinations; wait for it to finish or confirm Stop now")
 	}
 	if b.control.stage != "OFF" && b.control.mode == "real" && !cmd.Confirmed {

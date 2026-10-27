@@ -28,24 +28,31 @@ const generatorTimeout = 15 * time.Minute
 // GenerationJob captures immutable inputs. Only state, progress, error and the
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
-	ExactTiming    bool               `json:"exact_timing,omitempty"`
-	MixGain        *float64           `json:"mix_gain,omitempty"`
-	ID             string             `json:"id"`
-	Sequence       uint64             `json:"sequence"`
-	QueuePosition  int                `json:"queue_position,omitempty"`
-	Message        string             `json:"message,omitempty"`
-	RetryOf        string             `json:"retry_of,omitempty"`
-	State          string             `json:"state"`
-	Progress       int                `json:"progress"`
-	Error          string             `json:"error,omitempty"`
-	DesignRevision string             `json:"design_revision"`
-	Design         mediaauthor.Design `json:"design_snapshot"`
-	ThemeSnapshot  *mediaauthor.Theme `json:"theme_snapshot,omitempty"`
-	Profile        config.BRBProfile  `json:"profile"`
-	Renderer       string             `json:"renderer"`
-	Duration       float64            `json:"duration"`
-	MediaRevision  string             `json:"media_revision,omitempty"`
-	CreatedAt      string             `json:"created_at"`
+	Kind              string                 `json:"kind,omitempty"`
+	BRBDigest         string                 `json:"brb_digest,omitempty"`
+	BRBFrames         int                    `json:"brb_frames,omitempty"`
+	VisualRevision    string                 `json:"visual_revision,omitempty"`
+	VisualFingerprint string                 `json:"visual_fingerprint,omitempty"`
+	ReusedVisual      bool                   `json:"reused_visual,omitempty"`
+	MusicTracks       []mediaauthor.AssetRef `json:"music_tracks,omitempty"`
+	ExactTiming       bool                   `json:"exact_timing,omitempty"`
+	MixGain           *float64               `json:"mix_gain,omitempty"`
+	ID                string                 `json:"id"`
+	Sequence          uint64                 `json:"sequence"`
+	QueuePosition     int                    `json:"queue_position,omitempty"`
+	Message           string                 `json:"message,omitempty"`
+	RetryOf           string                 `json:"retry_of,omitempty"`
+	State             string                 `json:"state"`
+	Progress          int                    `json:"progress"`
+	Error             string                 `json:"error,omitempty"`
+	DesignRevision    string                 `json:"design_revision"`
+	Design            mediaauthor.Design     `json:"design_snapshot"`
+	ThemeSnapshot     *mediaauthor.Theme     `json:"theme_snapshot,omitempty"`
+	Profile           config.BRBProfile      `json:"profile"`
+	Renderer          string                 `json:"renderer"`
+	Duration          float64                `json:"duration"`
+	MediaRevision     string                 `json:"media_revision,omitempty"`
+	CreatedAt         string                 `json:"created_at"`
 }
 
 func (g *generatorStore) jobPath(id string) string       { return filepath.Join(g.jobsRoot, id+".json") }
@@ -63,7 +70,7 @@ func (g *generatorStore) loadJobs() error {
 			return errors.New("generator job history limit exceeded")
 		}
 		var j GenerationJob
-		if readGeneratorJob(filepath.Join(g.jobsRoot, f.Name()), &j) != nil || !validDesignID(j.ID) || f.Name() != j.ID+".json" || !designBounds(j.Design) || j.Profile.Validate() != nil {
+		if readGeneratorJob(filepath.Join(g.jobsRoot, f.Name()), &j) != nil || !validDesignID(j.ID) || f.Name() != j.ID+".json" || !jobDesignBounds(j) || j.Profile.Validate() != nil {
 			return errors.New("invalid saved generator job")
 		}
 		switch j.State {
@@ -115,7 +122,7 @@ func (g *generatorStore) loadJobs() error {
 			}
 		}
 	}
-	return nil
+	return g.recoverBRBCaptures()
 }
 func (g *generatorStore) jobList() []GenerationJob {
 	g.jobsMu.Lock()
@@ -190,7 +197,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			g.jobsMu.Lock()
 			job.Message = "Rendering captured revision."
 			g.jobsMu.Unlock()
-			revision, err = s.renderGenerator(jobCtx, &snapshot, func(percent int) {
+			revision, err = s.renderPresentationJob(jobCtx, &snapshot, func(percent int) {
 				g.jobsMu.Lock()
 				defer g.jobsMu.Unlock()
 				if job.State == "running" {
@@ -201,6 +208,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 		}
 		g.jobsMu.Lock()
 		job.MixGain = snapshot.MixGain
+		job.VisualRevision, job.VisualFingerprint, job.ReusedVisual = snapshot.VisualRevision, snapshot.VisualFingerprint, snapshot.ReusedVisual
 		switch {
 		case job.State == "cancelling":
 			job.State = "cancelled"

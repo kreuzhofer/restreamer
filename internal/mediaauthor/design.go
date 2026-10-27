@@ -63,11 +63,12 @@ type Scene struct {
 }
 
 type Soundtrack struct {
-	Asset          AssetRef `json:"asset"`
-	Mode           string   `json:"mode"`
-	VolumePercent  *float64 `json:"volume_percent,omitempty"`
-	FadeInSeconds  float64  `json:"fade_in_seconds,omitempty"`
-	FadeOutSeconds float64  `json:"fade_out_seconds,omitempty"`
+	Playlist       *AssetRef `json:"playlist,omitempty"`
+	Asset          AssetRef  `json:"asset"`
+	Mode           string    `json:"mode"`
+	VolumePercent  *float64  `json:"volume_percent,omitempty"`
+	FadeInSeconds  float64   `json:"fade_in_seconds,omitempty"`
+	FadeOutSeconds float64   `json:"fade_out_seconds,omitempty"`
 }
 
 func (m Soundtrack) Volume() float64 {
@@ -78,6 +79,7 @@ func (m Soundtrack) Volume() float64 {
 }
 
 type Design struct {
+	DurationMode   string      `json:"duration_mode,omitempty"`
 	LoopTransition *Transition `json:"loop_transition,omitempty"`
 	// Nil uses the ENDING default; zero preserves the final image and audio.
 	EndingFadeSeconds *float64    `json:"ending_fade_seconds,omitempty"`
@@ -100,7 +102,7 @@ type Issue struct {
 func DesignAssetRefs(d Design) []AssetRef {
 	refs := make([]AssetRef, 0)
 	seen := make(map[AssetRef]bool)
-	if d.Soundtrack != nil {
+	if d.Soundtrack != nil && d.Soundtrack.Playlist == nil {
 		refs = append(refs, d.Soundtrack.Asset)
 		seen[d.Soundtrack.Asset] = true
 	}

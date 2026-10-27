@@ -195,11 +195,18 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	issues = append(issues, s.generator.themeIssues(draft.Theme)...)
 	issues = append(issues, s.generator.videoIssues(draft, profile.FPS)...)
 	issues = append(issues, s.generator.musicIssues(draft, profile.FPS, profile.SampleRate)...)
+	duration := mediaauthor.SequenceDuration(draft, profile.FPS)
+	if draft.DurationMode == "music" {
+		job := GenerationJob{Design: draft, Profile: profile}
+		if s.generator.captureMusicPresentation(&job) == nil {
+			duration = job.Duration
+		}
+	}
 	s.generator.mu.Unlock()
 	if r.URL.Path == "/api/generator/validate" {
 		previewIssues := append(append([]mediaauthor.Issue{}, issues...), mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)
 		issues = append(issues, mediaauthor.ValidateTiming(draft, profile.FPS)...)
-		generatorJSON(w, 200, map[string]any{"issues": issues, "preview_issues": previewIssues, "profile": profile, "duration_seconds": mediaauthor.SequenceDuration(draft, profile.FPS)})
+		generatorJSON(w, 200, map[string]any{"issues": issues, "preview_issues": previewIssues, "profile": profile, "duration_seconds": duration})
 		return
 	}
 	issues = append(issues, mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)

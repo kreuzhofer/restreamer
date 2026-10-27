@@ -20,6 +20,7 @@ const maxDesigns = 200
 var errDesignTooLarge = errors.New("design exceeds 64 KiB after JSON encoding")
 
 type generatorStore struct {
+	playlists          map[string]musicPlaylist
 	mu                 sync.Mutex
 	assetUploadMu      sync.Mutex
 	themesRoot         string
@@ -64,6 +65,9 @@ func (s *Server) initializeGenerator() error {
 	if err := g.loadThemes(); err != nil {
 		return err
 	}
+	if err := g.loadPlaylists(); err != nil {
+		return err
+	}
 	s.generator = g
 	return nil
 }
@@ -72,9 +76,22 @@ func designBounds(d mediaauthor.Design) bool {
 	if d.LoopTransition != nil && len(d.LoopTransition.Kind) > 20 {
 		return false
 	}
-	if d.Soundtrack != nil && (!validDesignID(d.Soundtrack.Asset.ID) || d.Soundtrack.Asset.Revision < 1 || d.Soundtrack.Asset.Revision > maxAssetRevisions || len(d.Soundtrack.Mode) > 20) {
+	if d.DurationMode != "" && d.DurationMode != "fixed" && d.DurationMode != "music" {
 		return false
 	}
+	if d.Soundtrack != nil {
+		ref := d.Soundtrack.Asset
+		if d.Soundtrack.Playlist != nil {
+			if ref.ID != "" || ref.Revision != 0 {
+				return false
+			}
+			ref = *d.Soundtrack.Playlist
+		}
+		if !validDesignID(ref.ID) || ref.Revision < 1 || ref.Revision > maxAssetRevisions || len(d.Soundtrack.Mode) > 20 {
+			return false
+		}
+	}
+
 	if !utf8.ValidString(d.Name) || len(d.Name) > 180 || len(d.Scenes) > mediaauthor.MaxScenes {
 		return false
 	}

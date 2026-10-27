@@ -56,6 +56,10 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot create generation identity", 503)
 		return
 	}
+	if err := g.captureMusicPresentation(&job); err != nil {
+		http.Error(w, err.Error(), 422)
+		return
+	}
 	g.jobsMu.Lock()
 	defer g.jobsMu.Unlock()
 	g.admitJob(w, job)
@@ -203,5 +207,14 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 	job.MixGain = nil
 	job.QueuePosition = 0
 	job.RetryOf = previous.ID
+	if job.Kind == "brb" {
+		if err := os.Link(g.brbCapturePath(previous.ID), g.brbCapturePath(job.ID)); err != nil {
+			http.Error(w, "Cannot retain BRB retry inputs", 507)
+			return
+		}
+	}
 	g.admitJob(w, job)
+	if job.Kind == "brb" && g.jobs[job.ID] == nil {
+		os.Remove(g.brbCapturePath(job.ID))
+	}
 }

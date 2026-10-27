@@ -120,10 +120,10 @@ function render() {
   issue.textContent = output.last_error ? `${output.state === 'retrying' ? 'Issue' : 'Last issue'} · ${timeLabel(output.last_error_at)} — ${issues[output.last_error] || 'Destination connection failed.'}` : '';
   const button = $('.toggle', card);
   button.setAttribute('aria-checked', String(output.enabled));
-  button.disabled = !connected || !output.can_enable || window.broadcastStages?.busy() || (snapshot.stage?.stage === 'ENDING' && !snapshot.stage?.error && !output.enabled);
+  button.disabled = !connected || !output.can_enable || window.broadcastStages?.busy() || (snapshot.stage?.stage === 'ENDING' && !snapshot.stage?.error && !snapshot.stage?.playback?.loop && !output.enabled);
   $('.toggle-text', card).textContent = output.enabled ? 'On' : 'Off';
   $('.switch-label', card).textContent = !output.can_enable ? 'Configuration required' : output.enabled ? 'Target enabled' : 'Target disabled';
-  $('.switch-help', card).textContent = !output.can_enable ? 'Configure the destination URL and stream key in desktop Settings.' : snapshot.stage?.mode === 'preview_only' ? 'Preference only. Stop rehearsal before a real broadcast.' : snapshot.stage?.stage === 'OFF' ? 'Choose Prestream or Go live to start delivery.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.stage?.stage === 'ENDING' ? 'Additional destinations cannot join during ENDING.' : 'Enable to join the current on-air source.';
+  $('.switch-help', card).textContent = !output.can_enable ? 'Configure the destination URL and stream key in desktop Settings.' : snapshot.stage?.mode === 'preview_only' ? 'Preference only. Stop rehearsal before a real broadcast.' : snapshot.stage?.stage === 'OFF' ? 'Choose Prestream or Go live to start delivery.' : output.enabled ? 'Switch off to stop this destination.' : snapshot.stage?.stage === 'ENDING' && !snapshot.stage?.playback?.loop ? 'Additional destinations cannot join during ENDING.' : 'Enable to join the current on-air source.';
  }
 }
 function connection(ok, message) {

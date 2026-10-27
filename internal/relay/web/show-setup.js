@@ -39,11 +39,12 @@
     $('show-setup-cards').replaceChildren();
     for (const stage of ['prestream','brb','ending']) {
       const card = node('article','','show-card'), heading = node('h2',title(stage)); card.dataset.stage = stage; card.append(heading);
-      if (stage === 'brb') {
+      if (stage === 'brb' && !selections.brb) {
         const assets = dashboard?.brb_assets;
         if (assets?.generation) { const img = node('img','','show-poster'); img.src = `/api/brb/image?v=${encodeURIComponent(assets.generation)}`; img.alt = 'Assigned BRB screen'; card.append(img); }
         card.append(node('h3',assets?.theme?.name || 'BRB screen'),node('p',assets?.text || 'No BRB prepared','stage-help'),node('p',dashboard?.brb?.ready ? 'Assigned · also used if OBS disconnects' : 'BRB not ready','stage-help'));
-        card.append(link('Change / preview','/studio?editor=brb&view=results'),link('Edit design','/studio?editor=brb'));
+        card.append(link('Edit BRB / music','/studio?editor=brb'));
+        const change = button('Choose presentation',() => choose('brb')); change.disabled = !current || saving; card.append(change);
       } else {
         const id = selections[stage], media = catalog.revisions.find(item => item.id === id), job = ui.jobFor(id,jobs);
         if (media) card.append(poster(media)); else card.append(node('div',id ? 'Assigned render unavailable' : 'Choose what plays here','show-poster show-placeholder'));
@@ -54,7 +55,7 @@
         const actions = node('div','','generator-actions');
         const change = button('Change',() => choose(stage)); change.disabled = !current || saving; actions.append(change);
         const play = button('Preview',() => preview(media,ui.label(id,jobs,catalog.revisions))); play.disabled = !current || media?.state !== 'ready'; actions.append(play);
-        actions.append(link(job ? 'Edit design' : 'Create design',job ? `/studio?id=${encodeURIComponent(job.design_snapshot.id)}` : `/studio?collection=designs&stage=${stage}`));
+        actions.append(link(job ? 'Edit design' : 'Create design',stage === 'brb' ? '/studio?editor=brb' : job ? `/studio?id=${encodeURIComponent(job.design_snapshot.id)}` : `/studio?collection=designs&stage=${stage}`));
         if (job) actions.append(button('Render history',() => choose(stage,job.design_snapshot.id)));
         card.append(actions);
       }
@@ -72,7 +73,7 @@
     for (const group of groups) {
       const details = node('details','','render-group'); details.open = !!designID;
       details.append(node('summary',`${group.name} · ${group.renders.length} render${group.renders.length === 1 ? '' : 's'}${group.renders.some(media => media.id === selections[stage]) ? ' · Assigned' : ''}`));
-      if (group.design) details.append(link('Edit design',`/studio?id=${encodeURIComponent(group.id)}`));
+      if (group.design) details.append(link('Edit design',stage === 'brb' ? '/studio?editor=brb' : `/studio?id=${encodeURIComponent(group.id)}`));
       for (const [index,media] of group.renders.entries()) {
         const row = node('article','','render-choice'); row.dataset.revision = media.id;
         row.append(poster(media));
@@ -86,7 +87,8 @@
       }
       list.append(details);
     }
-    list.append(link('Create a design',`/studio?collection=designs&stage=${stage}`),link('Upload a video','/studio?collection=media'));
+    if (stage === 'brb') list.append(button('Use current fallback BRB',() => assign('brb','')));
+    list.append(link('Create a design',stage === 'brb' ? '/studio?editor=brb' : `/studio?collection=designs&stage=${stage}`),link('Upload a video','/studio?collection=media'));
     if (!dialog.open) dialog.showModal();
   }
   async function assign(stage, revision) {
@@ -107,7 +109,7 @@
     try { [catalog,jobs,selections,dashboard] = await Promise.all(['/api/library','/api/generator/jobs','/api/stage-media','/api/dashboard'].map(path => request(path))); current = true; fail(''); }
     catch (error) { current = false; fail(`Show setup is unavailable. Last loaded assignments may be stale. ${error.message}`); dialog.querySelectorAll('button:not(#show-chooser-close)').forEach(item => {item.disabled = true;}); }
     finally { fetching = false; render(); }
-    if (current && requested) { const stage = requested.get('stage'), id = requested.get('render'); requested = null; if (['prestream','ending'].includes(stage) && id) { const job = ui.jobFor(id,jobs); choose(stage,job?.design_snapshot.id); $('show-chooser-status').textContent = `Review ${ui.label(id,jobs,catalog.revisions)} and use its assignment button. Playback stays unchanged.`; } }
+    if (current && requested) { const stage = requested.get('stage'), id = requested.get('render'); requested = null; if (['prestream','ending','brb'].includes(stage) && id) { const job = ui.jobFor(id,jobs); choose(stage,job?.design_snapshot.id); $('show-chooser-status').textContent = `Review ${ui.label(id,jobs,catalog.revisions)} and use its assignment button. Playback stays unchanged.`; } }
   }
   $('show-chooser-close').addEventListener('click',() => dialog.close());
   $('show-preview-close').addEventListener('click',() => $('show-preview').close());

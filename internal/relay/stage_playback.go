@@ -26,6 +26,9 @@ func (b *broadcast) validatePlaybackAction(cmd StageCommand) error {
 	if b.control.failed {
 		return errors.New("Playback failed; Retry or select another source")
 	}
+	if b.clip.presentation != nil && (cmd.Action == "seek" || cmd.Action == "set_loop") {
+		return errors.New("Music-driven presentations repeat continuously; use Pause, Return or Stop instead")
+	}
 	if cmd.Action == "seek" && (math.IsNaN(cmd.Position) || math.IsInf(cmd.Position, 0) || cmd.Position < 0 || cmd.Position >= b.clip.reader.index.Duration.Seconds()) {
 		return errors.New("Seek position must be inside the clip")
 	}

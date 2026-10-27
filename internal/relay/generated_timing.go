@@ -19,7 +19,7 @@ func validateGeneratedTiming(timing *GeneratedTiming, p config.BRBProfile) error
 	if timing == nil {
 		return nil
 	}
-	if timing.Version != 1 || p.FPS <= 0 || p.SampleRate <= 0 || timing.Frames < 1 || timing.Frames > 600*p.FPS {
+	if timing.Version != 1 || p.FPS <= 0 || p.SampleRate <= 0 || timing.Frames < 1 || timing.Frames > 3600*p.FPS {
 		return errors.New("Generated media timing is invalid; generate a new revision.")
 	}
 	return nil

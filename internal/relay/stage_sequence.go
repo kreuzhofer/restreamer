@@ -47,7 +47,7 @@ func (b *broadcast) restoreStage(frame *stageFrame, now time.Time) {
 		b.control.failed = false
 	}
 	b.clip = frame.clip
-	b.manual, b.live, b.active = frame.stage == "BRB", false, false
+	b.manual, b.live, b.active = frame.stage == "BRB" && frame.clip == nil, false, false
 	b.control.version++
 	if b.clip != nil && !b.clip.paused && !b.control.failed {
 		if err := b.startClip(now); err != nil {

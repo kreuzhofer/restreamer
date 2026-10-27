@@ -18,6 +18,9 @@ import (
 func (g *generatorStore) musicIssues(d mediaauthor.Design, fps, rate int) []mediaauthor.Issue {
 	m := d.Soundtrack
 	if m == nil {
+		if d.DurationMode == "music" {
+			return []mediaauthor.Issue{{Field: "soundtrack.asset", Message: "Follow music requires one track or playlist."}}
+		}
 		return nil
 	}
 	var issues []mediaauthor.Issue
@@ -30,10 +33,18 @@ func (g *generatorStore) musicIssues(d mediaauthor.Design, fps, rate int) []medi
 	if m.Volume() < 0 || m.Volume() > 100 || math.IsNaN(m.Volume()) || math.IsInf(m.Volume(), 0) {
 		add("volume_percent", "Music volume must be between 0 and 100%.")
 	}
-	meta, ok := g.assetRevision(m.Asset)
+	refs, refErr := g.musicRefs(m)
+	var samples int64
+	for _, ref := range refs {
+		meta, _ := g.assetRevision(ref)
+		samples += meta.Samples
+	}
 	length := sampleBoundary(int(math.Round(mediaauthor.CompositionDuration(d, fps)*float64(fps))), rate, fps)
-	if ok && m.Mode == "end" {
-		length = min(length, int64(math.Round(float64(meta.Samples)*float64(rate)/48000)))
+	musicLength := int64(math.Round(float64(samples) * float64(rate) / 48000))
+	if d.DurationMode == "music" {
+		length = musicLength
+	} else if refErr == nil && m.Mode == "end" {
+		length = min(length, musicLength)
 	}
 	fadeSum := int64(0)
 	for field, value := range map[string]float64{"fade_in_seconds": m.FadeInSeconds, "fade_out_seconds": m.FadeOutSeconds} {

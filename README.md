@@ -263,10 +263,12 @@ automatically. Established LIVE can recover OBS automatically after an outage.
 Stage changes, selecting a different clip, Return, Retry, Stop clip, Stop now,
 and media replacement require confirmation of their actual effect. Confirmation
 is bound to the reviewed stage and media selection. Another client's change
-requires fresh review; ordinary playback progress does not. A running ENDING
+requires fresh review; ordinary playback progress does not. A running **finite** ENDING
 rejects ordinary stage changes with **Ending in progress**. Confirmed Stop now
 is its early exit. Explicit ending-media replacement restarts that ending and
-postpones shutdown; ENDING cannot be paused or scrubbed.
+postpones shutdown; finite ENDING cannot be paused or scrubbed. A **Follow music**
+ending loops independently and permits explicit stage changes; it never drains or
+stops at EOF. Use confirmed Stop now to finish.
 
 Choose **Preview only** when starting a rehearsal. It uses the same sequence and
 broadcast preview but opens no destination connections, even if target switches
@@ -790,7 +792,7 @@ in the prepared-media drawer. A shortcut plays once and returns to its recorded
 stage. The contextual **Clip playback** panel provides pause, resume,
 seek, explicit looping, and Stop clip. Pause holds the position with fallback
 BRB on air; seeking resumes from a preceding keyframe within about one second,
-and seeking while paused keeps it paused. PRESTREAM owns its loop; ENDING is
+and seeking while paused keeps it paused. PRESTREAM owns its loop; fixed-duration ENDING is
 play-once and cannot be paused or scrubbed.
 
 Preparation is separate from activation. A ready candidate can be previewed
@@ -1454,3 +1456,17 @@ so another browser cannot unknowingly overwrite a newer key. Restarting preserve
 the key and leaves the broadcast OFF. The plaintext key is returned only by the
 explicit authenticated, same-origin reveal/copy request; it is absent from status,
 metrics, health responses and logs.
+
+### Music playlists and looping presentations
+
+In **Studio → Music**, create named playlists from uploaded tracks and arrange
+playback order. Choose a track, playlist, or no music in a design's music controls.
+**Follow music** prepares a download covering one music pass while its visual
+sequence repeats. On air, video and music loop independently until you change stage
+or press Stop—even for Ending. **Fixed** retains the existing duration and finite
+Ending behavior. Playlist edits create new versions and do not change prepared or
+on-air results. Music-only changes reuse the encoded visual.
+
+BRB has the same preparation choices in its editor. Preview a prepared result and
+assign it through **Show setup → BRB**; automatic fallback remains independently
+configured. See [music presentation behavior and limits](docs/design/music-presentations.md).

@@ -25,7 +25,7 @@ func (b *broadcast) endingStatusLocked() EndingStatus {
 }
 
 func (b *broadcast) validateEndingAction(cmd StageCommand) error {
-	if b.control.stage != "ENDING" || b.control.failed {
+	if b.control.stage != "ENDING" || b.control.failed || b.clip != nil && b.clip.presentation != nil {
 		return nil
 	}
 	switch cmd.Action {
@@ -47,7 +47,7 @@ func (b *broadcast) startEnding(candidate *clipPlayback, now time.Time) {
 	b.control.stage, b.control.failed = "ENDING", false
 	b.control.version++
 	b.clip = candidate
-	candidate.loop = false
+	candidate.loop = candidate.presentation != nil
 	b.manual, b.live, b.active = false, false, false
 	if err := b.startClip(now); err != nil {
 		b.failPlayback("Cannot read prepared ending; check storage and Retry or choose another stage", now)

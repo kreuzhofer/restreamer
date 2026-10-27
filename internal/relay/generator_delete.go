@@ -205,6 +205,12 @@ func (s *Server) deleteGenerationLocked(w http.ResponseWriter, jobs map[string]b
 	revisions := map[string]bool{}
 	for id := range jobs {
 		paths = append(paths, "generator/jobs/"+id+".json")
+		if g.jobs[id].Kind == "brb" {
+			paths = append(paths, "generator/captures/"+id+".flv")
+		}
+		if visual := g.jobs[id].VisualRevision; visual != "" {
+			revisions[visual] = true
+		}
 		if revision := g.jobs[id].MediaRevision; revision != "" {
 			revisions[revision] = true
 		}
@@ -215,11 +221,31 @@ func (s *Server) deleteGenerationLocked(w http.ResponseWriter, jobs map[string]b
 			}
 		}
 	}
+	// Retained metadata is authoritative even if the job's final save was interrupted.
+	for id := range revisions {
+		if media := l.revisions[id]; media != nil && media.Presentation != nil {
+			revisions[media.Presentation.VisualRevision] = true
+		}
+	}
 	retained := []string{}
+	for revision := range revisions {
+		for id, job := range g.jobs {
+			if !jobs[id] && (job.MediaRevision == revision || job.VisualRevision == revision) {
+				delete(revisions, revision)
+				retained = append(retained, revision)
+				break
+			}
+		}
+	}
 	for revision := range revisions {
 		shared := false
 		for id, job := range g.jobs {
-			if !jobs[id] && job.MediaRevision == revision {
+			if !jobs[id] && (job.MediaRevision == revision || job.VisualRevision == revision) {
+				shared = true
+			}
+		}
+		for id, media := range l.revisions {
+			if !revisions[id] && media.Presentation != nil && media.Presentation.VisualRevision == revision {
 				shared = true
 			}
 		}
@@ -238,6 +264,9 @@ func (s *Server) deleteGenerationLocked(w http.ResponseWriter, jobs map[string]b
 			return
 		}
 		paths = append(paths, "revisions/"+revision+".json", "revisions/"+revision+".flv")
+		if media := l.revisions[revision]; media != nil && media.Presentation != nil {
+			paths = append(paths, "presentations/"+revision+"-scene.pcm", "presentations/"+revision+"-music.pcm")
+		}
 	}
 	committed, err := deleteMediaFiles(l.root, paths)
 	if committed {
@@ -261,7 +290,7 @@ func (s *Server) deleteGenerationLocked(w http.ResponseWriter, jobs map[string]b
 // Caller holds library.mu and controlMu, preventing new selections/commands.
 func (s *Server) mediaDeletionBlockLocked(id string) string {
 	l := s.library
-	if l.selected.Prestream == id || l.selected.Ending == id {
+	if l.selected.Prestream == id || l.selected.Ending == id || l.selected.BRB == id {
 		return "Media is selected for PRESTREAM or ENDING. Clear or replace the selection in live control before deleting."
 	}
 	for _, shortcut := range l.selected.Shortcuts {

@@ -267,3 +267,7 @@
   #studio-themes select, #templates-refresh, #theme-refresh { min-height: 44px; }
   .studio-template-grid { gap: 0; }
 }
+
+.playlist-tracks li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}.playlist-tracks li span{flex:1;min-width:180px}#music-playlists{margin-top:24px}#music-playlists form{display:grid;gap:12px;max-width:800px}
+
+.presentation-preview{display:block;width:100%;max-height:300px;background:#000;margin:12px 0}#brb-presentations form{display:grid;gap:10px}#brb-presentations form label{display:grid;gap:4px}

@@ -20,7 +20,7 @@ func (b *broadcast) validateReplacement(cmd StageCommand, candidate *clipPlaybac
 		}
 		current, stage = frame.clip, frame.stage
 	}
-	if (stage != "PRESTREAM" && stage != "CLIP" && stage != "ENDING") || current == nil {
+	if (stage != "PRESTREAM" && stage != "CLIP" && stage != "ENDING" && stage != "BRB") || current == nil {
 		return false, errors.New("No prepared stage media is selected for replacement")
 	}
 	if current.Revision == cmd.Revision {
@@ -44,6 +44,11 @@ func (b *broadcast) applyReplacement(cmd StageCommand, candidate *clipPlayback, 
 	}
 	previous := b.clip
 	candidate.loop = previous.loop
+	if b.control.stage == "ENDING" {
+		candidate.loop = candidate.presentation != nil
+	} else if candidate.presentation != nil {
+		candidate.loop = true
+	}
 	candidate.paused = previous.paused
 	b.cancelPending("cancelled", "Superseded by confirmed media replacement")
 	if candidate.paused {

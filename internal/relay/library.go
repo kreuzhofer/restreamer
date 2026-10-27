@@ -96,7 +96,10 @@ func (s *Server) initializeLibrary() error {
 	if err := recoverMediaDeletions(root); err != nil {
 		return errors.New("cannot recover media deletion; check library storage")
 	}
-	return s.library.loadRevisions()
+	if err := s.library.loadRevisions(); err != nil {
+		return err
+	}
+	return s.library.recoverPresentationFiles()
 }
 func (l *videoLibrary) notify() {
 	select {

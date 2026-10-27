@@ -74,10 +74,10 @@
     el('playback-pause').disabled = !usable || !clip || p.state !== 'playing';
     el('playback-resume').disabled = !usable || !clip || p.state !== 'paused';
     el('playback-stop').disabled = !usable || !clip;
-    el('playback-loop').disabled = !usable || !clip || p.state === 'failed';
+    el('playback-loop').disabled = p.music_driven || !usable || !clip || p.state === 'failed';
     el('playback-loop').checked = !!p.loop;
     const seek = el('playback-seek');
-    seek.disabled = !usable || !clip || !p.id || p.state === 'failed';
+    seek.disabled = !usable || !clip || !p.id || p.state === 'failed' || p.music_driven;
     seek.max = Math.max(0, Math.ceil(p.duration || 0) - 1);
     const preview = window.broadcastPreview?.position();
     const followsPreview = clip && p.state === 'playing' && preview?.ready && preview.epoch === p.epoch;

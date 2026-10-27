@@ -60,7 +60,7 @@ func (s *Server) stageCommandHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCommandResult(w, 409, CommandResult{ID: cmd.ID, State: "rejected", Reason: endingErr.Error()})
 		return
 	}
-	if cmd.Action == "prestream" || cmd.Action == "play_clip" || cmd.Action == "end_stream" || cmd.Action == "replace_now" || cmd.Action == "replace_on_return" || cmd.Action == "retry" {
+	if cmd.Action == "brb" && s.library != nil && (s.library.selections().BRB != "" || cmd.Revision != "") || cmd.Action == "prestream" || cmd.Action == "play_clip" || cmd.Action == "end_stream" || cmd.Action == "replace_now" || cmd.Action == "replace_on_return" || cmd.Action == "retry" {
 		b.mu.Lock()
 		skip := b.control.commands[cmd.ID] != nil || cmd.Action == "end_stream" && (b.control.stage == "ENDING" || b.control.stage == "OFF") || cmd.Action == "prestream" && b.control.stage == "PRESTREAM" || cmd.Action == "play_clip" && (b.control.stage == "OFF" || b.control.stage == "CLIP" && b.clip != nil && b.clip.Revision == cmd.Revision)
 		b.mu.Unlock()
@@ -105,8 +105,11 @@ func (s *Server) openCommandMedia(cmd StageCommand) (*clipPlayback, config.BRBPr
 		return nil, config.BRBProfile{}, errors.New("Prepare fallback BRB and a ready media revision first")
 	}
 	revision := cmd.Revision
-	if cmd.Action == "prestream" || cmd.Action == "end_stream" {
+	if cmd.Action == "prestream" || cmd.Action == "end_stream" || cmd.Action == "brb" {
 		selected := s.library.selections().Prestream
+		if cmd.Action == "brb" {
+			selected = s.library.selections().BRB
+		}
 		if cmd.Action == "end_stream" {
 			selected = s.library.selections().Ending
 		}
@@ -290,13 +293,16 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 					// The current deliberate break already represents the clip's
 					// BRB return. Retain its underlying destination only once.
 					if c.returnTo != nil && c.returnTo.stage == "BRB" {
+						if c.returnTo.clip != nil {
+							c.returnTo.clip.reader.close()
+						}
 						c.returnTo = c.returnTo.returnTo
 					}
 				}
 				c.returnTo = b.suspendStage(now)
 			}
 			b.clip = candidate
-			candidate.loop = cmd.Loop
+			candidate.loop = cmd.Loop || candidate.presentation != nil
 			b.manual, b.live, b.active = false, false, false
 			b.playbackError = ""
 			c.stage, c.failed = "CLIP", false
@@ -313,7 +319,16 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 			b.playbackError = ""
 			b.manual, b.live, b.active = true, false, false
 			c.version++
-			b.startFallback(now)
+			if candidate != nil {
+				b.clip = candidate
+				candidate.loop = true
+				b.manual = false
+				if b.startClip(now) != nil {
+					b.failPlayback("Cannot start prepared BRB; check storage and Retry", now)
+				}
+			} else {
+				b.startFallback(now)
+			}
 		case "return":
 			b.cancelPending("cancelled", "Superseded by Return")
 			b.restoreStage(c.returnTo, now)
