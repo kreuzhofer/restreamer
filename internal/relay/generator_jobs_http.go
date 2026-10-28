@@ -58,11 +58,12 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 		draft.Scenes[0].Text = text
 		draft.Scenes[0].DurationSeconds = float64(themedBRBSeconds(theme.Style))
 	}
+	draft, animationIssues := resolveAnimationTiming(draft, theme, profile.FPS)
 	validationDraft := draft
 	if draft.Stage == "brb" {
 		validationDraft.Stage = "prestream"
 	}
-	issues := generationIssues(validationDraft, profile, theme)
+	issues := append(animationIssues, generationIssues(validationDraft, profile, theme)...)
 	issues = append(issues, g.assetIssues(draft)...)
 	issues = append(issues, g.videoIssues(draft, profile.FPS)...)
 	issues = append(issues, g.musicIssues(draft, profile.FPS, profile.SampleRate)...)

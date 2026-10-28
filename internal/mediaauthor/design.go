@@ -46,6 +46,7 @@ type Transition struct {
 }
 
 type Scene struct {
+	AnimationLoops  *int          `json:"animation_loops,omitempty"`
 	Transition      *Transition   `json:"transition,omitempty"`
 	MediaKind       string        `json:"media_kind,omitempty"`
 	Video           *VideoScene   `json:"video,omitempty"`

@@ -47,6 +47,22 @@ interval. For simultaneous Twitch/YouTube streaming, start with a compatible
 See [YouTube's encoder settings](https://support.google.com/youtube/answer/2853702?hl=en)
 and [Twitch's broadcasting guidelines](https://help.twitch.tv/s/article/broadcasting-guidelines?language=en_US).
 
+## Whole animation loops in scenes
+
+In the design editor, select a scene and choose **Scene length → Animation loops**,
+then enter a whole number of loops. The editor shows the theme cycle and calculated
+render length: Arcade After Hours and Neon Night use 16 seconds, Maker Workshop
+Starting soon uses 12 seconds, and Pac-Man Maze uses 40 seconds. Custom variants
+follow their selected artwork and effect. Static themes and Maker Workshop's
+one-shot Ending animation use **Seconds**. BRB already uses its complete theme cycle.
+
+Crossfade overlap is added to loop-based scene lengths so it does not shorten the
+requested cycles. To align an entire repeating sequence, use Animation loops for
+all scenes. Existing seconds-based designs keep their durations; newly generated
+videos now continue background motion across scene boundaries. Existing generated
+videos stay unchanged and must be regenerated to receive this fix. Music-driven
+playback continues to loop its visual sequence independently of the music duration.
+
 ## Run with Docker Compose
 
 Requires Docker with the Compose plugin. Existing installations using environment-based
