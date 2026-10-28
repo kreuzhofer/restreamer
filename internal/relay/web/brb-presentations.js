@@ -5,7 +5,7 @@
   const node = (tag,text='') => {const n=document.createElement(tag); n.textContent=text; return n;};
   const button = (text,action) => {const b=node('button',text); b.type='button'; b.className='preview-button'; b.onclick=action; return b;};
   const field = (text,input) => {const label=node('label',text);label.append(input);return label;};
-  const form=node('form'); form.className='studio-authoring generator-soundtrack';
+  const form=node('form'); form.className='studio-authoring generator-soundtrack';form.inert=true;
   const name=node('input');name.value='BRB design';name.required=true;name.maxLength=180;
   const music=node('select'), duration=node('select'), behavior=node('select');
   const theme=node('select'), message=node('input'); message.value='BE RIGHT BACK';message.maxLength=40;message.required=true;
@@ -13,11 +13,11 @@
   behavior.append(new Option('Repeat to presentation end','repeat'),new Option('End at track end','end'));
   const number=(value,max) => {const input=node('input');input.type='number';input.min='0';input.max=String(max);input.step='any';input.value=String(value);return input;};
   const volume=number(100,100), fadeIn=number(0,600), fadeOut=number(0,600);
-  const submit=button('Generate video');submit.className='primary-button studio-authoring';submit.type='submit';
+  const submit=button('Generate video');submit.className='primary-button studio-authoring';submit.type='submit';submit.disabled=true;
   const durationInfo=node('p');durationInfo.className='stage-help';durationInfo.setAttribute('role','status');
   const status=node('p');status.className='stage-help';status.setAttribute('role','status');
   const rows=new Map();
-  let namingJob='', submittedJob='', savedDraft=null, edit=0, saveTimer, draftLoading=true, savingDraft=false, pendingSave=null;
+  let namingJob='', submittedJob='', savedDraft=null, savedContent='', draftLoading=true, savingDraft=false;
   const parameters=new URLSearchParams(location.search), designID=parameters.get('id');
   const results=node('div'), cleanup=node('div'), selectedResults=new Map();let cleanupMode=false;let busy=false, loading=false, dirty=false, assets=[], playlists=[];
   form.id='brb-design-form';submit.setAttribute('form',form.id);
@@ -61,10 +61,10 @@
     if(busy||!selectedResults.size)return;
     const items=[...selectedResults.values()];
     if(!window.confirm(`Delete ${items.length} videos and their generated files? Uploaded music stays. Selected and playing videos are protected.\n${items.map(job=>job.name||`Render ${job.sequence}`).join('\n')}`))return;
-    busy=true;deleteResults.disabled=true;
+    busy=true;deleteResults.disabled=true;refreshDraftLabels();
     try{const outcomes=await window.cleanupItems(items,job=>request(`/api/generator/jobs/${job.id}`,'DELETE',{}));for(const outcome of outcomes)if(outcome.deleted)selectedResults.delete(outcome.item.id);
       await refresh();status.textContent=`${outcomes.filter(outcome=>outcome.deleted).length} videos deleted. Uploaded files kept.`+(outcomes.some(outcome=>!outcome.deleted)?' Kept: '+outcomes.filter(outcome=>!outcome.deleted).map(outcome=>`${outcome.item.name||`Render ${outcome.item.sequence}`}: ${outcome.error}`).join('; '):'');
-    }finally{busy=false;renderCleanup();}
+    }finally{busy=false;renderCleanup();refreshDraftLabels();}
   });cleanup.className='studio-authoring';cleanup.append(selectResults,deleteResults);results.append(cleanup);
   function renderCleanup(){selectResults.textContent=cleanupMode?'Cancel selection':'Select videos';deleteResults.hidden=!cleanupMode;deleteResults.disabled=busy||!selectedResults.size;deleteResults.textContent=`Delete selected (${selectedResults.size})`;}
   renderCleanup();
@@ -83,7 +83,7 @@
         message.value=savedDraft.scenes[0]?.text||'BE RIGHT BACK';theme.value=`${savedDraft.theme.id}:${savedDraft.theme.revision}`;
         duration.value=savedDraft.duration_mode||'fixed';volume.value=savedDraft.soundtrack?.volume_percent??100;fadeIn.value=savedDraft.soundtrack?.fade_in_seconds||0;fadeOut.value=savedDraft.soundtrack?.fade_out_seconds||0;behavior.value=savedDraft.soundtrack?.mode||'end';
       } else {duration.value='fixed';}
-      status.textContent=savedDraft?'Saved':'New design';draftLoading=false;behavior.disabled=duration.value==='music';schedulePreview();await refresh();
+      status.textContent=savedDraft?'Saved':'New design';behavior.disabled=duration.value==='music';await refresh();savedContent=window.designEditState.contentKey(capture());draftLoading=false;form.inert=false;refreshDraftLabels();schedulePreview();
     }catch(error){status.textContent=error.message;submit.disabled=true;}
   }
   function capture() {
@@ -93,26 +93,24 @@
       soundtrack:selected?{...selected,mode:behavior.value,volume_percent:Number(volume.value),fade_in_seconds:Number(fadeIn.value),fade_out_seconds:Number(fadeOut.value)}:null};
   }
   async function saveDraft() {
-    if(draftLoading)return false;
-    while(pendingSave){const succeeded=await pendingSave;if(!succeeded)return false;}
+    if(draftLoading||savingDraft||busy)return false;
     if(savedDraft&&!dirty)return true;
     if(!form.reportValidity())return false;
-    savingDraft=true;const captured=edit;status.textContent='Saving…';saveButton.hidden=true;
-    pendingSave=(async()=>{
-      try {
-        const data=capture();savedDraft=await request('/api/generator/designs'+(savedDraft?`/${savedDraft.id}`:''),savedDraft?'PUT':'POST',data);
-        dirty=edit!==captured;refreshDraftLabels();heading.textContent=name.value;status.textContent=dirty?'Changes not saved yet':'Saved · changes not generated';
-        history.replaceState(null,'',`/editor?editor=brb&id=${savedDraft.id}&return=${encodeURIComponent(parameters.get('return')||'/setup')}`);
-        return true;
-      }catch(error){saveButton.hidden=false;status.textContent=`Could not save. Your edits are retained. ${error.message}`;return false;}
-    })();
-    const succeeded=await pendingSave;pendingSave=null;savingDraft=false;
-    if(succeeded&&dirty)return saveDraft();
-    return succeeded;
+    const data=capture();
+    savingDraft=true;status.textContent='Saving…';refreshDraftLabels();
+    try {
+      savedDraft=await request('/api/generator/designs'+(savedDraft?`/${savedDraft.id}`:''),savedDraft?'PUT':'POST',data);
+      savedContent=window.designEditState.contentKey(data);
+      dirty=window.designEditState.contentKey(capture())!==savedContent;
+      heading.textContent=name.value;status.textContent=dirty?'Unsaved changes':'Saved · changes not generated';
+      history.replaceState(null,'',`/editor?editor=brb&id=${savedDraft.id}&return=${encodeURIComponent(parameters.get('return')||'/setup')}`);
+      return true;
+    }catch(error){status.textContent=`Could not save. Your edits are retained. ${error.message}`;return false;}
+    finally{savingDraft=false;refreshDraftLabels();}
   }
-  const saveButton=button('Save changes',saveDraft);saveButton.hidden=true;form.append(saveButton);
+  const saveButton=button('Save changes',saveDraft);saveButton.className='primary-button studio-authoring';saveButton.disabled=true;header.insertBefore(saveButton,submit);
   loadDraft();
-  form.addEventListener('input',()=>{dirty=true;edit++;refreshDraftLabels();clearTimeout(saveTimer);saveTimer=setTimeout(saveDraft,900);schedulePreview();behavior.disabled=duration.value==='music';updateDuration();});
+  form.addEventListener('input',()=>{dirty=window.designEditState.contentKey(capture())!==savedContent;status.textContent=dirty?'Unsaved changes':savedDraft?'Saved':'New design';refreshDraftLabels();schedulePreview();behavior.disabled=duration.value==='music';updateDuration();});
   behavior.disabled=true;
   async function responseError(response){const text=(await response.text()).trim();try{const parsed=JSON.parse(text);return parsed.issues?.map(issue=>issue.message).join(' ')||parsed.error||text;}catch(_){return text;}}
   async function request(path,method='GET',body) {
@@ -139,6 +137,10 @@
     latestName.textContent=latest?window.mediaPresentation.renderName(latest.job):'No video generated yet';
     latestDetail.textContent=latest?`${window.mediaPresentation.capturedMusic(latest.job,assets,playlists)} · ${window.mediaPresentation.date(latest.job.created_at)} · ${latest.match}`:'Generate to review this design with animation and music.';
     reviewLatest.hidden=!latest;
+    saveButton.disabled=draftLoading||savingDraft||busy||!!savedDraft&&!dirty;
+    saveButton.textContent=savingDraft?'Saving…':'Save changes';
+    submit.hidden=!dirty&&latest?.match==='Matches current design';
+    submit.disabled=draftLoading||savingDraft||busy||dirty||!savedDraft;
   }
   function draftMatch(job){return savedDraft&&job.design_snapshot.id===savedDraft.id&&job.design_snapshot.version===savedDraft.version&&!dirty?'Matches current design':'Based on earlier changes';}
   function capturedMusic(job){const selected=job.design_snapshot.soundtrack;if(!selected)return 'No music';if(selected.playlist)return `${playlists.find(item=>item.id===selected.playlist.id)?.name||'Saved playlist'} · music version ${selected.playlist.revision}`;return `${assets.find(item=>item.id===selected.asset?.id)?.name||'Saved track'} · music version ${selected.asset?.revision}`;}
@@ -194,17 +196,16 @@
     } catch(error) {status.textContent=`Music preparation status unavailable: ${error.message}`;}
     finally {loading=false;}
   }
-  async function mutate(path,method='POST') {if(busy)return;busy=true;try{await request(path,method,{});await refresh();}catch(error){status.textContent=error.message;}finally{busy=false;}}
+  async function mutate(path,method='POST') {if(busy)return;busy=true;refreshDraftLabels();try{await request(path,method,{});await refresh();}catch(error){status.textContent=error.message;}finally{busy=false;refreshDraftLabels();}}
   form.onsubmit=async event=>{
-    event.preventDefault();if(busy)return;
-    busy=true;submit.disabled=true;
+    event.preventDefault();if(busy||draftLoading||savingDraft||dirty||!savedDraft)return;
+    busy=true;refreshDraftLabels();
     try {
-      clearTimeout(saveTimer);selectPreview(true);
-      if(!await saveDraft())throw new Error('Save the draft successfully before generating.');
+      selectPreview(true);
       const job=await request('/api/generator/jobs','POST',{design_id:savedDraft.id,version:savedDraft.version});submittedJob=job.id;
-      dirty=false;status.textContent='Preparing on the server. Preview the result, then assign it in Show setup. Current playback and fallback remain unchanged.';await refresh();
+      status.textContent='Preparing on the server. Preview the result, then assign it in Show setup. Current playback and fallback remain unchanged.';await refresh();
     } catch(error) {status.textContent=error.message;}
-    finally {busy=false;submit.disabled=false;}
+    finally {busy=false;refreshDraftLabels();}
   };
   window.addEventListener('beforeunload',event=>{if(!window.workspace?.departureApproved&&(dirty||busy||savingDraft||namingJob)){event.preventDefault();event.returnValue='';}});
   window.addEventListener('music-playlists-changed',refresh);
