@@ -20,6 +20,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	private.HandleFunc("GET /api/destination-presets/twitch", s.twitchIngestsHTTP)
 	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)
