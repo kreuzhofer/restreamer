@@ -28,7 +28,7 @@
   .live-primary .stage-summary>div:last-child{display:flex;align-items:baseline;gap:6px}.live-primary .stage-summary strong{font-size:11px}.live-primary .stage-label{margin:0}
   .live-primary #stage-media{display:none}
   .live-primary .stage-buttons{margin:4px 0 8px;gap:8px}.live-primary .stage-button{min-height:58px;font-size:14px}
-  .live-primary .stage-secondary{order:1;gap:8px}.stage-secondary-actions{width:100%}.stage-secondary-actions button{flex:1}
+  .live-primary .stage-secondary{order:0;gap:8px}.stage-secondary-actions{width:100%}.stage-secondary-actions button{flex:1}
   .live-primary .live-clips{order:2;margin-top:10px;border-top:1px solid var(--border)}
   .live-primary #clip-playback-controls{order:3}.live-primary #stage-help{order:4}.live-primary #command-status{order:5}
   .live-primary .clip-shortcuts{max-height:none}.live-clips-heading{flex-wrap:nowrap}.live-clips-heading h3{font-size:11px}.live-clips-heading button{font-size:11px}

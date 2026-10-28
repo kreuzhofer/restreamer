@@ -7,7 +7,8 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
   const heading = node('h3', 'Playlists'), help = node('p', 'Arrange uploaded tracks in playback order. Saved presentations keep the exact playlist version you chose.');
   help.className = 'stage-help';
   const status = node('p'); status.setAttribute('role', 'status'); status.className = 'stage-help';
-  const list = node('div'), form = node('form'); form.className = 'studio-authoring';
+  const list = node('div'); if (root.id === 'music-playlists') list.id = 'music-playlist-list';
+  const form = node('form'); form.className = 'studio-authoring';
   const nameLabel = node('label', 'Playlist name'), name = node('input'); name.required = true; name.maxLength = 180; nameLabel.append(name);
   const pickerLabel = node('label', 'Uploaded music'), picker = node('select'); pickerLabel.append(picker);
   const tracks = node('ol'); tracks.className = 'playlist-tracks';
@@ -17,7 +18,11 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
   const cancel = button('Cancel edit', () => { if (!busy && (!dirty() || window.confirm('Discard unsaved playlist edits?'))) reset(); });
   const refreshButton = button('Refresh music and playlists', () => refresh().catch(showError));
   const create = button('New playlist', () => { if (busy || (dirty() && !window.confirm('Discard unsaved playlist edits?'))) return; reset(); form.hidden = false; name.focus(); }); create.classList.add('studio-authoring');
-  form.append(nameLabel, pickerLabel, add, tracks, save, cancel); root.replaceChildren(heading, help, create, refreshButton, list, form, status);
+  form.append(nameLabel, pickerLabel, add, tracks, save, cancel); if (root.id === 'music-playlists') {
+    const maintenance = node('details'), summary = node('summary','Playlist details');
+    maintenance.className = 'task-disclosure'; maintenance.append(summary,help,refreshButton);
+    root.replaceChildren(form, status, list, maintenance);
+  } else root.replaceChildren(heading, help, create, refreshButton, list, form, status);
   function showError(error) { status.textContent = error.message; }
   async function request(path, method = 'GET', body) {
     const response = await fetch(location.origin + path, {method, cache:'no-store', signal:AbortSignal.timeout(10000), headers:{'Content-Type':'application/json','X-Restreamer-Control':'1'}, ...(body ? {body:JSON.stringify(body)} : {})});
@@ -42,8 +47,8 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
     list.replaceChildren();
     for (const playlist of playlists) {
       const row = node('article'); row.className = 'playlist-row';
-      const title = node('h4', playlist.name), info = node('p', `${playlist.tracks.length} tracks · ${(playlist.duration / 60).toFixed(2)} minutes · version ${playlist.revision}`);
-      const usage = node('p', playlist.uses.length ? `Used by: ${playlist.uses.map(use => use.name).join(', ')}` : 'Not used by a saved presentation.'); usage.className = 'stage-help';
+      const title = node('h4', playlist.name), info = node('p', `${playlist.tracks.length} ${playlist.tracks.length === 1 ? 'track' : 'tracks'} · ${Math.round(playlist.duration)} seconds`);
+      const usage = node('p', playlist.uses.length ? `Used by ${playlist.uses.length} saved ${playlist.uses.length === 1 ? 'item' : 'items'}` : 'Not used by a saved presentation.'); usage.className = 'stage-help';
       const edit = button('Edit playlist', () => { if (busy) return; if (dirty() && !window.confirm('Discard your unsaved playlist draft?')) return; draft = {id:playlist.id, version:playlist.revision, name:playlist.name, tracks:playlist.tracks.map(ref => ({...ref}))}; name.value = draft.name; savedTracks = JSON.stringify(draft.tracks); form.hidden = false; renderTracks(); name.focus(); });
       const remove = button('Delete playlist', async () => {
         if (busy || !window.confirm(`Delete playlist “${playlist.name}” and its saved versions? Uploaded tracks stay. Referenced playlists cannot be deleted.`)) return;
@@ -51,7 +56,8 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
         try { await request(`/api/music/playlists/${playlist.id}`, 'DELETE', {version:playlist.revision}); await refresh(); status.textContent = 'Playlist deleted. Uploaded tracks retained.'; } catch (error) { showError(error); } finally { busy = false; }
       });
       edit.classList.add('studio-authoring'); remove.classList.add('studio-authoring'); remove.disabled = playlist.uses.length > 0;
-      row.append(title, info, usage, edit, remove); list.append(row);
+      const actions=node('details'), summary=node('summary','Actions');actions.className='playlist-actions studio-authoring';actions.append(summary,edit,remove);
+      row.append(title, info, usage, actions); list.append(row);
     }
   }
   async function refresh() {

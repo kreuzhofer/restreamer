@@ -61,14 +61,15 @@
    <div id="stage-pending" class="stage-pending" role="status" hidden><div><strong>Go live pending</strong><p id="stage-pending-reason"></p></div><button id="stage-cancel-pending" class="preview-button" type="button">Cancel pending transition</button></div>
    <p id="stage-error" class="notice" role="alert" hidden></p>
    <p id="stage-completion" class="stage-help" role="status" hidden></p>
-   <div class="stage-buttons" role="group" aria-label="Choose broadcast stage">
+   <div id="stage-start" class="stage-start"><label>Start with<select id="stage-start-source"><option value="prestream">Starting soon</option><option value="go_live">OBS input</option></select></label><button id="stage-start-rehearsal" type="button" class="preview-button" disabled>Rehearse</button><button id="stage-start-broadcast" type="button" class="primary-button" disabled>Start broadcast</button></div>
+   <div id="stage-switches" class="stage-buttons" role="group" aria-label="Choose broadcast stage">
     <button id="stage-prestream" class="stage-button" type="button" aria-pressed="false" disabled>Starting soon<small>Loop starting soon</small></button>
     <button id="stage-live" class="stage-button" type="button" aria-pressed="false" disabled>Go live<small>Switch to OBS</small></button>
     <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled>BRB<small>Stay on a deliberate break</small></button>
     <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled>End stream<small id="stage-ending-help">Play ending, then stop</small></button>
    </div>
+   <div id="stage-secondary" class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div></div>
    <div class="live-clips"><div class="live-clips-heading"><h3>Pinned clips</h3><a class="preview-button" href="/setup">Show setup · Prestream / BRB / Ending</a><button id="prepared-media-open" class="preview-button" type="button" aria-haspopup="dialog">Browse prepared media</button></div><p id="clip-shortcuts-empty" class="library-help">Pin clip shortcuts in prepared-media selections.</p><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
-   <div class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div><label id="rehearsal-label" class="check-label"><input id="stage-rehearsal" type="checkbox"> Start a preview-only rehearsal</label></div>
    <details id="clip-playback-controls" class="clip-playback-controls" hidden><summary>Clip playback</summary>
      <p id="playback-status" role="status" class="library-help">No file playing</p>
      <div class="library-actions"><button id="playback-pause" class="preview-button" type="button">Pause clip</button><button id="playback-resume" class="preview-button" type="button">Resume clip</button><button id="playback-stop" class="preview-button" type="button">Stop clip</button></div>

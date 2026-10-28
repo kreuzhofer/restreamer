@@ -94,7 +94,7 @@
     if (request.action === 'prestream') request = {...request, revision: selections.prestream};
     if (request.action === 'brb' && selections.brb) request = {...request, revision: selections.brb};
     if (request.action === 'end_stream') request = {...request, revision: selections.ending};
-    if (current().stage === 'OFF' && ['prestream', 'go_live'].includes(request.action)) request = {...request, mode: el('stage-rehearsal').checked ? 'preview_only' : 'real'};
+    if (current().stage === 'OFF' && ['prestream', 'go_live'].includes(request.action)) request = {...request, mode: request.mode || 'real'};
     if (!needsConfirmation || noChange(request)) { execute(request, false); return; }
     const [title, effect] = describe(request);
     review = {request, context: current().context, server_id: current().server_id};
@@ -141,10 +141,13 @@
     el('stage-retry').hidden = stage.playback?.state !== 'failed' && !stage.fallback_error;
     el('stage-retry').textContent = stage.fallback_error ? 'Recover fallback' : 'Retry playback';
     el('stage-retry').disabled = !usable || stage.ending?.draining;
+    el('stage-secondary').hidden = stage.stage === 'OFF' && !stage.pending;
+    el('stage-return-button').hidden = !stage.return_stage;
     el('stage-stop').disabled = !usable || (stage.stage === 'OFF' && !stage.pending);
     el('stage-stop').textContent = rehearsal ? 'Stop rehearsal' : 'Stop now';
-    el('rehearsal-label').hidden = stage.stage !== 'OFF';
-    el('stage-rehearsal').disabled = !usable || !!stage.pending;
+    el('stage-start').hidden = stage.stage !== 'OFF';
+    el('stage-switches').hidden = stage.stage === 'OFF';
+    for (const id of ['stage-start-source','stage-start-rehearsal','stage-start-broadcast']) el(id).disabled = !usable || !!stage.pending;
     el('stage-help').textContent = ending ? 'Ending in progress. Only confirmed Stop now or a ready media replacement can interrupt playback. Destinations can be disabled, but additional destinations cannot join.' : rehearsal ? 'Destination switches only save preferences during rehearsal. Stop rehearsal, then explicitly start real Prestream or Go live to broadcast.' : stage.stage === 'OFF' ? 'Only Prestream and Go live can start. Choose at least one eligible destination, or explicitly select preview-only rehearsal.' : 'Stage describes intent; on-air source shows the selected feed. Platform-side public availability is not confirmed by the relay.';
     el('command-status').textContent = message;
     el('live-readiness').hidden = stage.stage !== 'OFF';
@@ -183,6 +186,7 @@
     document.dispatchEvent(new Event('stage-command-state'));
   }
   for (const [id, action] of [['prestream', 'prestream'], ['live', 'go_live'], ['brb', 'brb'], ['ending', 'end_stream'], ['return-button', 'return'], ['retry', 'retry'], ['stop', 'stop_now']]) el(`stage-${id}`).addEventListener('click', () => request(action === 'retry' && current()?.fallback_error ? {action:'replace_fallback',revision:selections.fallback_mode==='override'?selections.fallback:selections.brb} : {action}));
+  for (const [id,mode] of [['stage-start-rehearsal','preview_only'],['stage-start-broadcast','real']]) el(id).addEventListener('click',()=>request({action:el('stage-start-source').value,mode}));
   el('stage-cancel-pending').addEventListener('click', () => request({action: 'cancel_pending'}, false));
   el('stage-dialog-cancel').addEventListener('click', () => el('stage-dialog').close());
   el('stage-dialog').addEventListener('close', () => { review = null; });
@@ -207,7 +211,7 @@
       const stage = current();
       if (!stage) return;
       if ((serverID && serverID !== stage.server_id) || (inflight && inflight.server_id !== stage.server_id)) {
-        inflight = null; lastCommand = null; lastOutcome = null; remember(null); el('stage-rehearsal').checked = false;
+        inflight = null; lastCommand = null; lastOutcome = null; remember(null);
         message = 'Server restarted. State refreshed; previous commands were not replayed. Review the state and choose a fresh action.';
       }
       serverID = stage.server_id;

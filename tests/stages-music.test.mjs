@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 function fixture() {
   const nodes = new Map();
-  const el = id => { if (!nodes.has(id)) nodes.set(id, {textContent:'',setAttribute(){},addEventListener(){},replaceChildren(){},showModal(){},focus(){}}); return nodes.get(id); };
+  const el = id => { if (!nodes.has(id)) nodes.set(id, {textContent:'',handlers:{},setAttribute(){},addEventListener(name,fn){this.handlers[name]=fn;},replaceChildren(){},showModal(){},focus(){}}); return nodes.get(id); };
   const window = {};
   const context = {window, document:{getElementById:el,dispatchEvent(){}}, sessionStorage:{getItem:()=>null}, Event:class {}};
   vm.createContext(context);
@@ -36,4 +36,16 @@ test('active ending hint keeps its pinned behavior when the next assignment chan
   ui.stage.playback.loop=false; ui.update();
   ui.api.setSelections({ending:'loop'},[{id:'loop',presentation:{mode:'music'}}]);
   assert.equal(ui.el('stage-ending-help').textContent,'Play ending, then stop');
+});
+
+test('stopped session offers explicit rehearsal or broadcast with the chosen starting source', () => {
+  const ui=fixture();ui.stage.stage='OFF';ui.stage.mode='real';ui.update();
+  assert.equal(ui.el('stage-start').hidden,false);
+  assert.equal(ui.el('stage-switches').hidden,true);
+  ui.el('stage-start-source').value='go_live';ui.el('stage-start-rehearsal').handlers.click();
+  assert.match(ui.el('stage-dialog-effect').textContent,/Preview only: no destination/);
+  ui.el('stage-dialog').handlers.close();
+  ui.el('stage-start-broadcast').handlers.click();
+  assert.match(ui.el('stage-dialog-effect').textContent,/Selected destinations will receive/);
+  ui.stage.stage='PRESTREAM';ui.update();assert.equal(ui.el('stage-start').hidden,true);assert.equal(ui.el('stage-switches').hidden,false);
 });

@@ -35,9 +35,19 @@
     }
     return [...groups.values()];
   }
+  function capturedMusic(job, assets, playlists) {
+    const music=job.design_snapshot.soundtrack;
+    if(!music)return 'No music';
+    return music.playlist ? playlists.find(item=>item.id===music.playlist.id)?.name || 'Saved playlist' : assets.find(item=>item.id===music.asset?.id)?.name || 'Saved track';
+  }
+  function latestDesignVideo(draft, jobs, dirty) {
+    if (!draft) return null;
+    const job = [...jobs].sort((a,b) => b.sequence-a.sequence).find(item => item.design_snapshot.id === draft.id && item.state === 'ready' && item.media_revision);
+    return job ? {job, match:!dirty && job.design_snapshot.version === draft.version ? 'Matches current design' : 'Based on earlier changes'} : null;
+  }
   function selection(saved, stage, revision) {
     if (!['prestream','ending','brb'].includes(stage)) throw new Error('Unsupported stage selection');
     return {...saved, [stage]:revision};
   }
-  window.mediaPresentation = {renderName, date, jobFor, label, changes, groups, selection};
+  window.mediaPresentation = {renderName, date, jobFor, label, changes, groups, selection, latestDesignVideo, capturedMusic};
 })();
