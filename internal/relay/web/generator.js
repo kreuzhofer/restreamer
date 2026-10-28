@@ -53,8 +53,9 @@
     });
     if (name === 'themes' && editingTheme) scheduleThemePreview();
     if (focus) document.querySelector(`[data-studio-collection="${name}"]`)?.focus();
-    const filter=document.querySelector(`[data-collection-panel="${name}"] [data-filter-list]`);
-    history.replaceState(null, '', name === 'brb' ? `/editor?editor=brb${requestedDesign?"&id="+encodeURIComponent(requestedDesign):""}&return=${encodeURIComponent(returnPath)}` : name === 'setup' ? '/setup' : `/library?collection=${name}${filter?.value?'&q='+encodeURIComponent(filter.value):''}`);
+    const filter=name === 'music' ? $('music-search') : document.querySelector(`[data-collection-panel="${name}"] [data-filter-list]`);
+    const musicView = name === 'music' ? `&music_view=${$('music-playlists').hidden ? 'tracks' : 'playlists'}` : '';
+    history.replaceState(null, '', name === 'brb' ? `/editor?editor=brb${requestedDesign?"&id="+encodeURIComponent(requestedDesign):""}&return=${encodeURIComponent(returnPath)}` : name === 'setup' ? '/setup' : `/library?collection=${name}${musicView}${filter?.value?'&q='+encodeURIComponent(filter.value):''}`);
     window.dispatchEvent(new Event('studio-route-changed'));
   }
   function showEditor() {
@@ -252,12 +253,24 @@
     schedulePreview();
     loadJobs();
   }
+  let thumbnailSignature = '', thumbnailProfile = '', thumbnails = new Map();
+  const scenePreviewSignature = value => JSON.stringify([value.id,value.stage,value.theme,value.scenes,value.loop_transition,value.ending_fade_seconds]);
+  function storeSceneThumbnail(index, bitmap) {
+    const thumbnail=document.createElement('canvas');thumbnail.width=160;thumbnail.height=90;
+    thumbnail.getContext('2d').drawImage(bitmap,0,0,160,90);thumbnails.set(index,thumbnail);
+    const visible=$('scene-list').children[index]?.querySelector('canvas');
+    if(visible)visible.getContext('2d').drawImage(thumbnail,0,0);
+  }
   function renderScenes() {
     $('scene-list').replaceChildren();
     for (const [index, scene] of draft.scenes.entries()) {
       const button = document.createElement('button'); button.type = 'button';
       const invalid = validationIssues.some(issue => issue.field.startsWith(`scenes.${index}.`));
-      button.textContent = `${index + 1}. ${scene.text.split('\n')[0] || (scene.layout === 'list' ? 'List' : 'Untitled')} · ${scene.duration_seconds}s${invalid ? ' · needs attention' : ''}`;
+      const caption=document.createElement('span');
+      caption.textContent = `${index + 1}. ${scene.text.split('\n')[0] || (scene.layout === 'list' ? 'List' : 'Untitled')} · ${scene.duration_seconds}s${invalid ? ' · needs attention' : ''}`;
+      const thumbnail=document.createElement('canvas');thumbnail.width=160;thumbnail.height=90;thumbnail.setAttribute('aria-hidden','true');
+      if(thumbnailSignature===scenePreviewSignature(draft)&&thumbnails.has(index))thumbnail.getContext('2d').drawImage(thumbnails.get(index),0,0);
+      button.append(thumbnail,caption);
       button.setAttribute('aria-current', String(index === selectedScene));
       button.addEventListener('click', () => selectScene(index)); $('scene-list').append(button);
     }
@@ -422,6 +435,9 @@
           snapshot.scenes[i].duration_seconds = result.scenes[i].duration_seconds;
         }
       }
+      const nextThumbnailSignature=scenePreviewSignature(snapshot);
+      const nextThumbnailProfile=JSON.stringify(result.profile);
+      if(thumbnailSignature!==nextThumbnailSignature||thumbnailProfile!==nextThumbnailProfile){thumbnails.clear();thumbnailSignature=nextThumbnailSignature;thumbnailProfile=nextThumbnailProfile;}
       renderSceneLength();
       validationIssues = result.issues;
       renderScenes();
@@ -462,10 +478,26 @@
       if (sequence !== previewSequence) { bitmap.close(); return; }
       const canvas = $('scene-preview');
       canvas.width = bitmap.width; canvas.height = bitmap.height;
-      canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
+      canvas.getContext('2d').drawImage(bitmap, 0, 0); storeSceneThumbnail(selectedScene,bitmap); bitmap.close();
       canvas.hidden = false;
       canvas.setAttribute('aria-label', `Quick preview: ${snapshot.scenes[selectedScene].text || 'Blank title scene'}`);
       $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[selectedScene].duration_seconds} seconds · ${snapshot.scenes[selectedScene].transition?.kind === 'crossfade' && selectedScene + 1 < snapshot.scenes.length ? 'crossfade shown in generated preview' : 'individual scene'} · not on air`;
+      // Keep requests sequential: the server admits one draft preview at a time.
+      // A new edit cancels this pass; an old response must never label a new scene.
+      for (let index=0;index<snapshot.scenes.length;index++) {
+        if(sequence!==previewSequence)return;
+        if(thumbnails.has(index)||result.preview_issues.some(issue=>!issue.field.startsWith('scenes.')||issue.field.startsWith(`scenes.${index}.`)))continue;
+        try {
+          const response=await request(`/api/generator/preview?scene=${index}`, 'POST', snapshot, previewAbort.signal);
+          const bitmap=await createImageBitmap(await response.blob());
+          if(sequence===previewSequence)storeSceneThumbnail(index,bitmap);
+          bitmap.close();
+        } catch(error) {
+          if(error.name==='AbortError'||sequence!==previewSequence)return;
+          const caption=$('scene-list').children[index]?.querySelector('span');
+          if(caption)caption.textContent+=' · preview unavailable';
+        }
+      }
     } catch (error) {
       if (error.name !== 'AbortError' && sequence === previewSequence) $('preview-state').textContent = `Preview unavailable: ${error.message}`;
     }
@@ -676,6 +708,11 @@
       if (focusContainer === 'generation-queue') $('generation-status').focus({preventScroll: true});
       return;
     }
+    const videoSummary = window.mediaPresentation.latestDesignVideo(draft, jobs, dirty);
+    $('latest-video-name').textContent = videoSummary ? window.mediaPresentation.renderName(videoSummary.job) : 'No video generated yet';
+    $('latest-video-detail').textContent = videoSummary ? `${window.mediaPresentation.capturedMusic(videoSummary.job,assets,window.musicPlaylists?.catalog()||[])} · ${window.mediaPresentation.date(videoSummary.job.created_at)} · ${videoSummary.match}` : 'Generate to review this design with animation and music.';
+    $('review-latest-video').hidden = !videoSummary;
+    $('review-latest-video').disabled = !jobsCurrent || !mediaRevisions.some(media => media.id === videoSummary?.job.media_revision && media.state === 'ready');
     $('generate-design').disabled = !jobsCurrent || deleting || dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
@@ -797,6 +834,7 @@
       (nextFocus || $(focusContainer === 'generation-queue' ? 'generation-status' : 'generation-history-heading')).focus({preventScroll: true});
     }
   }
+  $('review-latest-video').addEventListener('click', () => { showPreviewPanel('results'); $('preview-last-ready').click(); });
   $('preview-last-ready').addEventListener('click', () => { if (lastReadyJob && jobsCurrent && mediaRevisions.some(media => media.id === lastReadyJob.media_revision && media.state === 'ready')) previewGenerated(lastReadyJob); });
   function queueError(message) { $('generation-queue-error').textContent = message; $('generation-queue-error').hidden = !message; }
   function generationError(message) { $('generation-error').textContent = message; $('generation-error').hidden = !message; }
@@ -866,7 +904,7 @@
       const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind === 'audio' ? `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds` : asset.kind} · ${asset.uses.length ? `Used by ${[...new Set(asset.uses.map(use => use.name))].join(', ')}` : 'Not used'}`;
       if (asset.kind === 'audio') {
         summary.replaceChildren(); summary.className = 'music-row-summary';
-        for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? [...new Set(asset.uses.map(use => use.name))].join(', ') : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
+        for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? `Used in ${asset.uses.length} saved ${asset.uses.length === 1 ? 'item' : 'items'}` : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
       }
       const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       img.addEventListener('error', () => assetError(`Preview unavailable for ${asset.name}. Refresh assets to check its exact revision.`));

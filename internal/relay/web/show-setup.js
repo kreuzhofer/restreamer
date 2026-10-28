@@ -35,16 +35,20 @@
       const id=selections[stage],media=catalog.revisions.find(m=>m.id===id),job=ui.jobFor(id,jobs),legacy=stage==='brb'&&!id;
       const thumb=button('',()=>media&&preview(media,stage),'show-thumbnail');thumb.setAttribute('aria-label',`Preview ${title(stage)}`);thumb.disabled=!current||(!legacy&&media?.state!=='ready');
       if(media)thumb.append(poster(media));else if(legacy&&dashboard?.brb_assets?.generation){const img=node('img','','show-poster');img.src=`/api/brb/image?v=${encodeURIComponent(dashboard.brb_assets.generation)}`;img.alt='Retained BRB appearance';thumb.append(img);thumb.disabled=true;}else thumb.append(node('span','No video selected','show-poster show-placeholder'));
-      const info=node('div','','show-card-info');info.append(node('h2',title(stage)));
+      const phase=node('div','','show-phase');phase.append(node('h2',title(stage)),node('p',{prestream:'Before the show',brb:'During a break',ending:'After the show'}[stage],'stage-help'));
+      if(media?.state==='ready'){const play=node('span','','show-play');play.setAttribute('aria-hidden','true');thumb.append(play);}
+      const info=node('div','','show-card-info');
       const name=job?.design_snapshot.name||media?.name||(legacy?'Retained BRB screen':'Choose a video');
       const nameLink=job||legacy?link(name,editURL(stage,job),'show-design-name'):node('span',name,'show-design-name');info.append(nameLink);
       info.append(node('p',legacy?'Your existing appearance and music are preserved':`${soundtrack(job)} · ${behavior(stage,job)}`,'stage-help'));
       const active=dashboard?.stage?.stage===stage.toUpperCase()?dashboard.stage.media?.revision:null;
-      info.append(node('p',active&&active!==id?`Playing now: ${ui.label(active,jobs,catalog.revisions)} · this selection applies next time`:id?`${media?.state==='ready'?'Ready':'Unavailable'} · Selected for next use${job?' · '+ui.date(job.created_at):''}`:legacy?'Ready · Legacy fallback retained':'Not selected','assignment-note'));
-      const change=button('Change',()=>choose(stage));change.disabled=!current||saving;card.append(thumb,info,change);cards.append(card);
+      info.append(node('p',active&&active!==id?`Playing now: ${ui.label(active,jobs,catalog.revisions)} · this selection applies next time`:id?`${media?.state==='ready'?'':'Unavailable · '}Selected for next use${job?' · '+ui.date(job.created_at):''}`:legacy?'Legacy fallback retained':'Not selected','assignment-note'));
+      if(media?.state==='ready'||legacy)info.append(node('span','Ready','ready-label'));
+      const change=button('Change',()=>choose(stage));change.disabled=!current||saving;card.append(phase,thumb,info,change);cards.append(card);
     }
-    const fallback=node('details','','fallback-options');fallback.append(node('summary','When a source is unavailable'));
-    const mode=selections.fallback_mode||'legacy';fallback.append(node('p',mode==='shared'?'Uses the selected BRB video. Changes apply on the next fallback entry.':mode==='override'?`Uses ${ui.label(selections.fallback,jobs,catalog.revisions)}.`:'Your previously configured fallback is preserved. You can switch to the selected BRB video.','stage-help'));
+    const mode=selections.fallback_mode||'legacy';
+    const fallback=node('details','','fallback-options');fallback.append(node('summary',`When a source is unavailable · ${mode==='shared'?'Use BRB video':mode==='override'?'Use a separate video':'Use retained fallback'}`));
+    fallback.append(node('p',mode==='shared'?'Uses the selected BRB video. Changes apply on the next fallback entry.':mode==='override'?`Uses ${ui.label(selections.fallback,jobs,catalog.revisions)}.`:'Your previously configured fallback is preserved. You can switch to the selected BRB video.','stage-help'));
     const shared=button('Use selected BRB',()=>assign('fallback-mode','shared'));shared.disabled=!current||!selections.brb;
     fallback.append(shared,button('Choose a different video',()=>choose('fallback')));cards.append(fallback);
     if(focused){const card=cards.querySelector(`[data-stage="${focused}"]`);[...card.querySelectorAll('button,a')].find(el=>el.textContent===action)?.focus({preventScroll:true});}

@@ -84,12 +84,13 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     if (platform.value === 'twitch') await discoverTwitch({prefill: true});
   };
   const hint = node('p', 'New destinations start disabled. Enable delivery in Live after checking readiness.');
-  const save = node('button', 'Add destination'); save.type = 'submit';
+  const save = node('button', 'Add destination'); save.type = 'submit'; save.className = 'primary-button';
   const cancel = node('button', 'Cancel edit'); cancel.type = 'button'; cancel.hidden = true;
   fields.append(hint, save, cancel); form.append(fields);
-  const retry = node('button', 'Refresh destinations'); retry.type = 'button'; retry.className = 'preview-button';
+  const retry = node('button', 'Refresh destinations'); retry.type = 'button'; retry.className = 'text-button';
   const add=node('button','Add destination');add.type='button';add.className='primary-button';add.onclick=()=>{form.hidden=false;name.focus();};
-  form.hidden=true;container.replaceChildren(heading, message, add, retry, list, form);
+  const headingRow=node('div');headingRow.className='destination-heading';headingRow.append(heading,add);
+  form.hidden=true;container.replaceChildren(headingRow,message,list,form,retry);
   baseline = JSON.stringify([name.value, url.value, key.value]);
   window.addEventListener('beforeunload', event => {
     if (!window.workspace?.departureApproved && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; }
@@ -115,8 +116,9 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     }
     for (const destination of snapshot.destinations) {
       const row = node('article');
-      row.append(node('h3', destination.name), node('p', destination.url), node('p', `${destination.has_key ? 'Key stored ••••••••' : 'No key'} · ${destination.ready ? 'Ready' : destination.reason}`));
-      const edit = node('button', 'Edit'); edit.type = 'button'; edit.disabled = busy || !snapshot.managed;
+      const info=node('div');info.className='destination-info';
+      info.append(node('h3', destination.name), node('p', destination.url), node('p', `${destination.has_key ? 'Key stored ••••••••' : 'No key'} · ${destination.ready ? 'Ready' : destination.reason}`));
+      const edit = node('button', 'Edit'); edit.type = 'button'; edit.className='preview-button'; edit.disabled = busy || !snapshot.managed;
       edit.onclick = () => {
         if (dirty() && !window.confirm('Discard the unsaved destination draft and edit this destination?')) return;
         editing = destination.name;form.hidden=false;discovery++;serverLabel.hidden=true; name.value = destination.name; url.value = destination.url; key.value = '';
@@ -127,9 +129,9 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
         hint.textContent = 'Leaving the key blank preserves the stored key. Saving an active destination reconnects only that destination.';
         save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value]); name.focus();
       };
-      const remove = node('button', 'Remove'); remove.type = 'button'; remove.disabled = busy || !snapshot.managed;
+      const remove = node('button', 'Remove'); remove.type = 'button'; remove.className='text-button danger-text'; remove.disabled = busy || !snapshot.managed;
       remove.onclick = () => mutate(`/api/destinations/${encodeURIComponent(destination.name)}`, 'DELETE', {}, `Remove ${destination.name} and its stored key? Its delivery will stop. Removing the last destination leaves the show and preview running without delivery.`);
-      row.append(edit, remove); list.append(row);
+      const actions=node('div');actions.className='destination-actions';actions.append(edit,remove);row.append(info,actions); list.append(row);
     }
     if (!snapshot.destinations.length) list.append(node('p', 'No destinations yet. Add one below, or use preview-only rehearsal in Live.'));
   }

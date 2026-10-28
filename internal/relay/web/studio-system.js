@@ -30,12 +30,16 @@
   disclosure(document.querySelector('.generator-soundtrack > p:last-child'), 'Music playback details');
   disclosure($('soundtrack-settings'), 'Volume, fades and looping');
   disclosure($('generation-summary'), 'Selection and generation details');
+  const playbackDetails=disclosure(document.querySelector('.stage-summary'),'Playback details');if(playbackDetails&&$('stage-secondary'))$('stage-secondary').after(playbackDetails);
   const liveHelp = $('stage-help'); if (liveHelp) disclosure(liveHelp, 'About stage controls');
   const tools = $('live-brb-tools'); if (tools) {tools.querySelector('summary').textContent = 'Fallback readiness'; $('brb-theme-settings').hidden = true;}
+  const queue=document.querySelector('.studio-queue');if(queue&&$('workspace-status'))$('workspace-status').append(queue);
   const collectionNav = document.querySelector('.studio-collections');
   if (collectionNav) {
-    const heading = document.createElement('h1'); heading.textContent = 'Library'; heading.id = 'library-heading'; collectionNav.before(heading);
-    const sync = () => {heading.hidden = document.body.dataset.workspace !== 'library';}; sync(); window.addEventListener('studio-route-changed',sync);
+    const heading = document.createElement('h1'); heading.textContent = 'Library'; heading.id = 'library-heading';
+    const header=document.createElement('div');header.className='library-heading-row';header.append(heading);collectionNav.before(header);
+    const musicActions=document.querySelector('#studio-music .collection-actions');if(musicActions)header.append(musicActions);
+    const sync = () => {header.hidden = document.body.dataset.workspace !== 'library';if(musicActions)musicActions.hidden=document.body.dataset.studioView!=='music';}; sync(); window.addEventListener('studio-route-changed',sync);
   }
   const breadcrumb = $('shared-editor-nav');
   if (breadcrumb) {

@@ -37,7 +37,7 @@ func TestWorkspaceNavigationPreservesBroadcastAndAuthentication(t *testing.T) {
 func TestLiveConsoleOffersMonitoringAndReadinessBeforeOperation(t *testing.T) {
 	s := dashboardServer(t)
 	response := dashboardRequest(s, "GET", "/live", "")
-	for _, content := range []string{`aria-label="Broadcast operation"`, `aria-label="Before going on air"`, `id="readiness-input"`, `id="readiness-media"`, `id="readiness-destinations"`, `aria-label="Broadcast preview"`, `aria-label="Live input preview"`, `id="stage-rehearsal"`} {
+	for _, content := range []string{`aria-label="Broadcast operation"`, `aria-label="Before going on air"`, `id="readiness-input"`, `id="readiness-media"`, `id="readiness-destinations"`, `aria-label="Broadcast preview"`, `aria-label="Live input preview"`, `id="stage-start-rehearsal"`, `id="stage-start-broadcast"`, `id="stage-start-source"`} {
 		if !strings.Contains(response.Body.String(), content) {
 			t.Errorf("Live console missing %s", content)
 		}

@@ -22,19 +22,27 @@
   const results=node('div'), cleanup=node('div'), selectedResults=new Map();let cleanupMode=false;let busy=false, loading=false, dirty=false, assets=[], playlists=[];
   form.id='brb-design-form';submit.setAttribute('form',form.id);
   const header=node('header'), heading=node('h2','BRB design');header.className='brb-design-heading';header.append(heading,status,submit);
-  const contentPanel=node('section'), musicPanel=node('section'), tabs=node('nav');tabs.className='studio-tabs';tabs.setAttribute('aria-label','BRB properties');
-  musicPanel.hidden=true;musicPanel.setAttribute('data-context-music','');
-  for(const [label,panel] of [['Content',contentPanel],['Music',musicPanel]]) {
-    const tab=button(label,()=>{contentPanel.hidden=panel!==contentPanel;musicPanel.hidden=panel!==musicPanel;for(const item of tabs.children)item.setAttribute('aria-pressed',String(item===tab));});tab.setAttribute('aria-pressed',String(panel===contentPanel));tabs.append(tab);
+  const contentPanel=node('section'), appearancePanel=node('section'), musicPanel=node('section'), tabs=node('nav');tabs.className='studio-tabs';tabs.setAttribute('aria-label','BRB properties');
+  appearancePanel.hidden=true;musicPanel.hidden=true;musicPanel.setAttribute('data-context-music','');
+  for(const [label,panel] of [['Content',contentPanel],['Appearance',appearancePanel],['Music',musicPanel]]) {
+    const tab=button(label,()=>{contentPanel.hidden=panel!==contentPanel;appearancePanel.hidden=panel!==appearancePanel;musicPanel.hidden=panel!==musicPanel;for(const item of tabs.children)item.setAttribute('aria-pressed',String(item===tab));});tab.setAttribute('aria-pressed',String(panel===contentPanel));tabs.append(tab);
   }
-  contentPanel.append(field('Design name',name),field('Message',message),field('Theme',theme));
+  contentPanel.append(field('Design name',name),field('Message',message));
+  appearancePanel.append(field('Theme',theme));
   const advanced=node('details');advanced.append(node('summary','Volume, fades and looping'),field('Fixed-mode music behavior',behavior),field('Music volume (%)',volume),field('Fade in (seconds)',fadeIn),field('Fade out (seconds)',fadeOut));
   musicPanel.append(field('Music',music),field('Duration',duration),durationInfo,advanced);
   const monitor=node('div'), previewPane=node('section'), previewTabs=node('nav'), draftImage=node('canvas'), previewState=node('p','Draft preview loads after choosing an appearance.');
   previewTabs.className='studio-tabs';previewTabs.setAttribute('aria-label','BRB preview view');draftImage.hidden=true;draftImage.setAttribute('role','img');draftImage.setAttribute('aria-label','Current BRB draft preview');draftImage.className='brb-draft-preview';previewState.setAttribute('role','status');
   const selectPreview=showVideos=>{previewPane.hidden=showVideos;results.hidden=!showVideos;for(const tab of previewTabs.children)tab.setAttribute('aria-pressed',String((tab.textContent==='Videos')===showVideos));};
   previewTabs.append(button('Draft preview',()=>selectPreview(false)),button('Videos',()=>selectPreview(true)));previewPane.append(draftImage,previewState);monitor.append(previewTabs,previewPane,results);selectPreview(false);
-  form.append(tabs,contentPanel,musicPanel);root.append(header,monitor,form);
+  const latestSummary=node('section'), latestInfo=node('div'), latestName=node('strong','No video generated yet'), latestDetail=node('p','Generate to review this design with animation and music.'), reviewLatest=button('Review video',()=>{
+    selectPreview(true);
+    const latest=window.mediaPresentation.latestDesignVideo(savedDraft,[...rows.values()].map(entry=>entry.job),dirty);
+    const video=latest&&rows.get(latest.job.id)?.node.querySelector('video');
+    if(video){video.scrollIntoView({block:'nearest'});video.focus({preventScroll:true});video.play().catch(()=>{status.textContent='Press Play to review the exact prepared output.';});}
+  });
+  latestSummary.className='latest-video-summary';latestSummary.setAttribute('aria-label','Latest video');latestDetail.className='stage-help';reviewLatest.hidden=true;latestInfo.append(latestName,latestDetail);latestSummary.append(latestInfo,reviewLatest);previewPane.append(latestSummary);
+  form.append(tabs,contentPanel,appearancePanel,musicPanel);root.append(header,monitor,form);
   root.setAttribute('data-panel','preview');
   const panels=node('nav');panels.className='brb-panel-switch studio-tabs';panels.setAttribute('aria-label','Editor panels');
   for(const [label,value] of [['Preview','preview'],['Properties','properties']]){const tab=button(label,()=>{root.setAttribute('data-panel',value);for(const item of panels.children)item.setAttribute('aria-pressed',String(item===tab));});tab.setAttribute('aria-pressed',String(value==='preview'));panels.append(tab);}root.insertBefore(panels,monitor);
@@ -89,20 +97,20 @@
     while(pendingSave){const succeeded=await pendingSave;if(!succeeded)return false;}
     if(savedDraft&&!dirty)return true;
     if(!form.reportValidity())return false;
-    savingDraft=true;const captured=edit;status.textContent='Saving…';
+    savingDraft=true;const captured=edit;status.textContent='Saving…';saveButton.hidden=true;
     pendingSave=(async()=>{
       try {
         const data=capture();savedDraft=await request('/api/generator/designs'+(savedDraft?`/${savedDraft.id}`:''),savedDraft?'PUT':'POST',data);
         dirty=edit!==captured;refreshDraftLabels();heading.textContent=name.value;status.textContent=dirty?'Changes not saved yet':'Saved · changes not generated';
         history.replaceState(null,'',`/editor?editor=brb&id=${savedDraft.id}&return=${encodeURIComponent(parameters.get('return')||'/setup')}`);
         return true;
-      }catch(error){status.textContent=`Could not save. Your edits are retained. ${error.message}`;return false;}
+      }catch(error){saveButton.hidden=false;status.textContent=`Could not save. Your edits are retained. ${error.message}`;return false;}
     })();
     const succeeded=await pendingSave;pendingSave=null;savingDraft=false;
     if(succeeded&&dirty)return saveDraft();
     return succeeded;
   }
-  const saveButton=button('Save changes',saveDraft);form.append(saveButton);
+  const saveButton=button('Save changes',saveDraft);saveButton.hidden=true;form.append(saveButton);
   loadDraft();
   form.addEventListener('input',()=>{dirty=true;edit++;refreshDraftLabels();clearTimeout(saveTimer);saveTimer=setTimeout(saveDraft,900);schedulePreview();behavior.disabled=duration.value==='music';updateDuration();});
   behavior.disabled=true;
@@ -125,7 +133,13 @@
     } catch(error) { if(requestID===durationRequest) durationInfo.textContent=`Selected music unavailable: ${error.message}`; }
   }
 
-  function refreshDraftLabels(){for(const entry of rows.values())entry.draftState.textContent=draftMatch(entry.job);}
+  function refreshDraftLabels(){
+    for(const entry of rows.values())entry.draftState.textContent=draftMatch(entry.job);
+    const latest=window.mediaPresentation.latestDesignVideo(savedDraft,[...rows.values()].map(entry=>entry.job),dirty);
+    latestName.textContent=latest?window.mediaPresentation.renderName(latest.job):'No video generated yet';
+    latestDetail.textContent=latest?`${window.mediaPresentation.capturedMusic(latest.job,assets,playlists)} · ${window.mediaPresentation.date(latest.job.created_at)} · ${latest.match}`:'Generate to review this design with animation and music.';
+    reviewLatest.hidden=!latest;
+  }
   function draftMatch(job){return savedDraft&&job.design_snapshot.id===savedDraft.id&&job.design_snapshot.version===savedDraft.version&&!dirty?'Matches current design':'Based on earlier changes';}
   function capturedMusic(job){const selected=job.design_snapshot.soundtrack;if(!selected)return 'No music';if(selected.playlist)return `${playlists.find(item=>item.id===selected.playlist.id)?.name||'Saved playlist'} · music version ${selected.playlist.revision}`;return `${assets.find(item=>item.id===selected.asset?.id)?.name||'Saved track'} · music version ${selected.asset?.revision}`;}
   async function refresh() {
@@ -173,6 +187,7 @@
         if(previous) previous.node.replaceWith(row); else results.prepend(row);
         rows.set(job.id,{node:row,signature,checkbox,draftState,job});
       }
+      refreshDraftLabels();
       const latestReady=ordered.find(j=>j.state==='ready');
       for(const [target,group,offset] of [[results,ordered.filter(j=>j===latestReady||j===ordered[0]),1],[older,ordered.filter(j=>j!==latestReady&&j!==ordered[0]),1]])group.forEach((job,index)=>{const row=rows.get(job.id).node,at=target.children[index+offset];if(at!==row)target.insertBefore(row,at||null);});
       olderHeading.textContent=`Older videos (${ordered.filter(j=>j!==latestReady&&j!==ordered[0]).length})`;older.hidden=ordered.length<2;
