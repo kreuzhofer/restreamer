@@ -28,3 +28,12 @@ test('suspended looping position remains inside its displayed cycle', () => {
   ui.update();
   assert.match(ui.el('stage-return').textContent,/0:01 \/ 0:02/);
 });
+test('active ending hint keeps its pinned behavior when the next assignment changes', () => {
+  const ui = fixture();
+  ui.stage.stage='ENDING'; ui.stage.playback.loop=true; ui.update();
+  ui.api.setSelections({ending:'finite'},[{id:'finite'}]);
+  assert.equal(ui.el('stage-ending-help').textContent,'Loop ending · stop manually');
+  ui.stage.playback.loop=false; ui.update();
+  ui.api.setSelections({ending:'loop'},[{id:'loop',presentation:{mode:'music'}}]);
+  assert.equal(ui.el('stage-ending-help').textContent,'Play ending, then stop');
+});

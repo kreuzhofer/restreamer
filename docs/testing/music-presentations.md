@@ -44,7 +44,8 @@ restored. The isolated loopback fixture has dummy credentials and no destination
   and observed OFF. Restart retained selections and remained OFF.
 - Browser-discovered corrections: clarify fixed versus music-driven previews/fades
   and capacity; label looping endings as manual stop; show suspended loop position
-  within its cycle. Two additional DOM tests cover the live-control regressions.
+  within its cycle. Three additional DOM tests cover the live-control regressions, including a next
+  assignment that differs from the active ending’s pinned behavior.
 
 Screenshots captured locally as `/tmp/restreamer-music58-desktop.png` and
 `/tmp/restreamer-music58-phone.png`. Browser console reported no warnings/errors.
@@ -74,7 +75,7 @@ several transition-rendering tests (including the new fixed-playlist test when
 building its base visual). The unchanged baseline `3795bee` also fails
 `TestGeneratorCrossfadeKeepsMusicOnShortenedSequenceTimeline` with FFmpeg 7.
 Neither local full run is claimed green. The focused music/presentation race
-suite with default FFmpeg 9, artwork checks and Go vet passed. All 41 web tests
+suite with default FFmpeg 9, artwork checks and Go vet passed. All 42 web tests
 passed after the browser corrections.
 The Linux GitHub CI run is the required full-suite release gate. Implementation
 commit `bd4c7437a7ed5d3d8c92a1c632a2211effd2af2c` passed the complete race suite,

@@ -132,7 +132,8 @@
       button.setAttribute('aria-pressed', String(stage.stage === value));
       button.disabled = !usable || (ending && stage.stage !== value) || ((id === 'brb' || id === 'ending') && stage.stage === 'OFF');
     }
-    el('stage-ending-help').textContent = revisions.find(item => item.id === selections.ending)?.presentation?.mode === 'music' ? 'Loop ending · stop manually' : 'Play ending, then stop';
+    const loopingEnding = stage.stage === 'ENDING' ? p.loop : revisions.find(item => item.id === selections.ending)?.presentation?.mode === 'music';
+    el('stage-ending-help').textContent = loopingEnding ? 'Loop ending · stop manually' : 'Play ending, then stop';
     el('stage-return-button').disabled = !usable || ending || !stage.return_stage;
     el('stage-return-button').textContent = stage.return_stage ? `Return to ${stage.return_stage}` : 'Return';
     el('stage-retry').hidden = stage.playback?.state !== 'failed';
