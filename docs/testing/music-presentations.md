@@ -25,14 +25,30 @@ Implemented regression coverage:
 - Browser-independent UI tests retain exact old selections, preserve stale playlist
   drafts, and detect reordering as unsaved work.
 
-Browser workflow pending: authenticated desktop, narrow desktop and phone review
-of playlist create/edit/reorder, both design duration modes, BRB preparation and
-Show setup assignment, preview/download, plus phone operation. Chrome extension
-creation timed out and native access returned `cgWindowNotFound` on 2026-10-27.
-No screenshot or browser pass is claimed. A loopback fixture with zero destinations
-is available at `http://127.0.0.1:18871` using documented dummy `stage-test` credentials.
+## Browser verification
 
-Final full-suite, review and exact-SHA GitHub CI evidence belong to delivery closeout.
+Authenticated Chrome verification passed on 2026-10-28 after browser access was
+restored. The isolated loopback fixture has dummy credentials and no destinations.
+
+- Desktop 1440×1000: created, reordered, renamed and removed a track from a playlist;
+  saved a new immutable version; verified usage and disabled deletion when referenced.
+- Prestream editor: selected both duration modes, inspected exact playlist duration,
+  and played the retained one-pass preview with no browser media error.
+- Narrow desktop 1024×800: inspected responsive editor panels and exact preview.
+- BRB: prepared a new playlist presentation from the UI, observed server progress
+  and a ready result reporting visual reuse; preparation kept the broadcast OFF.
+- Phone 390×844: authoring controls stayed hidden, prepared results and assignments
+  remained usable. Assigned prestream, BRB and ending through Show setup.
+- Phone rehearsal: confirmed PRESTREAM → BRB → looping ENDING, observed decodable
+  live preview and ENDING continuing across many music passes, then confirmed Stop
+  and observed OFF. Restart retained selections and remained OFF.
+- Browser-discovered corrections: clarify fixed versus music-driven previews/fades
+  and capacity; label looping endings as manual stop; show suspended loop position
+  within its cycle. Two additional DOM tests cover the live-control regressions.
+
+Screenshots captured locally as `/tmp/restreamer-music58-desktop.png` and
+`/tmp/restreamer-music58-phone.png`. Browser console reported no warnings/errors.
+The final verification evidence and exact-SHA release run are recorded on issue #58.
 
 ## Independent review
 
@@ -58,10 +74,12 @@ several transition-rendering tests (including the new fixed-playlist test when
 building its base visual). The unchanged baseline `3795bee` also fails
 `TestGeneratorCrossfadeKeepsMusicOnShortenedSequenceTimeline` with FFmpeg 7.
 Neither local full run is claimed green. The focused music/presentation race
-suite with default FFmpeg 9, 39 web tests, artwork checks and Go vet passed.
-The Linux GitHub CI run is the required full-suite release gate. Browser
-verification is still unavailable as described above; no browser pass is inferred
-from API or DOM-unit tests.
+suite with default FFmpeg 9, artwork checks and Go vet passed. All 41 web tests
+passed after the browser corrections.
+The Linux GitHub CI run is the required full-suite release gate. Implementation
+commit `bd4c7437a7ed5d3d8c92a1c632a2211effd2af2c` passed the complete race suite,
+vet, cross-builds, container smoke checks and amd64/arm64 publication in run
+`40600526273`. The subsequent browser corrections require their own exact-SHA run.
 
 The final isolated HTTP fixture prepared prestream, ending and BRB presentations
 from a two-track 2.3-second playlist. Each reports a 2.32-second one-pass export at

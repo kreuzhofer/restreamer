@@ -80,7 +80,7 @@
       case 'retry': return ['Retry failed playback?', `Retry the selected media from its beginning. ${mode}`];
       case 'stop_clip': return ['Stop this clip?', `Stop the clip and restore ${destination}. ${mode}`];
       case 'stop_now': return [stage.mode === 'preview_only' ? 'Stop rehearsal now?' : 'Stop broadcast now?', 'Immediately stop all stage playback, cancel pending transitions, and disconnect every destination. OBS input may stay connected.'];
-      case 'replace_now': return [`Replace ${stage.stage} media?`, `Start ${name(request.revision)} from the beginning, preserving the selected stage, return destination and loop setting.${stage.playback?.state === 'paused' ? ' The clip remains paused.' : ''}${stage.stage === 'ENDING' ? ' This restarts the ending video and postpones shutdown.' : ''} ${mode}`];
+      case 'replace_now': return [`Replace ${stage.stage} media?`, `Start ${name(request.revision)} from the beginning, preserving the selected stage, return destination and loop setting.${stage.playback?.state === 'paused' ? ' The clip remains paused.' : ''}${stage.stage === 'ENDING' ? revisions.find(item => item.id === request.revision)?.presentation?.mode === 'music' ? ' This ending loops until you explicitly stop or change stage.' : ' This restarts the finite ending, which stops the broadcast when it finishes.' : ''} ${mode}`];
       case 'replace_on_return': return [`Replace ${stage.return_stage} media on return?`, `Keep the current source uninterrupted. When returning to ${destination}, start ${name(request.revision)} from its beginning instead of resuming the old revision. ${mode}`];
       case 'set_target': return request.enabled ? [`Enable ${request.target}?`, `This destination immediately joins ${sourceName(stage)}, the current on-air source.`] : [`Disable the last destination?`, `Disable ${request.target}. The stage and preview keep running with NO DESTINATIONS — NOT SENDING. This remains a real session, not a rehearsal.`];
       default: return ['Confirm change?', request.action];
@@ -112,7 +112,7 @@
     el('stage-selected').textContent = stage.stage;
     el('stage-source').textContent = sourceName(stage);
     const retained = stage.return_playback;
-    el('stage-return').textContent = stage.return_stage ? `${stage.return_stage}${retained ? ` · ${retained.state === 'paused' ? 'paused by operator' : 'suspended'} · ${time(retained.position)} / ${time(retained.duration)}${retained.loop ? ' · looping' : ''}` : ''}` : 'None';
+    el('stage-return').textContent = stage.return_stage ? `${stage.return_stage}${retained ? ` · ${retained.state === 'paused' ? 'paused by operator' : 'suspended'} · ${time(retained.loop && retained.duration > 0 ? retained.position % retained.duration : retained.position)} / ${time(retained.duration)}${retained.loop ? ' · looping' : ''}` : ''}` : 'None';
     const p = stage.playback || {};
     el('stage-media').textContent = stage.media?.revision ? `${label(stage.media)} · ${p.state || 'selected'} · ${time(p.position)} / ${time(p.duration)}${p.loop ? ' · looping' : ''}` : stage.stage === 'LIVE' && stage.source !== 'obs' ? 'LIVE intent remains selected; OBS recovery is automatic.' : '';
     el('stage-error').hidden = !stage.error;
@@ -132,6 +132,7 @@
       button.setAttribute('aria-pressed', String(stage.stage === value));
       button.disabled = !usable || (ending && stage.stage !== value) || ((id === 'brb' || id === 'ending') && stage.stage === 'OFF');
     }
+    el('stage-ending-help').textContent = revisions.find(item => item.id === selections.ending)?.presentation?.mode === 'music' ? 'Loop ending · stop manually' : 'Play ending, then stop';
     el('stage-return-button').disabled = !usable || ending || !stage.return_stage;
     el('stage-return-button').textContent = stage.return_stage ? `Return to ${stage.return_stage}` : 'Return';
     el('stage-retry').hidden = stage.playback?.state !== 'failed';
