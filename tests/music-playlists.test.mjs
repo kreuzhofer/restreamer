@@ -8,6 +8,7 @@ async function fixture() {
   append(...children){this.children.push(...children);}
   replaceChildren(...children){this.children=children;}
   setAttribute(){}
+  focus(){this.focused=true;}
   all(){return [this,...this.children.flatMap(c=>c.all())];}
  }
  const root=new Element('section'),calls=[],listeners={};let failing=false;
@@ -19,7 +20,7 @@ async function fixture() {
  await new Promise(resolve=>setImmediate(resolve));
  const button=text=>root.all().find(e=>e.tag==='button'&&e.textContent===text);
  const name=root.all().find(e=>e.tag==='input'), form=root.all().find(e=>e.tag==='form');
- return {root,calls,button,name,refresh:window.musicPlaylists.refresh,fail(){failing=true;},async submit(){await form.onsubmit({preventDefault(){}});},unload(){let blocked=false;listeners.beforeunload({preventDefault(){blocked=true;}});return blocked;}};
+ return {root,calls,button,name,form,refresh:window.musicPlaylists.refresh,fail(){failing=true;},async submit(){await form.onsubmit({preventDefault(){}});},unload(){let blocked=false;listeners.beforeunload({preventDefault(){blocked=true;}});return blocked;}};
 }
 test('reordering a saved playlist is a dirty edit and saves exact ordered references',async()=>{
  const ui=await fixture();ui.button('Edit playlist').onclick();assert.equal(ui.unload(),false);
@@ -31,4 +32,9 @@ test('stale playlist save preserves name and reordered tracks through refresh',a
  const ui=await fixture();ui.button('Edit playlist').onclick();ui.name.value='My draft';ui.button('Move down').onclick();await ui.refresh();
  assert.equal(ui.name.value,'My draft');ui.fail();await ui.submit();assert.equal(ui.name.value,'My draft');assert.equal(ui.unload(),true);
  assert.ok(ui.root.all().some(e=>e.textContent.includes('Playlist changed')));
+});
+
+test('playlist creation stays out of browsing until requested',async()=>{
+ const ui=await fixture();assert.equal(ui.form.hidden,true);ui.button('New playlist').onclick();assert.equal(ui.form.hidden,false);assert.equal(ui.name.focused,true);
+ ui.button('Cancel edit').onclick();assert.equal(ui.form.hidden,true);
 });

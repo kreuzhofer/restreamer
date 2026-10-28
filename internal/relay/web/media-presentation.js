@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const renderName = job => `Render ${job.sequence}`;
+  const renderName = job => job.name || `Render ${job.sequence}`;
   const date = value => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat(undefined, {dateStyle:'medium', timeStyle:'short'}).format(new Date(value)) : 'Date unavailable';
   const jobFor = (id, jobs) => [...jobs].sort((a,b) => b.sequence-a.sequence).find(job => job.media_revision === id);
   const label = (id, jobs, revisions) => {

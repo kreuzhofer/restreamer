@@ -44,10 +44,12 @@ type ClipShortcut struct {
 }
 
 type StageMediaSelections struct {
-	BRB       string         `json:"brb,omitempty"`
-	Prestream string         `json:"prestream"`
-	Ending    string         `json:"ending"`
-	Shortcuts []ClipShortcut `json:"shortcuts"`
+	FallbackMode string         `json:"fallback_mode,omitempty"`
+	Fallback     string         `json:"fallback,omitempty"`
+	BRB          string         `json:"brb,omitempty"`
+	Prestream    string         `json:"prestream"`
+	Ending       string         `json:"ending"`
+	Shortcuts    []ClipShortcut `json:"shortcuts"`
 }
 
 type savedStageMedia struct {
@@ -122,7 +124,7 @@ func (l *videoLibrary) loadRevisions() error {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	if err != nil || saved.Version != 1 || validateSelections(saved.Selections) != nil {
+	if err != nil || (saved.Version != 1 && saved.Version != 2) || validateSelections(saved.Selections) != nil {
 		return errors.New("invalid saved stage media selections")
 	}
 	l.selected = saved.Selections
@@ -236,7 +238,7 @@ func (l *videoLibrary) revisionsLocked() []MediaRevision {
 		}
 		revisions = append(revisions, r)
 	}
-	ids := []string{l.selected.Prestream, l.selected.Ending, l.selected.BRB}
+	ids := []string{l.selected.Prestream, l.selected.Ending, l.selected.BRB, l.selected.Fallback}
 	for _, shortcut := range l.selected.Shortcuts {
 		ids = append(ids, shortcut.Revision)
 	}
@@ -316,10 +318,20 @@ func (l *videoLibrary) openRevision(id string) (*clipPlayback, config.BRBProfile
 }
 
 func validateSelections(settings StageMediaSelections) error {
+	if settings.FallbackMode != "" && settings.FallbackMode != "shared" && settings.FallbackMode != "legacy" && settings.FallbackMode != "override" {
+		return errors.New("Choose shared BRB or an explicit fallback override")
+	}
+	if settings.FallbackMode == "shared" && settings.BRB == "" {
+		return errors.New("Select a BRB video before sharing it with automatic fallback")
+	}
+	if settings.FallbackMode == "override" && settings.Fallback == "" {
+		return errors.New("Select a fallback video")
+	}
+
 	if len(settings.Shortcuts) > 32 {
 		return errors.New("Save at most 32 clip shortcuts")
 	}
-	for _, id := range []string{settings.Prestream, settings.Ending, settings.BRB} {
+	for _, id := range []string{settings.Prestream, settings.Ending, settings.BRB, settings.Fallback} {
 		if id != "" && !validRevisionID(id) {
 			return errors.New("Select an exact ready media revision")
 		}
@@ -368,10 +380,34 @@ func (s *Server) stageMediaSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 409)
 		return
 	}
+	var emergency *brbMedia
+	if settings.fallbackRevision() != "" {
+		s.broadcast.mu.Lock()
+		emergency = s.broadcast.emergency
+		profile := s.broadcast.media.settings.Profile
+		s.broadcast.mu.Unlock()
+		if emergency == nil || emergency.settings.Profile != profile {
+			var err error
+			emergency, err = s.prepareEmergency()
+			if err != nil {
+				http.Error(w, err.Error(), 503)
+				return
+			}
+		}
+	}
 	// Library validation and persistence must not hold the command lock: an
 	// operator must still be able to stop the show while storage is busy.
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if emergency != nil && emergency.settings.Profile != l.profile {
+		http.Error(w, "Profile changed; review fallback again", 409)
+		return
+	}
+	descriptor, err := s.fallbackDescriptor(settings)
+	if err != nil {
+		http.Error(w, err.Error(), 409)
+		return
+	}
 	changed, err := l.persistSelectionsLocked(settings)
 	if err != nil {
 		code := 409
@@ -386,6 +422,11 @@ func (s *Server) stageMediaSettings(w http.ResponseWriter, r *http.Request) {
 	// broadcast lock, and recheck context after opening their candidate.
 	s.broadcast.mu.Lock()
 	l.selected = settings
+	s.broadcast.fallbackNext = descriptor
+	s.broadcast.fallbackManaged = settings.fallbackRevision() != ""
+	if emergency != nil {
+		s.broadcast.emergency = emergency
+	}
 	if changed {
 		s.broadcast.control.version++
 	}
@@ -397,7 +438,7 @@ var errStageMediaPersistence = errors.New("Cannot save stage media; selections u
 
 // Caller holds l.mu through persistence and publication of the new selections.
 func (l *videoLibrary) persistSelectionsLocked(settings StageMediaSelections) (bool, error) {
-	ids := []string{settings.Prestream, settings.Ending, settings.BRB}
+	ids := []string{settings.Prestream, settings.Ending, settings.BRB, settings.Fallback}
 	for _, shortcut := range settings.Shortcuts {
 		ids = append(ids, shortcut.Revision)
 	}
@@ -413,10 +454,10 @@ func (l *videoLibrary) persistSelectionsLocked(settings StageMediaSelections) (b
 		clip.reader.close()
 		validated[id] = true
 	}
-	if err := writeState(filepath.Join(l.root, "stage-media.json"), savedStageMedia{Version: 1, Selections: settings}); err != nil {
+	if err := writeState(filepath.Join(l.root, "stage-media.json"), savedStageMedia{Version: 2, Selections: settings}); err != nil {
 		return false, errStageMediaPersistence
 	}
-	changed := settings.BRB != l.selected.BRB || settings.Prestream != l.selected.Prestream || settings.Ending != l.selected.Ending || !slices.Equal(settings.Shortcuts, l.selected.Shortcuts)
+	changed := settings.FallbackMode != l.selected.FallbackMode || settings.Fallback != l.selected.Fallback || settings.BRB != l.selected.BRB || settings.Prestream != l.selected.Prestream || settings.Ending != l.selected.Ending || !slices.Equal(settings.Shortcuts, l.selected.Shortcuts)
 	return changed, nil
 }
 

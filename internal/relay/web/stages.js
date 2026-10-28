@@ -9,7 +9,7 @@
   const name = revision => revisions.find(item => item.id === revision)?.name || revision || 'No media selected';
   const label = media => media?.revision ? window.mediaRenderLabel?.(media.revision) || media.name || 'Prepared media' : 'No prepared media';
   const locked = () => current()?.stage === 'ENDING' && !current()?.error && !current()?.playback?.loop;
-  const sourceName = stage => ({off: 'Off', obs: 'OBS', brb: stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB', file: stage.media?.name || 'Prepared video'})[stage.source] || stage.source;
+  const sourceName = stage => ({off: 'Off', obs: 'OBS', brb: stage.emergency?'Emergency screen':stage.fallback_media?.name|| (stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB'), file: stage.media?.name || 'Prepared video'})[stage.source] || stage.source;
 
   function remember(command) {
     try { command ? sessionStorage.setItem('restreamer-stage-command', JSON.stringify({id: command.id, server_id: command.server_id})) : sessionStorage.removeItem('restreamer-stage-command'); } catch { /* Reconciliation still works while this page remains open. */ }
@@ -77,6 +77,8 @@
       }
       case 'end_stream': if (revisions.find(r => r.id === selections.ending)?.presentation?.mode === 'music') return ['Start looping ending?',`Play ${name(selections.ending)} continuously. Music and visuals repeat independently. Use Stop now or change stage when you are done. ${mode}`]; return ['Play ending and stop?', `Play ${name(selections.ending)} once, finish queued destination writes for up to 10 seconds, then stop. Ordinary stage controls are locked while the ending runs. ${mode}`];
       case 'return': return ['Return to the recorded stage?', `Restore ${destination}, resuming retained media near its saved position. An unavailable return source holds fallback BRB. ${mode}`];
+      case 'replace_fallback': return ['Replace fallback now?', `Replace ${stage.fallback_media?.name || (stage.emergency ? 'the emergency screen' : 'the current fallback')} with ${name(request.revision)} from the beginning. The intended stage stays unchanged. ${mode}`];
+      case 'replace_fallback_on_return': return ['Replace fallback on return?', `Keep the current source uninterrupted. On return, play ${name(request.revision)} from the beginning instead of ${stage.return_fallback_media?.name || (stage.return_emergency ? 'the emergency screen' : 'the retained fallback')}. ${mode}`];
       case 'retry': return ['Retry failed playback?', `Retry the selected media from its beginning. ${mode}`];
       case 'stop_clip': return ['Stop this clip?', `Stop the clip and restore ${destination}. ${mode}`];
       case 'stop_now': return [stage.mode === 'preview_only' ? 'Stop rehearsal now?' : 'Stop broadcast now?', 'Immediately stop all stage playback, cancel pending transitions, and disconnect every destination. OBS input may stay connected.'];
@@ -136,7 +138,8 @@
     el('stage-ending-help').textContent = loopingEnding ? 'Loop ending · stop manually' : 'Play ending, then stop';
     el('stage-return-button').disabled = !usable || ending || !stage.return_stage;
     el('stage-return-button').textContent = stage.return_stage ? `Return to ${stage.return_stage}` : 'Return';
-    el('stage-retry').hidden = stage.playback?.state !== 'failed';
+    el('stage-retry').hidden = stage.playback?.state !== 'failed' && !stage.fallback_error;
+    el('stage-retry').textContent = stage.fallback_error ? 'Recover fallback' : 'Retry playback';
     el('stage-retry').disabled = !usable || stage.ending?.draining;
     el('stage-stop').disabled = !usable || (stage.stage === 'OFF' && !stage.pending);
     el('stage-stop').textContent = rehearsal ? 'Stop rehearsal' : 'Stop now';
@@ -179,7 +182,7 @@
     window.broadcastPreview?.update(online && stage.stage !== 'OFF', p.epoch);
     document.dispatchEvent(new Event('stage-command-state'));
   }
-  for (const [id, action] of [['prestream', 'prestream'], ['live', 'go_live'], ['brb', 'brb'], ['ending', 'end_stream'], ['return-button', 'return'], ['retry', 'retry'], ['stop', 'stop_now']]) el(`stage-${id}`).addEventListener('click', () => request({action}));
+  for (const [id, action] of [['prestream', 'prestream'], ['live', 'go_live'], ['brb', 'brb'], ['ending', 'end_stream'], ['return-button', 'return'], ['retry', 'retry'], ['stop', 'stop_now']]) el(`stage-${id}`).addEventListener('click', () => request(action === 'retry' && current()?.fallback_error ? {action:'replace_fallback',revision:selections.fallback_mode==='override'?selections.fallback:selections.brb} : {action}));
   el('stage-cancel-pending').addEventListener('click', () => request({action: 'cancel_pending'}, false));
   el('stage-dialog-cancel').addEventListener('click', () => el('stage-dialog').close());
   el('stage-dialog').addEventListener('close', () => { review = null; });

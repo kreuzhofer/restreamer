@@ -1,6 +1,9 @@
 package relay
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -42,7 +45,24 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	profile := s.library.profile
 	s.library.mu.Unlock()
 	theme, _ := g.resolveTheme(draft.Theme)
-	issues := generationIssues(draft, profile, theme)
+	if draft.Stage == "brb" {
+		if len(draft.Scenes) != 1 || draft.Scenes[0].Layout != "title" {
+			http.Error(w, "BRB requires one message scene", 422)
+			return
+		}
+		text, normalizeErr := normalizeBRBText(draft.Scenes[0].Text)
+		if normalizeErr != nil || text == "" {
+			http.Error(w, "Choose a valid BRB message", 422)
+			return
+		}
+		draft.Scenes[0].Text = text
+		draft.Scenes[0].DurationSeconds = float64(themedBRBSeconds(theme.Style))
+	}
+	validationDraft := draft
+	if draft.Stage == "brb" {
+		validationDraft.Stage = "prestream"
+	}
+	issues := generationIssues(validationDraft, profile, theme)
 	issues = append(issues, g.assetIssues(draft)...)
 	issues = append(issues, g.videoIssues(draft, profile.FPS)...)
 	issues = append(issues, g.musicIssues(draft, profile.FPS, profile.SampleRate)...)
@@ -55,6 +75,14 @@ func (s *Server) generatorJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Cannot create generation identity", 503)
 		return
+	}
+	if draft.Stage == "brb" {
+		job.Kind = "brb"
+		job.BRBFrames = themedBRBSeconds(theme.Style) * profile.FPS
+		job.BRBDraft = &brbSettings{Text: draft.Scenes[0].Text, Theme: &theme, Profile: profile}
+		captured, _ := json.Marshal(job.BRBDraft)
+		digest := sha256.Sum256(captured)
+		job.BRBDigest = hex.EncodeToString(digest[:])
 	}
 	if err := g.captureMusicPresentation(&job); err != nil {
 		http.Error(w, err.Error(), 422)
@@ -207,14 +235,14 @@ func (s *Server) generatorRetryHTTP(w http.ResponseWriter, r *http.Request) {
 	job.MixGain = nil
 	job.QueuePosition = 0
 	job.RetryOf = previous.ID
-	if job.Kind == "brb" {
+	if job.Kind == "brb" && job.BRBDraft == nil {
 		if err := os.Link(g.brbCapturePath(previous.ID), g.brbCapturePath(job.ID)); err != nil {
 			http.Error(w, "Cannot retain BRB retry inputs", 507)
 			return
 		}
 	}
 	g.admitJob(w, job)
-	if job.Kind == "brb" && g.jobs[job.ID] == nil {
+	if job.Kind == "brb" && job.BRBDraft == nil && g.jobs[job.ID] == nil {
 		os.Remove(g.brbCapturePath(job.ID))
 	}
 }

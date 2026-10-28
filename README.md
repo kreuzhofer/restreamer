@@ -176,57 +176,51 @@ uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
 the dashboard and status API return 503 while RTMP input continues operating.
 A broadcast starts only through the authenticated dashboard/API.
 
-Use **Live** (`/live`) for operation, **Studio** (`/studio`) for media authoring,
-and **Settings** (`/settings`) for the shared streaming profile. The original `/`
-and `/generator?id=…` bookmarks still work. Each workspace shows the server's
-selected stage, on-air source, delivery mode, and status freshness. Navigation
-never starts or stops a broadcast. Profile drafts survive Live/Settings switches;
-leaving a page with unsaved edits prompts before discarding them. Streaming-profile
-setup requires a desktop window and an OFF broadcast, including no rehearsal.
+Use **Live** (`/live`) to operate the broadcast, **Show setup** (`/setup`) to
+choose upcoming videos, **Library** (`/library`) to manage reusable resources,
+and **Settings** (`/settings`) for ingestion, destinations and the streaming
+profile. Existing `/studio` and `/generator?id=…` bookmarks still open their
+corresponding content. Navigation never starts or stops a broadcast.
+
+Show setup presents **Starting soon**, **BRB** and **Ending** together. Select
+**Change**, preview the exact ready video, then use it for that stage. Each
+choice shows its name, date, music and playback behavior; older videos are
+available on demand. Updating a selection affects next use. Current and
+suspended playback change only through a separately reviewed replacement in Live.
+
+Open a design by its name in Show setup or Library. The dedicated editor keeps
+content, theme, music, draft preview and generated videos together for all three
+stage types. Generate captures saved inputs; it never selects a result or changes
+on-air media. Autosave, background progress, errors and retry remain visible.
+Name a video to make variants recognizable; technical revision IDs are under
+Technical details. Older videos and maintenance actions open on demand.
+
+Library contains **Designs**, **Music**, **Uploads** and **Themes**. Tracks and
+playlists appear as lists; search filters designs, tracks and uploads. Create a
+playlist or upload a missing asset from the editor, then return to the same draft.
+Templates are available from Designs and as starting points for a new design.
+Theme and playlist updates require explicit adoption; existing generated videos
+remain unchanged. Select multiple designs or generated videos for cleanup;
+partial failures identify protected items for retry. Deleting a design removes
+its generated files, while uploaded originals remain separately managed.
 
 On phones, Live is a broadcast remote: **Operate** keeps the outgoing preview,
 stages, Return/Stop and pinned clips together. **Signals & destinations** opens
-delivery switches, readiness, OBS preview and diagnostics on demand. Preview
-pause controls reduce browser video traffic without changing the broadcast.
-**Browse prepared media** supports exact previews and saved stage selections.
-Text edits, uploads, generation, theme editing, ingestion credentials, destination
-setup and streaming-profile changes require desktop.
+readiness, delivery switches, OBS preview and diagnostics on demand. Show setup
+and Library support browsing, exact previews and selecting ready videos. Editing,
+uploads, generation, theme changes and technical configuration require desktop.
+Preview pause controls affect browser traffic only, never the broadcast.
 
-Studio opens **Show setup**, with Prestream, BRB and Ending together. Use **Change**
-to choose a design or uploaded video, inspect its render history, then explicitly
-assign the desired result. **Edit design** opens the dedicated editor; its shared
-navigation reaches all three stage types. Live has a direct **Show setup** link.
-New renders never silently replace assigned Prestream or Ending media. Render
-numbers are stable queue sequence numbers (gaps are normal), with dates, captured
-change summaries and exact video thumbnails; hashes are under Technical details.
+Desktop uses a persistent sidebar, local underlined tabs and a prominent main
+action per task. The Layout controls retain resizable panels and reset options;
+preferences apply only to this browser. Narrow windows use panel views. Focus
+outlines, keyboard controls and explicit save/departure messages remain available.
 
-**Music** displays uploaded tracks as rows with duration and uses. Expand a row to
-listen, inspect retained upload revisions or delete an unused track. Music remains
-separate from playlist/runtime-audio work.
-
-Studio also includes **Designs**, **Media**, **Themes**, and **Templates**. Themes browses
-immutable revisions and explicitly adopts a saved revision into the open design;
-publishing shared styling alone leaves existing designs pinned. Create or
-open a design to use its scene list, quick preview, and properties. Properties
-switch between the selected **Scene**, whole **Design** settings (including exact
-theme revision, soundtrack, loop or ending fade), and a **Template** shortcut to collection administration.
-**Results & queue** separates the current draft, latest generation attempt, last
-ready output, selected stage revision, and active revision. Each design has its
-own newest-first history with exact-result preview, explicit activation links,
-retry and protected cleanup. The compact shared queue remains available while
-browsing collections; cancelling or failed work leaves previous ready output
-and active media unchanged. Returning to a collection keeps the open draft and autosave active; use
-**Return to open design** to resume. Narrow desktop windows expose the preview and
-properties through panel buttons. Phones can browse designs and review prepared
-results; authoring, uploads, theme changes and generation require desktop.
-
-Desktop Live and Studio panels have draggable dividers. Focus a divider and use
-arrow keys (Shift for larger steps), Home, or End; the **Layout** menu also offers
-touch-friendly width sliders and **Reset layout**. Sizes persist only in this
-browser. Invalid or unavailable preferences show a visible recovery message.
-Narrow windows use panel buttons while preserving open work; no layout setting
-changes broadcast state. Alerts and the shared queue reduce the remaining panel
-height naturally, and long content scrolls within its panel.
+Twitch destination creation and editing fetch available servers from Twitch's
+unauthenticated ingest API. Choose the global/default or a regional server;
+manual URL entry remains available when discovery fails. Discovery never sends
+the stream key. An existing destination's address changes only after selecting a
+server and saving it.
 
 The application serves HTTP only. Configure your HTTPS reverse proxy to forward
 to port 8080 and preserve the original `Host` and `Authorization` headers. Use a
@@ -553,76 +547,35 @@ The broadcast still starts OFF after every application restart.
   cancelling a dialog, or pressing Escape never stops a broadcast. Application
   shutdown or loss of the relay's own connectivity cannot be protected by BRB.
 
-Open **Studio → Show setup → BRB → Edit design** for screen, music and theme
-preparation. BRB shares the editor navigation but retains its bounded storage:
-one assigned screen and one prepared candidate. It does not yet keep a full
-multi-design render history. **Prepare preview** captures the edited message,
-volume and selected theme without activation. Review and explicitly activate the
-candidate; preparing again replaces only the previous candidate. **Live → BRB
-readiness & activation** retains readiness, exact candidate review, and explicit
-activation, with a direct link back to Studio. Phones can review and activate a
-prepared candidate; editing, uploads and preparation require desktop.
+Open **Show setup → BRB** or a BRB design in Library. Edit the message, choose
+its theme and music, then **Generate video**. Draft preview shows appearance;
+the Videos view plays the exact animation and soundtrack. Preview and use the
+result explicitly. BRB designs and their generated history persist independently.
 
-Expand **Content & music** in the BRB editor. File uploads and legacy styling are under **Upload files / legacy styling**:
+The selected BRB video can also serve as automatic fallback. Under **When a
+source is unavailable**, choose **Use selected BRB** or an explicit different
+video. An existing separately configured legacy fallback is retained until you
+change this choice; opening the redesigned app does not replace it. Selecting
+next-use media never replaces an active or suspended fallback.
 
-- The default is a **32-second pixel-art arcade loop**: ghosts chase Pac-Man,
-  a power pellet reverses the chase, frightened ghosts scatter and returning
-  eyes cross the screen, then another chase leads back into the opening.
-  “BE RIGHT BACK” stays readable in the centre. There are no game sound effects.
-  The dashboard shows a labelled still preview of this animation.
-- Upload a PNG/JPEG image up to 10 MiB and 20 megapixels for a static screen,
-  or select **Remove the custom image and use the BRB message** and
-  **Apply uploads & activate** to restore the message screen. Select **Restore legacy
-  arcade/custom-image styling** as well to return from a shared theme to the
-  original animation. Images fit inside the output without cropping.
-  Existing default-screen installations receive the animation on restart;
-  custom images and music are preserved.
-  To change sprites, colours or choreography, use the editable Canvas source and
-  browser preview described in [the artwork guide](artwork/brb/README.md).
-- Edit **BRB message**, choose a theme and **Prepare preview** to review the text
-  and its still preview. With legacy styling, the message stays on one centred line and automatically
-  shrinks in whole-pixel steps to fit clear of the animation. Up to 40 characters
-  are supported: A–Z, 0–9, ÄÖÜß, spaces and `. , ! ? : ' - / ( ) + &`.
-  Lowercase letters are displayed in uppercase. Unsupported or empty text is
-  rejected without replacing the active BRB. The message persists across
-  restarts and can be changed while forwarding. It appears in legacy animation
-  or the selected shared theme when no custom image is selected. Shared themes
-  validate typography and overflow without shrinking the text.
-- Upload optional MP3/WAV audio up to 32 MiB and 10 minutes, choose volume, or
-  remove it. Music loops during BRB; without music, the relay sends silent AAC.
-  Preparing and saving audio restarts the BRB loop if already active.
-- **Apply uploads & activate** validates and encodes assets before atomically activating
-  them. During a show, confirmation explains that success immediately replaces BRB
-  and restarts its playback if on air. Failed uploads preserve the previous working assets. The saved dashboard
-  profile overrides the initial JSON profile on restart. Assets/profile persist;
-  deliberate BRB selection does not persist across application restarts.
+If managed fallback fails, an independently prepared silent emergency screen
+keeps a visible source when available. The error stays visible until explicit
+recovery; the failed presentation is not restarted in a loop. If emergency media
+is also unavailable, the dashboard reports output failure. Current and suspended
+fallback media, as well as selected media, are protected from cleanup.
 
-**Pac-Man Maze · revision 1** is an opt-in 40-second BRB theme with the detailed
-maze, ghost regeneration, staggered exits and a continuous chase. Select it under
-**Shared style theme**, choose **Prepare theme preview**, review the full exact
-preview, then **Activate prepared BRB**. Existing default arcade media and retained
-shared-theme selections remain available. Its centered sign uses editable Arcade
-Pixel text; long messages follow shared-theme overflow validation. The same artwork
-is available for authored scenes without the BRB-only “STREAM PAUSED” caption.
+**Pac-Man Maze** is a selectable 40-second theme with ghost regeneration and a
+continuous chase. Other themes and named variants live under **Library → Themes**.
+Shared changes do not alter an existing video's appearance. BRB supports a message
+of up to 40 characters; unsupported text and overflow are rejected explicitly.
+Music supports none, one uploaded track, or a playlist. Follow music downloads
+one music pass; broadcast BRB loops until the operator leaves it.
 
-Expand **Shared style theme** to select an exact built-in or named theme revision
-from the same library used by prestream and ending. Customize named variants in
-**Studio → Themes**, then explicitly refresh the BRB choices. A theme edit never
-changes the current BRB or an already-prepared candidate. Save any message,
-custom-image, or music edits first; theme preparation captures those saved inputs.
-
-**Prepare theme preview** creates a separate candidate. **Preview exact BRB**
-plays its encoded video and audio; **Activate prepared BRB** asks for confirmation
-before replacing the current fallback. If BRB is on air, activation restarts its
-video and music. Candidate activation checks the captured base generation and
-profile. Later BRB settings/profile changes make it stale: preview remains
-available, but a new preparation is required before activation. Cancelling a
-preparation or discarding a candidate leaves the current BRB unchanged. Accepted
-preparation belongs to the server: closing or reloading the browser does not cancel
-it. Reload discovers its status and result; **Cancel preparation** targets that
-exact preparation. Server shutdown or restart reports an interrupted preparation
-that must be started again, preserving current media and any earlier candidate. The
-existing `/api/brb/assets` prepare-and-save contract remains available.
+The legacy `/api/brb/assets` prepare-and-save and candidate APIs remain available
+for compatibility. Their immediate-activation behavior is not the ordinary
+editor workflow. Existing custom images and music remain in retained legacy
+fallback storage. See [UX migration and rollback](docs/design/ux-migration.md)
+before deploying or downgrading persisted state.
 
 Shared-theme BRB uses the same embedded typography, images/logos, palette,
 spacing, borders, and decorative effect renderer as authored scenes. It supports
@@ -1377,10 +1330,17 @@ New installations start with no destinations. Add the RTMP/RTMPS server URL and
 stream key in desktop **Settings → Destinations**, then enable the prepared
 destination from **Live**. Names use 1–64 letters, digits, underscores, or hyphens.
 For a new destination, choose **Twitch**, **YouTube**, **Kick**, or **Custom** in
-the Platform dropdown. Twitch and YouTube prefill their secure server URLs and
-names; Kick prefills its name and asks for the server URL from your Kick Creator
-Dashboard. Names and URLs remain editable. Changing to a platform preset clears
-the draft stream key so a key from another platform is not reused.
+the Platform dropdown. Twitch loads its current secure servers from the
+[public Twitch ingest API](https://dev.twitch.tv/docs/video-broadcast/reference/).
+Choose a regional server in **Twitch server**; the initial address is the first
+server returned by Twitch, not a latency measurement. Discovery runs from the
+relay and never sends your stream key. If it fails, retry or enter the server URL
+manually. Editing an existing Twitch destination offers **Choose Twitch server**;
+loading that list keeps the saved URL until you select a server and save.
+YouTube prefills its secure server URL and name; Kick prefills its name and asks
+for the server URL from your Kick Creator Dashboard. Names and URLs remain
+editable. Changing to a platform preset clears the draft stream key so a key
+from another platform is not reused.
 Up to 16 destinations are supported. A destination without a key cannot send.
 Saving an edit with an empty key field preserves the stored key; enter a new key
 to replace it. Keys are masked and never returned by the management API or status.

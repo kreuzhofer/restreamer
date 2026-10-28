@@ -186,7 +186,11 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	s.generator.mu.Lock()
 	theme, themeErr := s.generator.resolveTheme(draft.Theme)
 	s.generator.mu.Unlock()
-	issues := mediaauthor.ValidateWithTheme(draft, theme, profile.Width, profile.Height)
+	validationDraft := draft
+	if draft.Stage == "brb" {
+		validationDraft.Stage = "prestream"
+	}
+	issues := mediaauthor.ValidateWithTheme(validationDraft, theme, profile.Width, profile.Height)
 	if themeErr != nil {
 		issues = append(issues, mediaauthor.Issue{Field: "theme", Message: themeErr.Error()})
 	}

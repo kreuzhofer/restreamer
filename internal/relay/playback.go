@@ -119,6 +119,9 @@ func (b *broadcast) stopClip(reason string) {
 }
 
 func (b *broadcast) startClip(now time.Time) error {
+	if !b.playingFallback {
+		b.closeFallback()
+	}
 	p := b.clip
 	if p.presentation != nil {
 		return b.startPresentation(now)

@@ -373,6 +373,14 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 		fail(err)
 		return
 	}
+	var emergency *brbMedia
+	if oldProfile != settings.Profile {
+		emergency, err = s.prepareEmergencyProfile(settings.Profile)
+		if err != nil {
+			fail(err)
+			return
+		}
+	}
 	settings.Generation = filepath.Base(dir)
 	s.controlMu.Lock()
 	defer s.controlMu.Unlock()
@@ -397,8 +405,14 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 			s.broadcast.closeInput()
 		}
 		s.broadcast.resetInput()
+		s.broadcast.fallbackNext = nil
+		s.broadcast.emergency = emergency
+		s.broadcast.closeFallback()
 	}
 	if s.broadcast.active {
+		if !s.broadcast.fallbackManaged && !s.broadcast.fallbackFailed {
+			s.broadcast.fallbackMedia = media
+		}
 		s.broadcast.startFallback(time.Now())
 	}
 	os.RemoveAll(filepath.Join(root, old))

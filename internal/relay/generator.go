@@ -119,7 +119,7 @@ func designBounds(d mediaauthor.Design) bool {
 			return false
 		}
 	}
-	return len(d.Theme.ID) <= 80 && (d.Stage == "prestream" || d.Stage == "ending")
+	return len(d.Theme.ID) <= 80 && (d.Stage == "prestream" || d.Stage == "ending" || d.Stage == "brb")
 }
 
 func validDesignID(id string) bool {

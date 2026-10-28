@@ -16,14 +16,15 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
   const save = button('Save playlist'); save.type = 'submit';
   const cancel = button('Cancel edit', () => { if (!busy && (!dirty() || window.confirm('Discard unsaved playlist edits?'))) reset(); });
   const refreshButton = button('Refresh music and playlists', () => refresh().catch(showError));
-  form.append(nameLabel, pickerLabel, add, tracks, save, cancel); root.replaceChildren(heading, help, refreshButton, list, form, status);
+  const create = button('New playlist', () => { if (busy || (dirty() && !window.confirm('Discard unsaved playlist edits?'))) return; reset(); form.hidden = false; name.focus(); }); create.classList.add('studio-authoring');
+  form.append(nameLabel, pickerLabel, add, tracks, save, cancel); root.replaceChildren(heading, help, create, refreshButton, list, form, status);
   function showError(error) { status.textContent = error.message; }
   async function request(path, method = 'GET', body) {
     const response = await fetch(location.origin + path, {method, cache:'no-store', signal:AbortSignal.timeout(10000), headers:{'Content-Type':'application/json','X-Restreamer-Control':'1'}, ...(body ? {body:JSON.stringify(body)} : {})});
     if (!response.ok) throw new Error((await response.text()).trim());
     return response.json();
   }
-  function reset() { draft = {name:'', tracks:[]}; name.value = ''; savedTracks = '[]'; renderTracks(); }
+  function reset() { form.hidden = true; draft = {name:'', tracks:[]}; name.value = ''; savedTracks = '[]'; renderTracks(); }
   function describe(ref) { const asset = assets.find(a => a.id === ref.id); return `${asset?.name || 'Missing track'} · version ${ref.revision}`; }
   function renderTracks() {
     tracks.replaceChildren();
@@ -34,16 +35,16 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
       row.append(title, up, down, button('Remove track', () => { if (!busy) { draft.tracks.splice(i, 1); renderTracks(); } })); tracks.append(row);
     });
     const seconds = draft.tracks.reduce((total, ref) => total + (assets.find(a => a.id === ref.id)?.revisions.find(r => r.revision === ref.revision)?.duration_seconds || 0), 0);
-    status.textContent = `${draft.tracks.length} tracks · ${(seconds / 60).toFixed(2)} minutes · limit 50 tracks / 60 minutes`;
-    save.textContent = draft.id ? 'Save new playlist version' : 'Create playlist'; cancel.hidden = !draft.id;
+    status.textContent = form.hidden ? '' : `${draft.tracks.length} tracks · ${(seconds / 60).toFixed(2)} minutes · limit 50 tracks / 60 minutes`;
+    save.textContent = draft.id ? 'Save new playlist version' : 'Create playlist'; cancel.hidden = false;
   }
   function renderList() {
     list.replaceChildren();
     for (const playlist of playlists) {
-      const row = node('article'); row.className = 'generator-asset';
+      const row = node('article'); row.className = 'playlist-row';
       const title = node('h4', playlist.name), info = node('p', `${playlist.tracks.length} tracks · ${(playlist.duration / 60).toFixed(2)} minutes · version ${playlist.revision}`);
       const usage = node('p', playlist.uses.length ? `Used by: ${playlist.uses.map(use => use.name).join(', ')}` : 'Not used by a saved presentation.'); usage.className = 'stage-help';
-      const edit = button('Edit playlist', () => { if (busy) return; if (dirty() && !window.confirm('Discard your unsaved playlist draft?')) return; draft = {id:playlist.id, version:playlist.revision, name:playlist.name, tracks:playlist.tracks.map(ref => ({...ref}))}; name.value = draft.name; savedTracks = JSON.stringify(draft.tracks); renderTracks(); });
+      const edit = button('Edit playlist', () => { if (busy) return; if (dirty() && !window.confirm('Discard your unsaved playlist draft?')) return; draft = {id:playlist.id, version:playlist.revision, name:playlist.name, tracks:playlist.tracks.map(ref => ({...ref}))}; name.value = draft.name; savedTracks = JSON.stringify(draft.tracks); form.hidden = false; renderTracks(); name.focus(); });
       const remove = button('Delete playlist', async () => {
         if (busy || !window.confirm(`Delete playlist “${playlist.name}” and its saved versions? Uploaded tracks stay. Referenced playlists cannot be deleted.`)) return;
         busy = true;
@@ -69,6 +70,6 @@ window.mountMusicPlaylists = function mountMusicPlaylists(root) {
   };
   window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (busy || dirty())) { event.preventDefault(); event.returnValue = ''; } });
   reset(); refresh().catch(showError);
-  return {refresh, catalog:() => playlists};
+  return {refresh, catalog:() => playlists, create:()=>create.onclick(), canClose:()=>!busy&&(!dirty()||window.confirm("Discard unsaved playlist edits?"))};
 };
 window.musicPlaylists = window.mountMusicPlaylists(document.getElementById('music-playlists'));

@@ -11,21 +11,27 @@ import (
 
 // StageStatus separates operator intent from the media actually selected.
 type StageStatus struct {
-	Ending             EndingStatus       `json:"ending"`
-	Stage              string             `json:"stage"`
-	Source             string             `json:"source"`
-	Mode               string             `json:"mode"`
-	ServerID           string             `json:"server_id"`
-	Context            string             `json:"context"`
-	Pending            *PendingTransition `json:"pending,omitempty"`
-	Error              string             `json:"error,omitempty"`
-	Outcomes           []CommandResult    `json:"outcomes"`
-	Media              StageMediaStatus   `json:"media"`
-	Playback           PlaybackStatus     `json:"playback"`
-	ReturnStage        string             `json:"return_stage,omitempty"`
-	ReturnMedia        *StageMediaStatus  `json:"return_media,omitempty"`
-	ReturnPlayback     *PlaybackStatus    `json:"return_playback,omitempty"`
-	ReturnAfterDiscard string             `json:"return_after_discard,omitempty"`
+	ReturnFallback      *StageMediaStatus  `json:"return_fallback_media,omitempty"`
+	ReturnEmergency     bool               `json:"return_emergency,omitempty"`
+	ReturnFallbackError string             `json:"return_fallback_error,omitempty"`
+	Fallback            *StageMediaStatus  `json:"fallback_media,omitempty"`
+	Emergency           bool               `json:"emergency,omitempty"`
+	FallbackError       string             `json:"fallback_error,omitempty"`
+	Ending              EndingStatus       `json:"ending"`
+	Stage               string             `json:"stage"`
+	Source              string             `json:"source"`
+	Mode                string             `json:"mode"`
+	ServerID            string             `json:"server_id"`
+	Context             string             `json:"context"`
+	Pending             *PendingTransition `json:"pending,omitempty"`
+	Error               string             `json:"error,omitempty"`
+	Outcomes            []CommandResult    `json:"outcomes"`
+	Media               StageMediaStatus   `json:"media"`
+	Playback            PlaybackStatus     `json:"playback"`
+	ReturnStage         string             `json:"return_stage,omitempty"`
+	ReturnMedia         *StageMediaStatus  `json:"return_media,omitempty"`
+	ReturnPlayback      *PlaybackStatus    `json:"return_playback,omitempty"`
+	ReturnAfterDiscard  string             `json:"return_after_discard,omitempty"`
 }
 
 type StageMediaStatus struct {
@@ -87,6 +93,11 @@ func (b *broadcast) stageStatusLocked(now time.Time) StageStatus {
 		}
 	}
 	s := StageStatus{Stage: c.stage, Source: source, Mode: c.mode, ServerID: c.serverID, Context: b.stageContext(), Error: b.playbackError, Outcomes: []CommandResult{}}
+	s.Emergency = b.fallbackFailed && b.active
+	s.FallbackError = b.fallbackError
+	if b.fallback != nil {
+		s.Fallback = &StageMediaStatus{ID: b.fallback.ID, Revision: b.fallback.Revision, Name: b.fallback.Name}
+	}
 	s.Ending = b.endingStatusLocked()
 	s.Playback = b.playbackStatusLocked(now)
 	if p := b.clip; p != nil {
@@ -94,6 +105,11 @@ func (b *broadcast) stageStatusLocked(now time.Time) StageStatus {
 	}
 	if f := c.returnTo; f != nil {
 		s.ReturnStage = f.stage
+		s.ReturnEmergency = f.fallbackFailed
+		s.ReturnFallbackError = f.fallbackError
+		if f.fallback != nil {
+			s.ReturnFallback = &StageMediaStatus{ID: f.fallback.ID, Revision: f.fallback.Revision, Name: f.fallback.Name}
+		}
 		if f.clip != nil {
 			s.ReturnMedia = &StageMediaStatus{ID: f.clip.ID, Revision: f.clip.Revision, Name: f.clip.Name}
 			p := f.clip
