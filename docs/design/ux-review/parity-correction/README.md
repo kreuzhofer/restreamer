@@ -19,6 +19,7 @@ Screenshots are from the isolated copied test fixture on 127.0.0.1:18886, using 
 - Phone 390 × 844: Live, Show setup, Music and open generation activity; no horizontal overflow. Stop remains directly beneath stage buttons. Phone authoring actions stay hidden.
 - Browser checks: Tracks/Playlists switching and filtered deep-link restoration; both Review video actions focus the exact video and start playback; preview-only start/stop confirmations; no captured browser console errors.
 - The browser approval reviewer rejected adding a scene because it could autosave. No browser mutation of that copied design was performed. Latest-result match behavior is covered by automated tests; preview rendering and thumbnails were inspected read-only.
+- Final edge-case pass: long playlist names wrap; expanded playlist actions remain inside the content column (right edge 1400 at a 1440px viewport); thumbnail cache invalidates when the streaming profile changes. Browser keyboard zoom did not apply through the automation interface, so no increased-zoom pass is claimed.
 - Two independent follow-up reviews closed the scoped findings; their reports are retained here. Parent-executed browser checks are attributed separately in the reports.
 
 ## Automated validation

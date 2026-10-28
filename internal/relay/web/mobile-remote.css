@@ -35,7 +35,7 @@
   #live-workspace .preview-button,#live-workspace .danger-button,#live-workspace summary,#live-workspace .toggle{min-height:44px}
   #live-workspace summary{display:flex;align-items:center}
   #live-workspace .toggle{min-width:48px}#live-destinations .target-panel .badge{font-size:10px}#live-destinations .target-brief{font-size:11px}
-  #rehearsal-label,.clip-playback-controls .check-label{min-height:44px}.check-label input{width:20px;height:20px}
+  .clip-playback-controls .check-label{min-height:44px}.check-label input{width:20px;height:20px}
   #brb-settings{display:none}
   .prepared-media-drawer button,.prepared-media-drawer select,.prepared-media-drawer input,.prepared-media-drawer summary{min-height:44px}
   .prepared-media-drawer input,.prepared-media-drawer select{font-size:16px}.prepared-media-heading{position:sticky;top:-18px;background:var(--panel);z-index:2;padding-top:8px}

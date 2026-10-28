@@ -253,7 +253,7 @@
     schedulePreview();
     loadJobs();
   }
-  let thumbnailSignature = '', thumbnails = new Map();
+  let thumbnailSignature = '', thumbnailProfile = '', thumbnails = new Map();
   const scenePreviewSignature = value => JSON.stringify([value.id,value.stage,value.theme,value.scenes,value.loop_transition,value.ending_fade_seconds]);
   function storeSceneThumbnail(index, bitmap) {
     const thumbnail=document.createElement('canvas');thumbnail.width=160;thumbnail.height=90;
@@ -436,7 +436,8 @@
         }
       }
       const nextThumbnailSignature=scenePreviewSignature(snapshot);
-      if(thumbnailSignature!==nextThumbnailSignature){thumbnails.clear();thumbnailSignature=nextThumbnailSignature;}
+      const nextThumbnailProfile=JSON.stringify(result.profile);
+      if(thumbnailSignature!==nextThumbnailSignature||thumbnailProfile!==nextThumbnailProfile){thumbnails.clear();thumbnailSignature=nextThumbnailSignature;thumbnailProfile=nextThumbnailProfile;}
       renderSceneLength();
       validationIssues = result.issues;
       renderScenes();
