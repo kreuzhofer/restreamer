@@ -87,8 +87,10 @@
     if (!seeking) seek.value = position;
     el('playback-position').textContent = `${clock(seeking ? Number(seek.value) : position)} / ${clock(p.duration)} · ${seeking ? 'Release to seek' : followsPreview ? 'Preview position' : 'Server position'}`;
     const reviewed = ready(candidate) && previewRevision === candidate.id;
-    el('library-replace-now').disabled = !usable || !reviewed || !['PRESTREAM', 'CLIP', 'ENDING'].includes(stage.stage) || stage.ending?.draining || stage.media?.revision === candidate?.id;
-    el('library-replace-return').disabled = !usable || !reviewed || !stage.return_media?.revision || ending || stage.return_media.revision === candidate?.id;
+    el('library-replace-now').disabled = !usable || !reviewed || !(stage.source==='brb'||['PRESTREAM', 'CLIP', 'ENDING','BRB'].includes(stage.stage)) || stage.ending?.draining || (stage.source==='brb'?stage.fallback_media?.revision:stage.media?.revision) === candidate?.id;
+    el('library-replace-return').disabled = !usable || !reviewed || !(stage.return_media?.revision||stage.return_fallback_media||stage.return_emergency) || ending || stage.return_media.revision === candidate?.id;
+    el('library-replace-now').textContent=stage.source==='brb'?'Replace fallback now':'Replace current video';
+    el('library-replace-return').textContent=stage.return_fallback_media||stage.return_emergency?'Replace fallback on return':'Replace video on return';
     el('selection-save').disabled = !connected || saving || !draft;
     el('selection-cancel').disabled = saving || !draft;
     el('selection-add-shortcut').disabled = !connected || saving;
@@ -185,8 +187,8 @@
     el('candidate-video').hidden = false;
     window.previewCandidate?.(candidate.id); render();
   });
-  el('library-replace-now').addEventListener('click', () => command('replace_now', {revision: revision()?.id}));
-  el('library-replace-return').addEventListener('click', () => command('replace_on_return', {revision: revision()?.id}));
+  el('library-replace-now').addEventListener('click', () => command(snapshot?.stage?.source==='brb'?'replace_fallback':'replace_now', {revision: revision()?.id}));
+  el('library-replace-return').addEventListener('click', () => command(snapshot?.stage?.return_fallback_media||snapshot?.stage?.return_emergency?'replace_fallback_on_return':'replace_on_return', {revision: revision()?.id}));
   for (const action of ['pause', 'resume']) el(`playback-${action}`).addEventListener('click', () => command(action, {}, false));
   el('playback-stop').addEventListener('click', () => command('stop_clip'));
   el('playback-loop').addEventListener('change', () => command('set_loop', {loop: el('playback-loop').checked}, false));

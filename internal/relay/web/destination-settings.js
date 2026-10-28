@@ -14,10 +14,10 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   const list = node('div'); list.className = 'destination-settings-list';
   const form = node('form');
   const fields = node('fieldset'); fields.disabled = true; fields.append(node('legend', 'Add or edit a destination'));
-  // Default ingest addresses: https://ingest.twitch.tv/ingests and OBS's
-  // plugins/rtmp-services/data/services.json. Kick supplies the URL in its dashboard.
+  // Twitch servers come from its public discovery API. YouTube's preset follows
+  // OBS's services.json. Kick supplies the URL in its dashboard.
   const presets = {
-    twitch: {name: 'Twitch', url: 'rtmps://ingest.global-contribute.live-video.net:443/app'},
+    twitch: {name: 'Twitch', url: ''},
     youtube: {name: 'YouTube', url: 'rtmps://a.rtmps.youtube.com:443/live2'},
     kick: {name: 'Kick', url: ''},
   };
@@ -37,19 +37,59 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   const key = input('Stream key', 'password', 'destination_key'); key.autocomplete = 'new-password'; key.maxLength = 2048;
   const platformHint = node('p'); platformHint.id = 'destination-platform-hint';
   platform.setAttribute('aria-describedby', platformHint.id); fields.append(platformHint);
-  platform.onchange = () => {
+  const serverLabel = node('label', 'Twitch server');
+  const server = node('select'); server.name = 'twitch_ingest';
+  serverLabel.append(server); serverLabel.hidden = true;
+  const discover = node('button', 'Choose Twitch server'); discover.type = 'button'; discover.hidden = true;
+  fields.append(serverLabel, discover);
+  let discovery = 0;
+  server.onchange = () => { if (server.value) url.value = server.value; };
+  async function discoverTwitch({prefill = false} = {}) {
+    const attempt = ++discovery;
+    const startingURL = url.value;
+    serverLabel.hidden = false; server.replaceChildren(); server.disabled = true;
+    discover.hidden = false; discover.disabled = true;
+    platformHint.textContent = 'Loading Twitch ingest servers…';
+    try {
+      const ingests = await request('/api/destination-presets/twitch');
+      if (attempt !== discovery) return;
+      if (!Array.isArray(ingests) || !ingests.length) throw new Error('Twitch returned no servers. Retry or enter a server URL manually.');
+      const placeholder = node('option', 'Choose a server'); placeholder.value = ''; server.append(placeholder);
+      for (const ingest of ingests) {
+        const option = node('option', ingest.name); option.value = ingest.url; server.append(option);
+      }
+      server.disabled = false;
+      if (prefill && url.value === startingURL) url.value = ingests[0].url;
+      server.value = ingests.some(ingest => ingest.url === url.value) ? url.value : '';
+      platformHint.textContent = 'Servers supplied by Twitch. Choose a region or edit the URL; your stream key stays separate.';
+      discover.textContent = 'Refresh Twitch servers';
+    } catch (error) {
+      if (attempt === discovery) {
+        platformHint.textContent = error.message;
+        discover.textContent = 'Retry Twitch servers';
+      }
+    } finally {
+      if (attempt === discovery) discover.disabled = false;
+    }
+  }
+  discover.onclick = () => discoverTwitch();
+  platform.onchange = async () => {
+    if (editing) return;
+    discovery++; serverLabel.hidden = true; discover.hidden = true;
     const preset = presets[platform.value];
     if (preset) { name.value = preset.name; url.value = preset.url; key.value = ''; }
     platformHint.textContent = platform.value === 'kick'
       ? 'Copy your server URL and stream key from Kick Creator Dashboard → Channel → Stream URL and Key.'
       : 'You can edit the name and server URL. Paste the stream key from your platform dashboard.';
+    if (platform.value === 'twitch') await discoverTwitch({prefill: true});
   };
   const hint = node('p', 'New destinations start disabled. Enable delivery in Live after checking readiness.');
   const save = node('button', 'Add destination'); save.type = 'submit';
   const cancel = node('button', 'Cancel edit'); cancel.type = 'button'; cancel.hidden = true;
   fields.append(hint, save, cancel); form.append(fields);
   const retry = node('button', 'Refresh destinations'); retry.type = 'button'; retry.className = 'preview-button';
-  container.replaceChildren(heading, message, retry, list, form);
+  const add=node('button','Add destination');add.type='button';add.className='primary-button';add.onclick=()=>{form.hidden=false;name.focus();};
+  form.hidden=true;container.replaceChildren(heading, message, add, retry, list, form);
   baseline = JSON.stringify([name.value, url.value, key.value]);
   window.addEventListener('beforeunload', event => {
     if (!window.workspace?.departureApproved && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; }
@@ -60,7 +100,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     return response.json();
   }
   function reset() {
-    editing = ''; form.reset(); cancel.hidden = true; save.textContent = 'Add destination'; key.placeholder = '';
+    editing = ''; discovery++; serverLabel.hidden = true; discover.hidden = true; form.hidden = true; form.reset(); cancel.hidden = true; save.textContent = 'Add destination'; key.placeholder = '';
     platform.value = 'custom'; platform.disabled = false; platformLabel.hidden = false; platformHint.textContent = '';
     hint.textContent = 'New destinations start disabled. Enable delivery in Live after checking readiness.';
     baseline = JSON.stringify([name.value, url.value, key.value]);
@@ -79,8 +119,10 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
       const edit = node('button', 'Edit'); edit.type = 'button'; edit.disabled = busy || !snapshot.managed;
       edit.onclick = () => {
         if (dirty() && !window.confirm('Discard the unsaved destination draft and edit this destination?')) return;
-        editing = destination.name; name.value = destination.name; url.value = destination.url; key.value = '';
+        editing = destination.name;form.hidden=false;discovery++;serverLabel.hidden=true; name.value = destination.name; url.value = destination.url; key.value = '';
         platform.disabled = true; platformLabel.hidden = true; platformHint.textContent = '';
+        discover.hidden = !/\.(?:live-video\.net|twitch\.tv)(?::[0-9]+)?\//.test(destination.url);
+        discover.disabled = false; discover.textContent = 'Choose Twitch server';
         key.placeholder = destination.has_key ? 'Leave blank to keep stored key' : 'Enter stream key';
         hint.textContent = 'Leaving the key blank preserves the stored key. Saving an active destination reconnects only that destination.';
         save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value]); name.focus();

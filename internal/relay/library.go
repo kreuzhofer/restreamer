@@ -99,7 +99,28 @@ func (s *Server) initializeLibrary() error {
 	if err := s.library.loadRevisions(); err != nil {
 		return err
 	}
-	return s.library.recoverPresentationFiles()
+	if err := s.library.recoverPresentationFiles(); err != nil {
+		return err
+	}
+	if s.library.selected.fallbackRevision() != "" {
+		s.broadcast.fallbackManaged = true
+		descriptor, err := s.fallbackDescriptor(s.library.selected)
+		if err != nil {
+			s.broadcast.fallbackError = "Saved fallback is unavailable; select a ready video in Show setup."
+			s.broadcast.fallbackFailed = true
+		} else {
+			s.broadcast.fallbackNext = descriptor
+		}
+		emergency, err := s.prepareEmergency()
+		if err != nil {
+			return err
+		}
+		s.broadcast.emergency = emergency
+		if s.broadcast.fallbackFailed {
+			s.broadcast.fallbackMedia = emergency
+		}
+	}
+	return nil
 }
 func (l *videoLibrary) notify() {
 	select {

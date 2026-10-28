@@ -70,11 +70,11 @@ func (b *broadcast) applyReplacement(cmd StageCommand, candidate *clipPlayback, 
 }
 
 func (b *broadcast) retainsPlayback(candidate *clipPlayback) bool {
-	if candidate == b.clip {
+	if candidate == b.clip || candidate == b.fallback {
 		return true
 	}
 	for frame := b.control.returnTo; frame != nil; frame = frame.returnTo {
-		if frame.clip == candidate {
+		if frame.clip == candidate || frame.fallback == candidate {
 			return true
 		}
 	}

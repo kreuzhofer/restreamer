@@ -60,7 +60,7 @@ func (s *Server) stageCommandHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCommandResult(w, 409, CommandResult{ID: cmd.ID, State: "rejected", Reason: endingErr.Error()})
 		return
 	}
-	if cmd.Action == "brb" && s.library != nil && (s.library.selections().BRB != "" || cmd.Revision != "") || cmd.Action == "prestream" || cmd.Action == "play_clip" || cmd.Action == "end_stream" || cmd.Action == "replace_now" || cmd.Action == "replace_on_return" || cmd.Action == "retry" {
+	if cmd.Action == "brb" && s.library != nil && (s.library.selections().BRB != "" || cmd.Revision != "") || cmd.Action == "prestream" || cmd.Action == "play_clip" || cmd.Action == "end_stream" || cmd.Action == "replace_now" || cmd.Action == "replace_on_return" || cmd.Action == "retry" || cmd.Action == "replace_fallback" || cmd.Action == "replace_fallback_on_return" {
 		b.mu.Lock()
 		skip := b.control.commands[cmd.ID] != nil || cmd.Action == "end_stream" && (b.control.stage == "ENDING" || b.control.stage == "OFF") || cmd.Action == "prestream" && b.control.stage == "PRESTREAM" || cmd.Action == "play_clip" && (b.control.stage == "OFF" || b.control.stage == "CLIP" && b.clip != nil && b.clip.Revision == cmd.Revision)
 		b.mu.Unlock()
@@ -187,11 +187,20 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 	if !noop && cmd.Action != "cancel_pending" && !directPlaybackAction(cmd.Action) && !cmd.Confirmed {
 		return reject("Review and confirm this broadcast action")
 	}
-	if cmd.Action != "go_live" && cmd.Action != "prestream" && cmd.Action != "play_clip" && cmd.Action != "brb" && cmd.Action != "return" && cmd.Action != "stop_now" && cmd.Action != "cancel_pending" && !directPlaybackAction(cmd.Action) && cmd.Action != "stop_clip" && cmd.Action != "end_stream" && cmd.Action != "replace_now" && cmd.Action != "replace_on_return" && cmd.Action != "retry" {
+	if cmd.Action != "go_live" && cmd.Action != "prestream" && cmd.Action != "play_clip" && cmd.Action != "brb" && cmd.Action != "return" && cmd.Action != "stop_now" && cmd.Action != "cancel_pending" && !directPlaybackAction(cmd.Action) && cmd.Action != "stop_clip" && cmd.Action != "end_stream" && cmd.Action != "replace_now" && cmd.Action != "replace_on_return" && cmd.Action != "retry" && cmd.Action != "replace_fallback" && cmd.Action != "replace_fallback_on_return" {
 		return reject("Unknown stage action")
 	}
 	if c.stage == "OFF" && (cmd.Action == "brb" || cmd.Action == "return" || cmd.Action == "play_clip" || cmd.Action == "end_stream") {
 		return reject("Start prestream or go live first")
+	}
+	if cmd.Action == "replace_fallback" && (c.stage == "OFF" || (!b.active && !b.fallbackFailed) || candidate == nil) {
+		return reject("Review an active fallback and a ready replacement first")
+	}
+	if cmd.Action == "replace_fallback_on_return" {
+		f := c.returnTo
+		if candidate == nil || f == nil || (f.fallback == nil && f.fallbackMedia == nil && !f.fallbackFailed) {
+			return reject("Review a suspended fallback and a ready replacement first")
+		}
 	}
 	if cmd.Action == "play_clip" && !noop && (candidate == nil || b.media == nil) {
 		return reject("Select a ready clip and prepare fallback BRB")
@@ -256,6 +265,24 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 	result := CommandResult{ID: cmd.ID, State: "completed"}
 	if !noop {
 		switch cmd.Action {
+		case "replace_fallback_on_return":
+			frame := c.returnTo
+			if frame.fallback != nil {
+				frame.fallback.reader.close()
+			}
+			candidate.loop = true
+			frame.fallback = candidate
+			frame.fallbackMedia = nil
+			frame.fallbackFailed = false
+			frame.fallbackError = ""
+			c.version++
+		case "replace_fallback":
+			b.closeFallback()
+			b.fallback = candidate
+			candidate.loop = true
+			b.active = true
+			b.live = false
+			c.version++
 		case "retry":
 			b.cancelPending("cancelled", "Superseded by confirmed Retry")
 			candidate.loop, candidate.paused = b.clip.loop, b.clip.paused
@@ -333,6 +360,7 @@ func (b *broadcast) commandLocked(cmd StageCommand, now time.Time, candidate *cl
 			b.cancelPending("cancelled", "Superseded by Return")
 			b.restoreStage(c.returnTo, now)
 		case "stop_now":
+			b.closeFallback()
 			b.cancelEnding()
 			b.cancelPending("cancelled", "Broadcast stopped")
 			b.stopClip("")

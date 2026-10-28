@@ -22,29 +22,34 @@ type BRBStatus struct {
 // A broadcast outlives publishers. All source selection and timestamp mapping
 // happen under mu, before fanout; output failures remain independent.
 type broadcast struct {
-	control                 stageControl
-	clip                    *clipPlayback
-	playbackError           string
-	previewChanged          chan struct{}
-	previewEpoch            uint64
-	lastTick                time.Time
-	attached                time.Time
-	mu                      sync.Mutex
-	server                  *Server
-	hub                     *hub
-	media                   *brbMedia
-	manual, active, live    bool
-	headers                 [3]*rtmp.Message
-	lastVideo, lastAudio    time.Time
-	closeInput              func()
-	offset, inputBase, last time.Duration
-	trackLast               [2]time.Duration
-	started                 time.Time
-	fallbackStart           time.Time
-	fallbackBase            time.Duration
-	videoIndex, audioIndex  int
-	videoLoop, audioLoop    time.Duration
-	lastError               string
+	fallbackNext, fallback          *clipPlayback
+	fallbackMedia, emergency        *brbMedia
+	fallbackManaged                 bool
+	fallbackFailed, playingFallback bool
+	fallbackError                   string
+	control                         stageControl
+	clip                            *clipPlayback
+	playbackError                   string
+	previewChanged                  chan struct{}
+	previewEpoch                    uint64
+	lastTick                        time.Time
+	attached                        time.Time
+	mu                              sync.Mutex
+	server                          *Server
+	hub                             *hub
+	media                           *brbMedia
+	manual, active, live            bool
+	headers                         [3]*rtmp.Message
+	lastVideo, lastAudio            time.Time
+	closeInput                      func()
+	offset, inputBase, last         time.Duration
+	trackLast                       [2]time.Duration
+	started                         time.Time
+	fallbackStart                   time.Time
+	fallbackBase                    time.Duration
+	videoIndex, audioIndex          int
+	videoLoop, audioLoop            time.Duration
+	lastError                       string
 }
 
 func newBroadcast(s *Server, media *brbMedia) *broadcast {
@@ -56,7 +61,14 @@ func newBroadcast(s *Server, media *brbMedia) *broadcast {
 }
 
 func (b *broadcast) run(ctx context.Context) {
-	defer func() { b.mu.Lock(); b.stopClip(""); b.clearReturn(); b.resetBroadcastPreview(); b.mu.Unlock() }()
+	defer func() {
+		b.mu.Lock()
+		b.stopClip("")
+		b.closeFallback()
+		b.clearReturn()
+		b.resetBroadcastPreview()
+		b.mu.Unlock()
+	}()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -84,7 +96,7 @@ func (b *broadcast) status() BRBStatus {
 	} else if b.live && b.server.forwarding.Load() {
 		reason = "live"
 	}
-	return BRBStatus{Enabled: b.media != nil, Ready: b.media != nil, Active: b.active && b.control.stage != "OFF", Manual: b.manual, Reason: reason, Error: b.lastError}
+	return BRBStatus{Enabled: b.media != nil, Ready: b.media != nil, Active: b.active && b.control.stage != "OFF", Manual: b.manual, Reason: reason, Error: b.lastError + b.fallbackError}
 }
 
 func (b *broadcast) setManual(enabled bool) {
@@ -129,6 +141,7 @@ func (b *broadcast) tick(now time.Time) {
 	b.lastTick = now
 	b.expirePending(now)
 	if b.control.stage == "OFF" {
+		b.closeFallback()
 		b.active = false
 		b.live = false
 		return
@@ -159,11 +172,21 @@ func (b *broadcast) tick(now time.Time) {
 		if !previousTick.IsZero() && now.Sub(previousTick) > 250*time.Millisecond {
 			b.startFallback(now)
 		}
-		b.sendFallback(now)
+		b.tickFallback(now)
 	}
 }
 
 func (b *broadcast) startFallback(now time.Time) {
+	if b.beginFallback(now) {
+		b.active = true
+		b.live = false
+		return
+	}
+	if b.fallbackMedia != nil {
+		b.startLegacyFallback(now)
+	}
+}
+func (b *broadcast) startLegacyFallback(now time.Time) {
 	b.resetBroadcastPreview()
 	b.active = true
 	b.live = false
@@ -172,16 +195,16 @@ func (b *broadcast) startFallback(now time.Time) {
 	b.videoIndex, b.audioIndex = 0, 0
 	b.videoLoop, b.audioLoop = 0, 0
 	b.hub.clearHeaders()
-	b.emit(b.media.video.header, b.fallbackBase)
-	b.emit(b.media.audio.header, b.fallbackBase)
+	b.emit(b.fallbackMedia.video.header, b.fallbackBase)
+	b.emit(b.fallbackMedia.audio.header, b.fallbackBase)
 	b.server.log.Info("BRB active", "manual", b.manual)
 }
 
 func (b *broadcast) sendFallback(now time.Time) {
 	elapsed := now.Sub(b.fallbackStart)
 	for sent := 0; sent < 256; sent++ {
-		v := b.media.video.frames[b.videoIndex]
-		a := b.media.audio.frames[b.audioIndex]
+		v := b.fallbackMedia.video.frames[b.videoIndex]
+		a := b.fallbackMedia.audio.frames[b.audioIndex]
 		vt, at := b.videoLoop+v.Timestamp, b.audioLoop+a.Timestamp
 		if min(vt, at) > elapsed {
 			return
@@ -189,16 +212,16 @@ func (b *broadcast) sendFallback(now time.Time) {
 		if vt <= at {
 			b.emit(v, b.fallbackBase+vt)
 			b.videoIndex++
-			if b.videoIndex == len(b.media.video.frames) {
+			if b.videoIndex == len(b.fallbackMedia.video.frames) {
 				b.videoIndex = 0
-				b.videoLoop += b.media.video.duration
+				b.videoLoop += b.fallbackMedia.video.duration
 			}
 		} else {
 			b.emit(a, b.fallbackBase+at)
 			b.audioIndex++
-			if b.audioIndex == len(b.media.audio.frames) {
+			if b.audioIndex == len(b.fallbackMedia.audio.frames) {
 				b.audioIndex = 0
-				b.audioLoop += b.media.audio.duration
+				b.audioLoop += b.fallbackMedia.audio.duration
 			}
 		}
 	}
@@ -263,6 +286,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 			}
 		}
 		b.resetBroadcastPreview()
+		b.closeFallback()
 		b.live = true
 		b.active = false
 		b.lastError = ""

@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+ <script src="/studio-routing.js" defer></script>
  <meta charset="utf-8">
  <meta name="viewport" content="width=device-width, initial-scale=1">
  <meta name="color-scheme" content="dark">
@@ -27,12 +28,14 @@
  <script src="/workspace-layout.js" defer></script>
  <link rel="stylesheet" href="/mobile-remote.css">
  <script src="/mobile-remote.js" defer></script>
+ <link rel="stylesheet" href="/studio-system.css">
+ <script src="/studio-system.js" defer></script>
 </head>
 <body>
  <main>
   <header class="workspace-header">
-  <a class="brand" href="/live" aria-label="Restreamer Live"><span class="brand-mark" aria-hidden="true">↗</span> restreamer <span class="workspace-wordmark">/ studio</span></a>
-  <nav class="workspace-nav" aria-label="Workspace"><a href="/live" data-workspace="live">Live</a><a href="/studio" data-workspace="studio">Studio</a><a href="/settings" data-workspace="settings">Settings</a></nav>
+  <a class="brand" href="/live" aria-label="Restreamer Live">restreamer </a>
+  <nav class="workspace-nav" aria-label="Main navigation"><a href="/live" data-workspace="live">Live</a><a href="/setup" data-workspace="setup">Show setup</a><a href="/library" data-workspace="library">Library</a><a href="/settings" data-workspace="settings">Settings</a></nav>
   <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Connecting…</span></div>
  </header>
  <div id="workspace-status" class="workspace-status" role="status" aria-label="Broadcast status">
@@ -45,9 +48,9 @@
   <nav class="remote-panels" aria-label="Remote panels"><button type="button" data-remote-panel="operate" aria-controls="live-primary" aria-pressed="true">Operate</button><button type="button" data-remote-panel="signals" aria-controls="live-sidebar" aria-pressed="false">Signals &amp; destinations</button></nav>
   <div id="live-console" class="live-console">
    <div id="live-primary" class="live-primary" aria-label="Broadcast operation">
-  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><p class="eyebrow">ACTUAL SELECTED FEED</p><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
+  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
   <section class="panel stage-panel" aria-labelledby="stage-title">
-   <div class="panel-heading"><div><p class="eyebrow">SHOW CONTROL</p><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
+   <div class="panel-heading"><div><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
    <div id="delivery-banner" class="delivery-banner" role="status" hidden></div>
    <div class="stage-summary" aria-live="polite">
     <div><span class="stage-label">Selected stage</span><strong id="stage-selected">—</strong></div>
@@ -59,12 +62,12 @@
    <p id="stage-error" class="notice" role="alert" hidden></p>
    <p id="stage-completion" class="stage-help" role="status" hidden></p>
    <div class="stage-buttons" role="group" aria-label="Choose broadcast stage">
-    <button id="stage-prestream" class="stage-button" type="button" aria-pressed="false" disabled><span>01</span> Prestream<small>Loop starting soon</small></button>
-    <button id="stage-live" class="stage-button" type="button" aria-pressed="false" disabled><span>02</span> Go live<small>Switch to OBS</small></button>
-    <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled><span>03</span> BRB<small>Stay on a deliberate break</small></button>
-    <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled><span>04</span> End stream<small id="stage-ending-help">Play ending, then stop</small></button>
+    <button id="stage-prestream" class="stage-button" type="button" aria-pressed="false" disabled>Starting soon<small>Loop starting soon</small></button>
+    <button id="stage-live" class="stage-button" type="button" aria-pressed="false" disabled>Go live<small>Switch to OBS</small></button>
+    <button id="stage-brb" class="stage-button" type="button" aria-pressed="false" disabled>BRB<small>Stay on a deliberate break</small></button>
+    <button id="stage-ending" class="stage-button" type="button" aria-pressed="false" disabled>End stream<small id="stage-ending-help">Play ending, then stop</small></button>
    </div>
-   <div class="live-clips"><div class="live-clips-heading"><h3>Pinned clips</h3><a class="preview-button" href="/studio">Show setup · Prestream / BRB / Ending</a><button id="prepared-media-open" class="preview-button" type="button" aria-haspopup="dialog">Browse prepared media</button></div><p id="clip-shortcuts-empty" class="library-help">Pin clip shortcuts in prepared-media selections.</p><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
+   <div class="live-clips"><div class="live-clips-heading"><h3>Pinned clips</h3><a class="preview-button" href="/setup">Show setup · Prestream / BRB / Ending</a><button id="prepared-media-open" class="preview-button" type="button" aria-haspopup="dialog">Browse prepared media</button></div><p id="clip-shortcuts-empty" class="library-help">Pin clip shortcuts in prepared-media selections.</p><div id="clip-shortcuts" class="clip-shortcuts" role="group" aria-label="Clip shortcuts"></div></div>
    <div class="stage-secondary"><div class="stage-secondary-actions"><button id="stage-return-button" class="preview-button" type="button" disabled>Return</button><button id="stage-retry" class="preview-button" type="button" hidden>Retry playback</button><button id="stage-stop" class="danger-button" type="button" disabled>Stop now</button></div><label id="rehearsal-label" class="check-label"><input id="stage-rehearsal" type="checkbox"> Start a preview-only rehearsal</label></div>
    <details id="clip-playback-controls" class="clip-playback-controls" hidden><summary>Clip playback</summary>
      <p id="playback-status" role="status" class="library-help">No file playing</p>
@@ -79,7 +82,7 @@
    </div>
    <aside id="live-sidebar" class="live-sidebar" aria-label="Input and preparation">
   <section class="panel preview-panel" aria-labelledby="preview-title">
-   <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><p class="eyebrow">INCOMING VIDEO</p><h2 id="preview-title">OBS input</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
+   <div class="panel-heading"><div class="source-label"><span class="icon" aria-hidden="true">▷</span><div><h2 id="preview-title">OBS input</h2></div></div><button id="preview-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div>
    <div class="preview-screen"><video id="preview-video" controls autoplay muted playsinline aria-label="Live input preview"></video></div>
    <p id="preview-status" class="preview-status" role="status">Waiting for OBS input</p>
 
@@ -90,17 +93,17 @@
   </section>
    <details id="live-destinations" class="live-disclosure" open><summary>Destination delivery</summary>
   <section class="destinations" aria-labelledby="destinations-title">
-   <div class="section-heading"><div><p class="eyebrow">OUTGOING SIGNALS</p><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence" class="visually-hidden">Loading saved target states…</p></div>
+   <div class="section-heading"><div><h2 id="destinations-title">Destinations <span id="target-count" class="count"></span></h2></div><p id="persistence" class="visually-hidden">Loading saved target states…</p></div>
    <div id="targets" class="target-grid"></div>
   </section>
    </details>
    <details id="live-brb-tools" class="live-disclosure"><summary>BRB readiness &amp; activation</summary>
   <section class="panel brb-panel" aria-labelledby="brb-title">
-   <div class="panel-heading"><div><p class="eyebrow">DROP PROTECTION</p><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
+   <div class="panel-heading"><div><h2 id="brb-title">Be right back</h2></div><span id="brb-badge" class="badge">Loading</span></div>
    <div class="brb-control"><div><strong id="brb-status" role="status">Waiting for server data</strong><p id="brb-help">OBS disconnects activate BRB automatically. No time limit.</p></div></div>
    <p id="brb-active-profile" class="brb-active-profile" hidden></p>
    <p id="brb-error" class="notice" role="alert" hidden></p>
-   <p class="library-help"><a class="preview-button" href="/studio?collection=brb">BRB in Studio</a></p>
+   <p class="library-help"><a class="preview-button" href="/setup">Configure BRB in Show setup</a></p>
    <section id="brb-theme-settings"><p id="brb-theme-current" class="library-help"></p><p id="brb-theme-status" class="library-help" role="status" aria-live="polite"></p>
     <p id="brb-theme-error" class="notice" role="alert" hidden></p><p id="brb-theme-empty" class="library-help" role="status">Loading prepared BRB…</p><section id="brb-theme-candidate" hidden><h3>Prepared BRB · not active</h3><p id="brb-theme-candidate-detail" class="library-help"></p><div class="brb-save"><button id="brb-theme-preview" class="preview-button" type="button">Preview exact BRB</button><button id="brb-theme-activate" class="preview-button" type="button" disabled>Activate prepared BRB</button></div><video id="brb-theme-video" controls playsinline preload="metadata" hidden></video><p class="library-help">Preview shows one complete visual cycle with the captured audio. The visual cycle and your complete music track loop independently on air. Theme preparation never changes the music volume or duration.</p></section>
    </section>
@@ -109,7 +112,7 @@
    <details id="live-diagnostics" class="live-disclosure"><summary>Signal diagnostics</summary>
   <div class="graph-toolbar"><span>15-minute history</span><div class="graph-switch" role="group" aria-label="Graph metric"><button type="button" data-metric="bitrate" aria-pressed="true">Bitrate</button><button type="button" data-metric="fps" aria-pressed="false">FPS</button></div></div>
   <section class="panel input-panel" aria-labelledby="input-title">
-   <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><p class="eyebrow">INCOMING SIGNAL</p><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
+   <div class="panel-heading"><div class="source-label"><span class="icon input-icon" aria-hidden="true">↳</span><div><h2 id="input-title">OBS input</h2></div></div><span id="input-status" class="badge">Loading</span></div>
    <div class="input-stats"><div><span class="metric" id="input-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong id="input-fps">—</strong><span>FPS received</span></div><div class="secondary-stat"><strong id="input-peak">—</strong><span>Mbps peak · 15 min</span></div><div class="secondary-stat"><strong id="active-targets">—</strong><span>destinations streaming</span></div></div>
    <div id="input-chart" class="chart input-chart" aria-label="Input bitrate over the past 15 minutes"></div>
    <div class="panel-footer"><span><span class="legend input-legend"></span><span id="input-graph-label">Input bitrate · Mbps</span></span><span id="input-detail">Waiting for server data</span></div>
@@ -121,7 +124,7 @@
   </div>
   </div>
   <section id="settings-workspace" data-workspace-panel="settings" class="settings-workspace" aria-labelledby="settings-title" hidden>
-   <p class="eyebrow">CONNECTIONS &amp; SETUP</p><h1 id="settings-title" tabindex="-1">Settings</h1>
+   <h1 id="settings-title" tabindex="-1">Settings</h1>
    <p class="desktop-only-note">Ingestion keys, destination setup and profile changes require desktop. Use Live on your phone to switch destination delivery and operate prepared media.</p>
    <div class="settings-desktop">
    <section id="ingestion-settings" class="panel settings-ingestion" data-ingestion-settings aria-label="OBS ingestion"></section>
@@ -129,7 +132,7 @@
    <section class="panel settings-profile" aria-label="Streaming profile">
    <p id="profile-unavailable" class="profile-help">Loading streaming profile…</p>
    <div id="input-profile" class="input-profile" hidden>
-    <h3>Shared streaming profile</h3>
+    <h2>Shared streaming profile</h2>
     <p id="profile-active" class="brb-active-profile"></p>
     <p class="profile-help">Required OBS output settings, also used for BRB and prepared videos. Set OBS to match; saving here does not configure OBS. H.264 video and AAC-LC stereo audio.</p>
     <form id="profile-form">
@@ -148,13 +151,13 @@
   </section>
  </main>
 <dialog id="prepared-media-drawer" class="prepared-media-drawer" aria-labelledby="prepared-media-title">
- <header class="prepared-media-heading"><div><p class="eyebrow">READY CONTENT</p><h2 id="prepared-media-title" tabindex="-1">Prepared media</h2></div><button id="prepared-media-close" class="preview-button" type="button">Close</button></header>
+ <header class="prepared-media-heading"><div><h2 id="prepared-media-title" tabindex="-1">Prepared media</h2></div><button id="prepared-media-close" class="preview-button" type="button">Close</button></header>
  <p id="library-loading" class="library-help" role="status">Loading prepared media…</p>
  <p id="library-unavailable" class="library-help" hidden>Prepared media is unavailable. Configure the media library on the server, then prepare content in Studio.</p>
   <section id="library-panel" class="panel library-panel" aria-labelledby="library-title" hidden>
-   <div class="panel-heading"><div><p class="eyebrow">PREPARED CONTENT</p><h2 id="library-title">Browse exact revisions</h2></div><span id="library-count" class="badge">Loading</span></div>
+   <div class="panel-heading"><div><h2 id="library-title">Browse exact revisions</h2></div><span id="library-count" class="badge">Loading</span></div>
    <p class="library-help">Browse and preview an exact revision before selecting or activating it. Saved selections affect the next use; current and suspended playback retain their revision.</p>
-   <a class="preview-button remote-desktop" href="/studio?collection=media">Upload &amp; prepare in Studio Media</a>
+   <a class="preview-button remote-desktop" href="/library?collection=media">Upload &amp; prepare in Studio Media</a>
    <p class="remote-only library-help">Uploads and preparation require desktop. You can preview exact prepared revisions, select stage media and play clips here.</p>
    <p id="library-empty" class="library-help" hidden>No prepared media yet. Prepare an upload or generate a design in Studio, then return here to review and select it.</p>
    <p id="library-error" class="notice" role="alert" hidden></p>
@@ -177,7 +180,7 @@
  </dialog>
  <template id="target-template">
   <article class="panel target-panel">
-   <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><p class="eyebrow">DESTINATION</p><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>
+   <div class="panel-heading"><div class="source-label"><span class="icon target-icon" aria-hidden="true">↗</span><div><h3 class="target-name"></h3></div></div><span class="badge target-status">Loading</span><button class="toggle" type="button" role="switch" aria-checked="false"><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-text">Enable</span></button></div>
    <p class="target-brief"></p>
    <details class="target-diagnostics"><summary>Signal details</summary>
    <div class="target-stats"><div><span class="metric target-rate">—</span><span class="unit">Mbps</span><p class="metric-label">Current bitrate</p></div><div class="secondary-stat"><strong class="target-peak">—</strong><span>Mbps peak · 15 min</span></div></div>

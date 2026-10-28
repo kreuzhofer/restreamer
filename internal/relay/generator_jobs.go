@@ -28,6 +28,8 @@ const generatorTimeout = 15 * time.Minute
 // GenerationJob captures immutable inputs. Only state, progress, error and the
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
+	Name              string                 `json:"name,omitempty"`
+	BRBDraft          *brbSettings           `json:"brb_draft,omitempty"`
 	Kind              string                 `json:"kind,omitempty"`
 	BRBDigest         string                 `json:"brb_digest,omitempty"`
 	BRBFrames         int                    `json:"brb_frames,omitempty"`

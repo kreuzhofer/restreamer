@@ -5,15 +5,22 @@ import "time"
 // A frame retains the original source of a temporary interruption. Clip
 // replacement updates the current clip; it never pushes another clip frame.
 type stageFrame struct {
-	stage    string
-	clip     *clipPlayback
-	returnTo *stageFrame
-	error    string
+	fallback       *clipPlayback
+	fallbackMedia  *brbMedia
+	fallbackFailed bool
+	fallbackError  string
+	stage          string
+	clip           *clipPlayback
+	returnTo       *stageFrame
+	error          string
 }
 
 func closeStageFrame(frame *stageFrame) {
 	if frame == nil {
 		return
+	}
+	if frame.fallback != nil {
+		frame.fallback.reader.close()
 	}
 	if frame.clip != nil {
 		frame.clip.reader.close()
@@ -27,10 +34,17 @@ func (b *broadcast) clearReturn() {
 }
 
 func (b *broadcast) suspendStage(now time.Time) *stageFrame {
+	if b.fallback != nil {
+		b.fallback.freeze(now)
+	}
 	if b.clip != nil {
 		b.clip.freeze(now)
 	}
-	f := &stageFrame{stage: b.control.stage, clip: b.clip, returnTo: b.control.returnTo, error: b.playbackError}
+	f := &stageFrame{fallback: b.fallback, fallbackMedia: b.fallbackMedia, fallbackFailed: b.fallbackFailed, fallbackError: b.fallbackError, stage: b.control.stage, clip: b.clip, returnTo: b.control.returnTo, error: b.playbackError}
+	b.fallback = nil
+	b.fallbackMedia = nil
+	b.fallbackFailed = false
+	b.fallbackError = ""
 	b.clip = nil
 	b.control.returnTo = nil
 	return f
@@ -38,6 +52,11 @@ func (b *broadcast) suspendStage(now time.Time) *stageFrame {
 
 func (b *broadcast) restoreStage(frame *stageFrame, now time.Time) {
 	b.stopClip("")
+	b.closeFallback()
+	b.fallback = frame.fallback
+	b.fallbackMedia = frame.fallbackMedia
+	b.fallbackFailed = frame.fallbackFailed
+	b.fallbackError = frame.fallbackError
 	b.control.stage = frame.stage
 	b.control.returnTo = frame.returnTo
 	b.control.failed = frame.error != ""
@@ -59,6 +78,10 @@ func (b *broadcast) restoreStage(frame *stageFrame, now time.Time) {
 }
 
 func (b *broadcast) failPlayback(reason string, now time.Time) {
+	if b.playingFallback {
+		b.fallbackFailure(reason, now)
+		return
+	}
 	if b.clip != nil {
 		b.clip.freeze(now)
 		b.clip.reader.close()

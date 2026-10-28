@@ -20,6 +20,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	private.HandleFunc("GET /api/destination-presets/twitch", s.twitchIngestsHTTP)
 	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)
@@ -38,10 +39,10 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/stage/commands/{id}", s.stageCommandOutcomeHTTP)
 	private.HandleFunc("GET /api/preview", s.preview)
 	private.HandleFunc("GET /api/broadcast-preview", s.preview)
-	for _, route := range []string{"/live", "/settings", "/studio"} {
+	for _, route := range []string{"/live", "/settings", "/studio", "/setup", "/library", "/editor"} {
 		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
 			page := "web/index.html"
-			if r.URL.Path == "/studio" {
+			if r.URL.Path == "/studio" || r.URL.Path == "/setup" || r.URL.Path == "/library" || r.URL.Path == "/editor" {
 				page = "web/generator.html"
 			}
 			data, _ := dashboardFiles.ReadFile(page)
@@ -54,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
+	private.HandleFunc("PUT /api/generator/jobs/{id}/name", s.generatorJobName)
 	private.HandleFunc("GET /api/generator/themes", s.generatorThemesHTTP)
 	private.HandleFunc("POST /api/generator/themes", s.generatorThemesHTTP)
 	private.HandleFunc("POST /api/generator/themes/preview", s.generatorThemePreviewHTTP)
