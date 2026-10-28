@@ -1330,10 +1330,17 @@ New installations start with no destinations. Add the RTMP/RTMPS server URL and
 stream key in desktop **Settings → Destinations**, then enable the prepared
 destination from **Live**. Names use 1–64 letters, digits, underscores, or hyphens.
 For a new destination, choose **Twitch**, **YouTube**, **Kick**, or **Custom** in
-the Platform dropdown. Twitch and YouTube prefill their secure server URLs and
-names; Kick prefills its name and asks for the server URL from your Kick Creator
-Dashboard. Names and URLs remain editable. Changing to a platform preset clears
-the draft stream key so a key from another platform is not reused.
+the Platform dropdown. Twitch loads its current secure servers from the
+[public Twitch ingest API](https://dev.twitch.tv/docs/video-broadcast/reference/).
+Choose a regional server in **Twitch server**; the initial address is the first
+server returned by Twitch, not a latency measurement. Discovery runs from the
+relay and never sends your stream key. If it fails, retry or enter the server URL
+manually. Editing an existing Twitch destination offers **Choose Twitch server**;
+loading that list keeps the saved URL until you select a server and save.
+YouTube prefills its secure server URL and name; Kick prefills its name and asks
+for the server URL from your Kick Creator Dashboard. Names and URLs remain
+editable. Changing to a platform preset clears the draft stream key so a key
+from another platform is not reused.
 Up to 16 destinations are supported. A destination without a key cannot send.
 Saving an edit with an empty key field preserves the stored key; enter a new key
 to replace it. Keys are masked and never returned by the management API or status.
