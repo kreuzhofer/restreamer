@@ -98,7 +98,9 @@
   }
   mobileStudio.addEventListener('change', updateStudioDevice);
   updateStudioDevice();
+  let animationTiming = null;
   const fields = {
+    animation_loops: ['scene-loops', 'loops-error'],
     ending_fade_seconds: ['ending-fade', 'ending-fade-error'],
     'soundtrack.asset': ['soundtrack-asset', 'soundtrack-asset-error'],
     'soundtrack.mode': ['soundtrack-mode', 'soundtrack-mode-error'],
@@ -278,6 +280,7 @@
     $('scene-font').value = scene.font || '';
     $('scene-size').value = scene.font_size || '';
     $('scene-duration').value = scene.duration_seconds;
+    renderSceneLength();
     $('scene-transition').value = scene.transition?.kind || 'cut';
     $('transition-duration').value = scene.transition?.duration_seconds || 0.5;
     renderTransitionControls();
@@ -301,16 +304,33 @@
     $('add-list-item').disabled = (scene.items || []).length >= 20;
     renderDesignTheme();
   }
+  function renderSceneLength(pending = false) {
+    const scene = draft?.scenes[selectedScene];
+    if (!scene) return;
+    const timing = animationTiming?.key === `${draft.stage}:${themeKey(draft.theme)}` ? animationTiming : null;
+    const loops = scene.animation_loops !== undefined;
+    $('scene-length-mode').value = loops ? 'loops' : 'seconds';
+    $('scene-length-mode').querySelector('[value="loops"]').disabled = !timing?.cycle;
+    $('scene-loops-control').hidden = !loops;
+    $('scene-seconds-control').hidden = loops;
+    $('scene-loops').value = scene.animation_loops ?? 1;
+    $('scene-loops').max = timing?.cycle ? Math.floor(3600 / timing.cycle) : 300;
+    $('scene-duration').value = scene.duration_seconds;
+    $('scene-length-help').textContent = !timing ? 'Checking the theme’s animation length…'
+      : !timing.cycle ? 'This theme has no repeating animation for this stage. Use seconds.'
+      : loops ? pending ? `${scene.animation_loops} × ${timing.cycle}s · calculating…` : `${scene.animation_loops} × ${timing.cycle}s = ${scene.animation_loops * timing.cycle}s. Render length: ${scene.duration_seconds}s, including any crossfade overlap.`
+      : `One animation loop is ${timing.cycle} seconds. Choose Animation loops to finish complete cycles. Background motion continues between scenes.`;
+  }
   function renderTransitionControls() {
     const last = selectedScene === draft.scenes.length - 1;
     $('transition-duration-controls').hidden = $('scene-transition').value !== 'crossfade';
-    $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Overlaps shorten the total duration. Generate to inspect the exact transition; the quick preview shows one scene.';
+    $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Seconds-based scenes lose the overlap from their duration; Animation loops adds it to preserve complete cycles. Generate to inspect the exact transition; the quick preview shows one scene.';
   }
   function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); showInspector('scene'); schedulePreview(); }
   function changed() {
     dirty = true; editSequence++;
     if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
-    renderScenes(); schedulePreview();
+    renderSceneLength(true); renderScenes(); schedulePreview();
   }
   function captureFields() {
     draft.name = $('design-name').value;
@@ -333,6 +353,8 @@
     if (imageValue) { const [id, revision] = imageValue.split(':'); scene.image = {id, revision: Number(revision)}; } else delete scene.image;
     scene.text = $('scene-text').value; scene.font = $('scene-font').value;
     scene.font_size = Number($('scene-size').value); scene.duration_seconds = Number($('scene-duration').value);
+    if ($('scene-length-mode').value === 'loops') scene.animation_loops = Number($('scene-loops').value);
+    else delete scene.animation_loops;
     scene.transition = $('scene-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('transition-duration').value)} : {kind: 'cut'};
     renderTransitionControls();
     scene.alignment = $('scene-alignment').value;
@@ -393,6 +415,14 @@
     try {
       const result = await (await request('/api/generator/validate', 'POST', snapshot, previewAbort.signal)).json();
       if (sequence !== previewSequence) return;
+      animationTiming = {key: `${draft.stage}:${themeKey(draft.theme)}`, cycle: result.animation_loop_seconds};
+      for (let i = 0; i < draft.scenes.length; i++) {
+        if (draft.scenes[i].animation_loops !== undefined && result.scenes?.[i]) {
+          draft.scenes[i].duration_seconds = result.scenes[i].duration_seconds;
+          snapshot.scenes[i].duration_seconds = result.scenes[i].duration_seconds;
+        }
+      }
+      renderSceneLength();
       validationIssues = result.issues;
       renderScenes();
       $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.duration_mode === 'music' ? 'per music pass (live repeats until stopped)' : draft.stage === 'prestream' ? 'per complete cycle after transition overlaps' : 'total after transition overlaps'} at ${result.profile.fps} fps`;

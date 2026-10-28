@@ -155,6 +155,7 @@ func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style media
 		backdrop += art.endingTailFilter(p.FPS, startFrame)
 	} else {
 		args = append(args, "-stream_loop", "-1")
+		backdrop += fmt.Sprintf(",trim=start_frame=%d,setpts=PTS-STARTPTS", startFrame%(art.seconds*p.FPS))
 	}
 	filter := fmt.Sprintf("[1:v]fps=%d,%s[backdrop];[backdrop][0:v]overlay=0:0:format=rgb,setsar=1,format=yuv420p[v]", p.FPS, backdrop)
 	return append(args, "-i", master, "-filter_complex", filter, "-map", "[v]"), nil
@@ -225,6 +226,7 @@ func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaautho
 		backdrop += art.endingTailFilter(p.FPS, startFrame)
 	} else {
 		args = append(args, "-stream_loop", "-1")
+		backdrop += fmt.Sprintf(",trim=start_frame=%d,setpts=PTS-STARTPTS", startFrame%(art.seconds*p.FPS))
 	}
 	args = append(args, "-i", master)
 	if frames > rangeFrames {

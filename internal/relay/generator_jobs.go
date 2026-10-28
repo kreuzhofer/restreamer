@@ -18,7 +18,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
-const generatorRenderer = "go-png-ffmpeg-v4"
+const generatorRenderer = "go-png-ffmpeg-v5"
 const maxGeneratorJobs = 200
 const maxGeneratorOutstanding = 8
 const maxGeneratorSeconds = 600
