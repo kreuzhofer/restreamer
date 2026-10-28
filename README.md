@@ -309,6 +309,11 @@ fragmented MP4; the browser decodes it through Media Source Extensions. No GPU,
 FFmpeg, transcoding, extra port, or external player dependency is required. The
 browser must support the input H.264 profile/resolution and AAC. Unsupported
 codecs and playback failures are shown in the panel. Video-only input also works.
+On compatible iPhone browsers (iOS 17.1 or later), the player uses Apple's
+ManagedMediaSource API when standard MediaSource is unavailable. AirPlay is
+disabled for these streamed monitors because they have no separate remote-playback
+source. If automatic playback is blocked, tap Play in the player. Browsers without
+either media-source API show an explicit unsupported-browser message.
 Playback starts at the next keyframe and reconnects after input changes; this is a
 live monitor, not a recording or a 15-minute playback buffer.
 

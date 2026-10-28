@@ -1,10 +1,35 @@
 'use strict';
+function previewMediaSource(video) {
+  const Source = window.MediaSource || window.ManagedMediaSource;
+  // iPhone exposes ManagedMediaSource only when remote playback is disabled
+  // (or an alternative AirPlay source is supplied). These authenticated monitors
+  // have no remote-playback source; this does not affect broadcast destinations.
+  if (Source && Source === window.ManagedMediaSource) video.disableRemotePlayback = true;
+  return Source;
+}
+function previewStreamingDemand(source, signal) {
+  if (signal.aborted) return Promise.reject(new DOMException('Stopped', 'AbortError'));
+  if (source.streaming !== false) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const finish = error => {
+      source.removeEventListener('startstreaming', ready);
+      signal.removeEventListener('abort', aborted);
+      error ? reject(error) : resolve();
+    };
+    const ready = () => finish();
+    const aborted = () => finish(new DOMException('Stopped', 'AbortError'));
+    source.addEventListener('startstreaming', ready, {once: true});
+    signal.addEventListener('abort', aborted, {once: true});
+    if (signal.aborted) aborted();
+    else if (source.streaming !== false) ready();
+  });
+}
 function createPreview(prefix, url, liveText, waitingText) {
   const video = document.querySelector(`#${prefix}-video`);
   const status = document.querySelector(`#${prefix}-status`);
   const toggle = document.querySelector(`#${prefix}-toggle`);
   let enabled = true, publishing = false, controller, retryAt = 0, epoch;
-  const MediaSourceClass = window.MediaSource;
+  const MediaSourceClass = previewMediaSource(video);
 
   function stop() {
     controller?.abort();
@@ -52,10 +77,14 @@ function createPreview(prefix, url, liveText, waitingText) {
       const source = new MediaSourceClass();
       objectURL = URL.createObjectURL(source);
       await event(source, 'sourceopen', signal, () => { video.src = objectURL; });
+      if (MediaSourceClass === window.ManagedMediaSource) video.play().catch(() => {
+        if (!signal.aborted) status.textContent = 'Preview ready · press Play in the player.';
+      });
       const buffer = source.addSourceBuffer(mime);
       reader = response.body.getReader();
       let playing = false;
       while (!signal.aborted) {
+        await previewStreamingDemand(source, signal);
         timeout = setTimeout(() => current.abort(new Error('Preview stream stalled. Retrying…')), 15000);
         const {done, value} = await reader.read();
         clearTimeout(timeout);
@@ -160,16 +189,21 @@ window.broadcastPreview = createPreview('broadcast','/api/broadcast-preview','Br
       clearTimeout(timeout);
       if (!response.ok) throw new Error((await response.text()).trim() || 'Ready revision preview unavailable.');
       const mime = response.headers.get('X-Preview-Codecs');
-      if (!window.MediaSource || !mime || !MediaSource.isTypeSupported(mime)) throw new Error('Preview needs a browser with Media Source Extensions and H.264/AAC support.');
-      const source = new MediaSource(); objectURL = URL.createObjectURL(source);
+      const MediaSourceClass = previewMediaSource(video);
+      if (!MediaSourceClass || !mime || !MediaSourceClass.isTypeSupported(mime)) throw new Error('Preview needs a browser with Media Source Extensions and H.264/AAC support.');
+      const source = new MediaSourceClass(); objectURL = URL.createObjectURL(source);
       await new Promise((resolve, reject) => {
         source.addEventListener('sourceopen', resolve, {once: true});
         current.signal.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), {once: true});
         video.src = objectURL;
       });
+      if (MediaSourceClass === window.ManagedMediaSource) video.play().catch(() => {
+        if (!current.signal.aborted) status.textContent = 'Preview ready · press Play in the player.';
+      });
       const buffer = source.addSourceBuffer(mime); reader = response.body.getReader();
       let started = false;
       while (!current.signal.aborted) {
+        await previewStreamingDemand(source, current.signal);
         timeout = setTimeout(() => current.abort(new Error('Revision preview stalled. Choose Preview revision to try again.')), 15000);
         const {done, value} = await reader.read();
         clearTimeout(timeout);
