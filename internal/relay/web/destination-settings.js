@@ -32,7 +32,9 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     const field = node('input'); field.type = type; field.name = name; field.autocomplete = 'off'; field.spellcheck = false;
     wrapper.append(field); fields.append(wrapper); return field;
   };
-  const name = input('Unique name', 'text', 'destination_name'); name.required = true; name.pattern = '[a-zA-Z0-9_-]{1,64}'; name.maxLength = 64;
+  const name = input('Unique name', 'text', 'destination_name'); name.required = true; name.pattern = '[a-zA-Z0-9_\\-](?:[a-zA-Z0-9_ \\-]{0,62}[a-zA-Z0-9_\\-])?'; name.maxLength = 64;
+  const nameHint = node('p', '1–64 characters: letters A–Z, numbers, underscores or hyphens. Spaces are allowed between words.'); nameHint.id = 'destination-name-hint'; nameHint.className = 'stage-help';
+  name.setAttribute('aria-describedby', nameHint.id); name.title = 'Use letters A–Z, numbers, spaces, underscores or hyphens, with no leading or trailing spaces.'; fields.append(nameHint);
   const url = input('RTMP or RTMPS server URL', 'url', 'destination_url'); url.required = true; url.maxLength = 2048;
   const key = input('Stream key', 'password', 'destination_key'); key.autocomplete = 'new-password'; key.maxLength = 2048;
   const platformHint = node('p'); platformHint.id = 'destination-platform-hint';

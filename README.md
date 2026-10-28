@@ -1344,7 +1344,8 @@ duration. Editing, generating and previewing never start or end a broadcast.
 
 New installations start with no destinations. Add the RTMP/RTMPS server URL and
 stream key in desktop **Settings → Destinations**, then enable the prepared
-destination from **Live**. Names use 1–64 letters, digits, underscores, or hyphens.
+destination from **Live**. Names use 1–64 letters A–Z, digits, spaces, underscores, or hyphens,
+with no leading or trailing spaces.
 For a new destination, choose **Twitch**, **YouTube**, **Kick**, or **Custom** in
 the Platform dropdown. Twitch loads its current secure servers from the
 [public Twitch ingest API](https://dev.twitch.tv/docs/video-broadcast/reference/).

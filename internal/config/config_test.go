@@ -190,3 +190,18 @@ func TestManagedIngestionConfigurationNeedsNoEnvironmentKey(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetNamesAllowSpacesWithoutRelaxingIngestionIdentifiers(t *testing.T) {
+	t.Setenv("TARGET_KEY", "test-key")
+	if _, err := loadText(t, strings.Replace(validJSON, `"name":"test"`, `"name":"Twitch Main"`, 1)); err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{
+		strings.Replace(validJSON, "input-key-1234567890", "input key 1234567890", 1),
+		strings.Replace(validJSON, "{", `{"application":"live app",`, 1),
+	} {
+		if _, err := loadText(t, body); err == nil {
+			t.Fatal("ingestion identifier accepted spaces")
+		}
+	}
+}
