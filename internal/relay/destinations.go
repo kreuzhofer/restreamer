@@ -126,11 +126,11 @@ func (s *Server) initializeDestinations() error {
 	return nil
 }
 
-var destinationName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var destinationName = regexp.MustCompile(`^[a-zA-Z0-9_ -]{1,64}$`)
 
 func validateDestination(target config.Target, allowUnavailable bool) error {
-	if !destinationName.MatchString(target.Name) {
-		return errors.New("Use a unique destination name with 1–64 letters, digits, underscores or hyphens")
+	if !destinationName.MatchString(target.Name) || strings.TrimSpace(target.Name) != target.Name {
+		return errors.New("Use a unique destination name with 1–64 letters A–Z, digits, spaces, underscores or hyphens; no leading or trailing spaces")
 	}
 	if len(target.URL) > 2048 || len(target.StreamKey) > 2048 || strings.ContainsAny(target.StreamKey, "\r\n\x00") {
 		return errors.New("Invalid destination URL or key")

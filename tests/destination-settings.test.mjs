@@ -124,3 +124,14 @@ test('existing Twitch destinations can discover servers without changing their s
  await ui.submit();const saved=JSON.parse(ui.calls.find(call=>call.method==='PUT').body);
  assert.equal(saved.url,'rtmps://euc10.contribute.live-video.net/app');assert.equal(Object.hasOwn(saved,'stream_key'),false);
 });
+
+
+test('destination name constraint accepts spaces and matches its visible help',async()=>{
+ const ui=await settings(),name=ui.input('Unique name');
+ const pattern=new RegExp(`^(?:${name.pattern})$`,'v');
+ for(const value of ['Twitch Main','YouTube Backup','a  b','_-','a'.repeat(64)])assert.ok(pattern.test(value),value);
+ for(const value of ['', ' ', ' Twitch','Twitch ', 'Twitch\tMain','Twitch/Main','a'.repeat(65)])assert.equal(pattern.test(value),false,value);
+ assert.ok(ui.container.all().some(element=>element.textContent.includes('Spaces are allowed')));
+ name.value='Twitch Main';ui.input('RTMP or RTMPS server URL').value='rtmp://localhost/app';await ui.submit();
+ assert.equal(JSON.parse(ui.calls.find(call=>call.method==='POST').body).name,'Twitch Main');
+});

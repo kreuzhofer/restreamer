@@ -17,14 +17,17 @@ import (
 func TestDestinationCreatePreserveKeyAndRestart(t *testing.T) {
 	cfg := config.Config{DashboardUsername: "test", DashboardPassword: "test", StateFile: filepath.Join(t.TempDir(), "switches.json")}
 	s := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	w := dashboardRequest(s, "POST", "/api/destinations", `{"version":0,"name":"local","url":"rtmp://localhost/live","stream_key":"private-key"}`)
+	w := dashboardRequest(s, "POST", "/api/destinations", `{"version":0,"name":"Twitch Main","url":"rtmp://localhost/live","stream_key":"private-key"}`)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	if strings.Contains(w.Body.String(), "private-key") {
 		t.Fatal("secret exposed")
 	}
-	w = dashboardRequest(s, "PUT", "/api/destinations/local", `{"version":1,"name":"local","url":"rtmp://localhost/next"}`)
+	if duplicate := dashboardRequest(s, "POST", "/api/destinations", `{"version":1,"name":"Twitch Main","url":"rtmp://localhost/app"}`); duplicate.Code != 400 {
+		t.Fatal("duplicate name accepted", duplicate.Code)
+	}
+	w = dashboardRequest(s, "PUT", "/api/destinations/Twitch%20Main", `{"version":1,"name":"Twitch Main","url":"rtmp://localhost/next"}`)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -38,13 +41,13 @@ func TestDestinationCreatePreserveKeyAndRestart(t *testing.T) {
 			URL    string `json:"url"`
 		} `json:"destinations"`
 	}
-	if json.Unmarshal(w.Body.Bytes(), &status) != nil || status.Version != 2 || len(status.Destinations) != 1 || !status.Destinations[0].HasKey || status.Destinations[0].URL != "rtmp://localhost/next" {
+	if json.Unmarshal(w.Body.Bytes(), &status) != nil || status.Version != 2 || len(status.Destinations) != 1 || !status.Destinations[0].HasKey || status.Destinations[0].URL != "rtmp://localhost/next" || status.Destinations[0].Name != "Twitch Main" {
 		t.Fatal(w.Body.String())
 	}
 	if readStage(t, restarted).Stage != "OFF" {
 		t.Fatal("restart resumed broadcast")
 	}
-	w = dashboardRequest(restarted, "DELETE", "/api/destinations/local", `{"version":2}`)
+	w = dashboardRequest(restarted, "DELETE", "/api/destinations/Twitch%20Main", `{"version":2}`)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -110,7 +113,7 @@ func TestDestinationDynamicDeliveryAndActiveEditConfirmation(t *testing.T) {
 	// Initialize before changing this test-only persistence setting.
 	_ = readStage(t, s)
 	s.cfg.DestinationsFile = filepath.Join(t.TempDir(), "destinations.json")
-	for i, target := range []config.Target{destination.target("one"), other.target("two")} {
+	for i, target := range []config.Target{destination.target("Twitch Main"), other.target("YouTube Backup")} {
 		body, _ := json.Marshal(map[string]any{"version": i, "name": target.Name, "url": target.URL, "stream_key": target.StreamKey})
 		if w := dashboardRequest(s, "POST", "/api/destinations", string(body)); w.Code != 200 {
 			t.Fatal(w.Code, w.Body.String())
@@ -132,9 +135,9 @@ func TestDestinationDynamicDeliveryAndActiveEditConfirmation(t *testing.T) {
 		Version int `json:"version"`
 	}
 	_ = json.Unmarshal(status.Body.Bytes(), &current)
-	edit := map[string]any{"version": current.Version, "name": "one", "url": destination.target("one").URL, "stream_key": "replacement-key"}
+	edit := map[string]any{"version": current.Version, "name": "Twitch Main", "url": destination.target("Twitch Main").URL, "stream_key": "replacement-key"}
 	body, _ := json.Marshal(edit)
-	if w := dashboardRequest(s, "PUT", "/api/destinations/one", string(body)); w.Code != 409 {
+	if w := dashboardRequest(s, "PUT", "/api/destinations/Twitch%20Main", string(body)); w.Code != 409 {
 		t.Fatal("unconfirmed active edit", w.Code)
 	}
 	stage := readStage(t, s)
@@ -142,7 +145,7 @@ func TestDestinationDynamicDeliveryAndActiveEditConfirmation(t *testing.T) {
 	edit["server_id"] = stage.ServerID
 	edit["context"] = stage.Context
 	body, _ = json.Marshal(edit)
-	if w := dashboardRequest(s, "PUT", "/api/destinations/one", string(body)); w.Code != 200 {
+	if w := dashboardRequest(s, "PUT", "/api/destinations/Twitch%20Main", string(body)); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	writePacket(t, publisher, keyframe(time.Second))
@@ -263,5 +266,18 @@ func TestDestinationRejectsInvalidPortsWithoutChangingSavedConfiguration(t *test
 	restarted := New(s.cfg, s.log)
 	if after := dashboardRequest(restarted, "GET", "/api/destinations", "").Body.String(); after != before {
 		t.Fatal("rejected port changed persisted configuration", after)
+	}
+}
+
+func TestDestinationNameValidation(t *testing.T) {
+	for _, name := range []string{"Twitch Main", "YouTube Backup", "a  b", "_-", strings.Repeat("a", 64)} {
+		if err := validateDestination(config.Target{Name: name}, true); err != nil {
+			t.Errorf("valid name %q: %v", name, err)
+		}
+	}
+	for _, name := range []string{"", " ", " Twitch", "Twitch ", "Twitch\tMain", "Twitch\nMain", "Twitch/Main", "Twitch%20Main", strings.Repeat("a", 65)} {
+		if err := validateDestination(config.Target{Name: name}, true); err == nil {
+			t.Errorf("invalid name accepted: %q", name)
+		}
 	}
 }

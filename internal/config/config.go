@@ -84,6 +84,7 @@ type Config struct {
 }
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+var targetName = regexp.MustCompile(`^[a-zA-Z0-9_ -]+$`)
 
 func Load(path string) (Config, error) {
 	f, err := os.Open(path)
@@ -218,8 +219,8 @@ func (c Config) Validate() error {
 	}
 	names := make(map[string]bool)
 	for i, t := range c.Targets {
-		if !identifier.MatchString(t.Name) || names[t.Name] {
-			return fmt.Errorf("target %d needs a unique name using letters, digits, underscores or hyphens", i+1)
+		if !targetName.MatchString(t.Name) || strings.TrimSpace(t.Name) != t.Name || names[t.Name] {
+			return fmt.Errorf("target %d needs a unique name using letters A–Z, digits, spaces, underscores or hyphens, without leading or trailing spaces", i+1)
 		}
 		names[t.Name] = true
 		if t.Enabled != "" && t.Enabled != "true" && t.Enabled != "false" {
