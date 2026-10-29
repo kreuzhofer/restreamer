@@ -1,0 +1,28 @@
+{
+  "name": "restreamer-streamdeck",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "validate": "streamdeck validate com.kreuzhofer.restreamer.sdPlugin",
+    "pack": "npm run build && streamdeck pack com.kreuzhofer.restreamer.sdPlugin --output dist --force --no-update-check"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "3.0.3"
+  },
+  "overrides": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@elgato/cli": "1.10.3",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

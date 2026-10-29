@@ -35,6 +35,8 @@ OBS ── RTMP :1935 ── Restreamer ┤
   OBS-input and broadcast previews. Every application launch starts OFF.
 - Exact prepared-media selections, predictable clip returns, bounded ending
   delivery, and isolated preview-only rehearsals.
+- Optional [Stream Deck plugin](integrations/streamdeck/README.md) with broadcast
+  controls, independent clip keys, protected Stop now, and relay delivery status.
 
 There is no live transcoding, recording, public playback endpoint, audio-only mode,
 Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher

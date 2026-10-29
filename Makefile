@@ -19,10 +19,15 @@ build:
 	CGO_ENABLED=0 go build -trimpath -o bin/restreamer ./cmd/restreamer
 test:
 	go test -race -timeout 20m ./...
-check: test check-web check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
+check: test check-web check-streamdeck check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
 	go vet ./...
 check-web:
 	node --test tests/*.test.mjs
+.PHONY: check-streamdeck
+check-streamdeck:
+	npm --prefix integrations/streamdeck ci --ignore-scripts
+	npm --prefix integrations/streamdeck test
+	npm --prefix integrations/streamdeck run pack
 cross-build:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/restreamer-linux-amd64 ./cmd/restreamer
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/restreamer-linux-arm64 ./cmd/restreamer
