@@ -207,7 +207,7 @@ suspended playback change only through a separately reviewed replacement in Live
 Open a design by its name in Show setup or Library. The dedicated editor keeps
 content, theme, music, draft preview and generated videos together for all three
 stage types. Generate captures saved inputs; it never selects a result or changes
-on-air media. Autosave, background progress, errors and retry remain visible.
+on-air media. Save status, background progress, errors and retry remain visible.
 Name a video to make variants recognizable; technical revision IDs are under
 Technical details. Older videos and maintenance actions open on demand.
 
@@ -837,7 +837,7 @@ In **Studio → Templates**, browse built-in starters and custom templates, then
 use **Use template** to choose a name and separate theme for an independent design.
 The collection also shows the open design as the source for explicit save/update.
 **Save as new template** captures the current draft content explicitly.
-**Update selected template** replaces only that reusable template; draft autosave
+**Update selected template** replaces only that reusable template; saving a design
 never does this. Copies are independent: changes to one show or the template do
 not change another show, a captured generation job, or prepared media. Templates
 preserve all supported scene fields and overrides, but do not select a theme.
@@ -1002,7 +1002,8 @@ Open **Studio → Designs** to create independent prestream or
 ending show designs. Add, remove, reorder or independently duplicate title and
 list scenes. Each defaults to 10 seconds and selects the built-in Retro theme
 revision independently of its
-text and timing. Drafts autosave beneath `<library_directory>/generator/designs`
+text and timing. Click **Save changes** to persist a design beneath
+`<library_directory>/generator/designs`
 (or the default BRB library directory). Wait for **Saved** before closing the tab.
 A failed save retains local edits and offers Retry; a concurrent-tab conflict
 requires Reload saved draft or Save local work as a copy. Neither draft saves nor
@@ -1039,7 +1040,9 @@ untrusted text strictly as raster data.
 
 ### Generate and review exact media
 
-Choose **Generate saved draft** after autosave finishes. The server captures that
+Choose **Generate video** after saving. New edits remain local and block generation
+until you click **Save changes** again. Save is disabled when unchanged; Generate
+is hidden when the current saved design already has a ready video. The server captures that
 acknowledged draft version, its exact theme revision and active streaming profile
 as an immutable design revision. Closing the browser does not stop generation;
 editing the draft creates newer work without changing the captured input. The
@@ -1132,7 +1135,7 @@ a restart marks unfinished jobs interrupted and removes incomplete workspace
 files. **Retry captured revision** explicitly creates a new job at the back of
 the queue using the interrupted, failed or cancelled job's immutable inputs,
 profile, renderer and duration. It does not use a newer editable draft or alter
-the previous outcome. To use newer edits, choose Generate saved draft instead.
+the previous outcome. To use newer edits, save the design and choose Generate video instead.
 If a server update removes the captured renderer version, its retry is rejected
 explicitly; generating the current saved draft is a new job and may include newer
 edits, not an equivalent replay of the old result.
@@ -1271,7 +1274,7 @@ The editor and captured job show the total after subtracting overlaps. For
 example, 0.8-, 0.6- and 1-second scenes with two 0.2-second crossfades produce
 2 seconds at 25 fps. Quick preview shows the selected individual scene and explains
 its transition; generate and play the exact output to inspect motion and audio.
-Invalid overlap edits remain saved with field errors, while generation preserves
+Invalid overlap edits can be explicitly saved with field errors, while generation preserves
 previous ready output. Source audio is combined on cumulative sample boundaries
 before continuous music and the single final AAC encode.
 

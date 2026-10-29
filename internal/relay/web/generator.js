@@ -20,7 +20,8 @@
   let conflict = false;
   let editSequence = 0;
   let previewSequence = 0;
-  let saveTimer;
+  let savedContent = '';
+  const contentKey = value => window.designEditState.contentKey(value);
   let previewTimer;
   let previewAbort;
   let jobs = [];
@@ -204,7 +205,6 @@
     if (!window.confirm(`Permanently delete “${design.name || 'Untitled design'}”, its generation history and generated files? Uploaded images, videos and music stay in Reusable media. Output shared with another saved result is kept. Selected or playing output blocks deletion.${draft?.id === design.id && dirty ? ' Unsaved edits to this design will also be discarded.' : ''}`)) return;
     deleting = true; editSequence++;
     const current = draft?.id === design.id;
-    if (current) clearTimeout(saveTimer);
     $('scene-form').inert = true;
     try {
       const result = await (await request(`/api/generator/designs/${design.id}`, 'DELETE', {version: current ? draft.version : design.version})).json();
@@ -218,7 +218,7 @@
       await listDesigns(); await loadJobs(); await loadAssets();
       notify(`Design deleted with ${result.deleted_media} generated file(s). Uploaded assets were kept.${result.retained_shared_media.length ? ' Shared generated output was retained for other results.' : ''}`);
     } catch (error) { notify(error.message); }
-    finally { deleting = false; $('scene-form').inert = false; if (draft && dirty && !conflict) saveTimer = setTimeout(() => saveDraft(), 700); }
+    finally { deleting = false; $('scene-form').inert = false; renderJobs(); }
   }
   function stopGeneratedPreview() {
     const video = $('generated-video'); video.pause(); video.removeAttribute('src'); video.load();
@@ -228,8 +228,7 @@
     if(document.body.dataset.workspace==='library')returnPath=location.pathname+location.search;
     const back=$('shared-editor-nav').querySelector('a');back.href=returnPath;back.textContent=returnPath.startsWith('/library')?'Library':'Show setup';
     if(value.stage==='brb'){location.href=`/editor?editor=brb&id=${encodeURIComponent(value.id)}&return=${encodeURIComponent(returnPath)}`;return;}
-    clearTimeout(saveTimer);
-    draft = value; dirty = false; conflict = false; editSequence++;
+    draft = value; savedContent = contentKey(value); dirty = false; conflict = false; editSequence++;
     loadPinnedTheme(value.theme);
     selectedScene = 0; validationIssues = [];
     stopGeneratedPreview();
@@ -341,8 +340,8 @@
   }
   function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); showInspector('scene'); schedulePreview(); }
   function changed() {
-    dirty = true; editSequence++;
-    if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
+    dirty = contentKey(draft) !== savedContent; editSequence++;
+    if (!conflict) saveState(dirty ? 'Unsaved changes' : 'Saved');
     renderSceneLength(true); renderScenes(); schedulePreview();
   }
   function captureFields() {
@@ -470,7 +469,7 @@
       $('preview-profile').textContent = `${result.profile.width} × ${result.profile.height} · ${result.profile.fps} fps`;
       const selectedInvalid = result.preview_issues.some(issue => !issue.field.startsWith('scenes.') || issue.field.startsWith(`scenes.${selectedScene}.`));
       if (!snapshot.scenes[selectedScene] || selectedInvalid) {
-        $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Draft edits are still saved.';
+        $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Your edits are kept locally. Click Save changes to keep them after leaving.';
         return;
       }
       const response = await request(`/api/generator/preview?scene=${selectedScene}&frame=${Math.round(Math.min(3600, Math.max(0, Number($('preview-time').value) || 0)) * result.profile.fps)}`, 'POST', snapshot, previewAbort.signal);
@@ -503,10 +502,8 @@
     }
   }
   async function saveDraft(asCopy = false) {
-    clearTimeout(saveTimer);
     if (!draft || saving || deleting || (conflict && !asCopy) || (!dirty && !asCopy)) return;
     saving = true;
-    const sequence = editSequence;
     const snapshot = structuredClone(draft);
     saveState(asCopy ? 'Saving independent copy…' : 'Saving…');
     try {
@@ -515,7 +512,8 @@
       if (saved.id !== draft.id) { stopGeneratedPreview(); $('generation-history').open = false; }
       // Keep edits made while this request was in flight, but advance the CAS version.
       draft.id = saved.id; draft.version = saved.version; draft.updated_at = saved.updated_at;
-      conflict = false; dirty = editSequence !== sequence;
+      savedContent = contentKey(snapshot);
+      conflict = false; dirty = contentKey(draft) !== savedContent;
       saveState(dirty ? 'Unsaved local changes' : `Saved · version ${draft.version}`);
       history.replaceState(null, '', `/editor?id=${encodeURIComponent(draft.id)}&return=${encodeURIComponent(returnPath)}`);
     window.dispatchEvent(new Event('studio-route-changed'));
@@ -527,7 +525,6 @@
     } finally {
       saving = false;
       renderJobs();
-      if (dirty && !conflict && editSequence !== sequence) saveTimer = setTimeout(() => saveDraft(), 700);
     }
   }
   $('scene-form').addEventListener('submit', event => event.preventDefault());
@@ -540,6 +537,7 @@
     if (['soundtrack-asset','soundtrack-mode','duration-mode'].includes(event.target.id)) renderMusicPicker();
     changed();
   });
+  $('save-design').addEventListener('click', () => saveDraft());
   $('save-retry').addEventListener('click', () => saveDraft());
   $('save-copy').addEventListener('click', () => saveDraft(true));
   $('save-reload').addEventListener('click', async () => {
@@ -713,13 +711,16 @@
     $('latest-video-detail').textContent = videoSummary ? `${window.mediaPresentation.capturedMusic(videoSummary.job,assets,window.musicPlaylists?.catalog()||[])} · ${window.mediaPresentation.date(videoSummary.job.created_at)} · ${videoSummary.match}` : 'Generate to review this design with animation and music.';
     $('review-latest-video').hidden = !videoSummary;
     $('review-latest-video').disabled = !jobsCurrent || !mediaRevisions.some(media => media.id === videoSummary?.job.media_revision && media.state === 'ready');
+    $('save-design').disabled = !dirty || saving || deleting || conflict || jobRequest;
+    $('save-design').textContent = saving ? 'Saving…' : 'Save changes';
+    $('generate-design').hidden = !dirty && videoSummary?.match === 'Matches current design' && mediaRevisions.some(media => media.id === videoSummary.job.media_revision && media.state === 'ready');
     $('generate-design').disabled = !jobsCurrent || deleting || dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
     const stagePhase = stageStatus.stage === 'ENDING' && stageStatus.ending?.draining ? 'ENDING · finishing destination writes' : stageStatus.stage === 'OFF' && stageStatus.ending?.completed ? 'Ending completed · destination results are in live control' : stageStatus.stage || 'Status unavailable';
     $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
-    const nextHistory = JSON.stringify([jobs, draft, dirty, saving, conflict, deleting, jobRequest, jobsCurrent, stageSelections, stageStatus.stage, stageStatus.source, stageStatus.mode, stageStatus.media, stageStatus.return_stage, stageStatus.return_media, stageStatus.ending, mediaRevisions]);
+    const nextHistory = JSON.stringify([jobs, [draft.id,draft.version,draft.stage], dirty, saving, conflict, deleting, jobRequest, jobsCurrent, stageSelections, stageStatus.stage, stageStatus.source, stageStatus.mode, stageStatus.media, stageStatus.return_stage, stageStatus.return_media, stageStatus.ending, mediaRevisions]);
     if(namingJob)return;
     if (nextHistory === historySignature) return;
     historySignature = nextHistory;
@@ -1263,7 +1264,7 @@
   $('theme-adopt').addEventListener('click', () => {
     if (!draft || !editingTheme || themeSaving) return;
     draft.theme = themeRef(themeKey(editingTheme)); renderDesignTheme(); changed(); renderCollectionContext();
-    $('theme-adoption-state').textContent = `Adopted ${editingTheme.name} revision ${editingTheme.revision} in ${draft.name}. Revalidation and autosave pending; prepared and on-air revisions are unchanged.`;
+    $('theme-adoption-state').textContent = `Adopted ${editingTheme.name} revision ${editingTheme.revision} in ${draft.name}. Review and save the design to keep this change; prepared and on-air revisions are unchanged.`;
   });
   $('design-theme').addEventListener('change', event => { event.stopPropagation(); if (!draft) return; draft.theme = themeRef($('design-theme').value); renderDesignTheme(); changed(); });
   $('apply-theme-update').addEventListener('click', () => {
