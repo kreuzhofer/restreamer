@@ -10,7 +10,7 @@ parser.add_argument('--bind', default='127.0.0.1')
 parser.add_argument('--port', default=18861, type=int)
 args = parser.parse_args()
 public = Path(__file__).resolve().parent/'public'
-allowed = {'index.html', 'midnight.mp4', 'debug.mp4', 'midnight.png', 'debug.png'}
+allowed = {'index.html', 'midnight.mp4', 'debug.mp4', 'midnight.png', 'debug.png', 'concepts.json'}
 
 class Preview(SimpleHTTPRequestHandler):
     def do_GET(self):

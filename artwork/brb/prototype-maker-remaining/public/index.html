@@ -11,17 +11,16 @@
 <header><div><h1 id="title">Midnight Workshop</h1><p id="description"></p></div><span class="badge">Motion prototype · not a live theme</span></header>
 <div class="screen">
 <video id="video" controls muted playsinline loop preload="auto" aria-label="Animated maker concept preview"></video>
-<div class="transport"><button id="play" type="button">Play loop</button><label for="seek">Inspect</label><input id="seek" type="range" min="0" max="15.9583" step="0.0416667" value="0" aria-label="Animation time"><label for="speed">Speed</label><select id="speed"><option value="1">1×</option><option value="0.5">½×</option></select><button id="boundary" type="button">Watch loop seam</button><time id="clock">0.00 / 16.00 s</time><a class="button" id="download" download>Download MP4</a></div>
+<div class="transport"><button id="play" type="button">Play loop</button><label for="seek">Inspect</label><input id="seek" type="range" min="0" max="60" step="0.0416667" value="0" aria-label="Animation time"><label for="speed">Speed</label><select id="speed"><option value="1">1×</option><option value="0.5">½×</option></select><button id="boundary" type="button">Watch loop seam</button><time id="clock">0.00 / 60.00 s</time><a class="button" id="download" download>Download MP4</a></div>
 <p id="error" class="error" role="alert"></p>
 </div>
-<div class="details"><section><h2>Follow the choreography</h2><div id="beats" class="beats"></div><p class="note" id="phase" aria-live="off"></p></section><section><h2>The design question</h2><p id="question"></p><p class="note">Flat illustrated pixel art and independent parts animated in Blender. Silent, 16 seconds, 24 fps. Final art direction, editable text and production integration await review.</p></section></div>
+<div class="details"><section><h2>Follow the choreography</h2><div id="beats" class="beats"></div><p class="note" id="phase" aria-live="off"></p></section><section><h2>The design question</h2><p id="question"></p><p class="note">Flat illustrated pixel art and independent parts animated in Blender. <span id="format"></span>. Final art direction, editable text and production integration await review.</p></section></div>
 </main>
 <nav class="switcher" aria-label="Concept selector"><button type="button" id="previous" aria-label="Previous concept">←</button><strong id="variantName">1 · Midnight Workshop</strong><button type="button" id="next" aria-label="Next concept">→</button></nav>
-<script>
-const concepts = {
-  midnight: {title: 'Midnight Workshop', description: 'A quiet late-night repair bench. A maker checks a small drone, repairs its circuit, then watches it take a test flight.', question: 'Does this quieter repair-and-flight rhythm feel like a cozy, living maker workspace? Is the machinery detailed enough beside the illustrated set?', beats: [[0, 'Approach'], [3, 'Repair'], [7, 'Test flight'], [10.5, 'Landing'], [12, 'Return']]},
-  debug: {title: 'Debug Quest', description: 'A tiny debugging adventure inside a computer. Catch a wayward circuit bug, repair it, then escort the friendly result home.', question: 'Does the chase → scan → repair → escort story read clearly without explanation? Should the bug character become more playful or more mechanical?', beats: [[0, 'Chase'], [4, 'Scan'], [7, 'Repaired'], [8, 'Escort'], [14, 'Reset offstage']]}
-};
+<script type="module">
+const response = await fetch('concepts.json');
+if (!response.ok) throw new Error('Concept timing metadata could not be loaded');
+const concepts = await response.json();
 const keys = Object.keys(concepts);
 const video = document.querySelector('#video');
 const seek = document.querySelector('#seek');
@@ -34,15 +33,19 @@ async function play() {
   catch { error.textContent = 'Playback did not start. Try the video’s native Play control or download the MP4.'; error.style.display = 'block'; }
 }
 function select(key, updateURL = true) {
-  pendingTime = Number.isFinite(video.currentTime) ? Math.min(video.currentTime, 15.95) : 0;
+  const previousTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
   resume = !video.paused;
   variant = keys.includes(key) ? key : 'midnight';
   const data = concepts[variant];
+  pendingTime = Math.min(previousTime, data.duration - 1 / data.fps);
+  seek.max = data.duration - 1 / data.fps;
+  seek.step = 1 / data.fps;
+  document.querySelector('#format').textContent = `Silent · ${data.duration} seconds · ${data.fps} fps`;
   document.querySelector('#title').textContent = data.title;
   document.querySelector('#description').textContent = data.description;
   document.querySelector('#question').textContent = data.question;
   document.querySelector('#variantName').textContent = `${keys.indexOf(variant) + 1} · ${data.title}`;
-  document.querySelector('#download').href = `${variant}.mp4`;
+  document.querySelector('#download').href = `${variant}.mp4?v=${data.revision}`;
   const beats = document.querySelector('#beats');
   beats.replaceChildren();
   for (const [time, name] of data.beats) {
@@ -51,7 +54,7 @@ function select(key, updateURL = true) {
     button.onclick = () => { video.pause(); video.currentTime = time; update(); };
     beats.append(button);
   }
-  video.poster = `${variant}.png`; video.src = `${variant}.mp4`; video.load();
+  video.poster = `${variant}.png?v=${data.revision}`; video.src = `${variant}.mp4?v=${data.revision}`; video.load();
   error.style.display = 'none';
   if (updateURL) { const url = new URL(location); url.searchParams.set('variant', variant); history.replaceState(null, '', url); }
   update();
@@ -59,11 +62,11 @@ function select(key, updateURL = true) {
 function update() {
   const time = video.currentTime || 0;
   seek.value = time;
-  document.querySelector('#clock').textContent = `${time.toFixed(2)} / 16.00 s`;
+  document.querySelector('#clock').textContent = `${time.toFixed(2)} / ${concepts[variant].duration.toFixed(2)} s`;
   document.querySelector('#play').textContent = video.paused ? 'Play loop' : 'Pause';
   let phase = concepts[variant].beats[0];
   for (const beat of concepts[variant].beats) if (time >= beat[0]) phase = beat;
-  document.querySelector('#phase').textContent = `Now: ${phase[1]} · ${variant} · source frame ${Math.floor(time * 24)}`;
+  document.querySelector('#phase').textContent = `Now: ${phase[1]} · ${variant} · source frame ${Math.floor(time * concepts[variant].fps)}`;
   for (const button of document.querySelectorAll('#beats button')) button.setAttribute('aria-current', String(Number(button.dataset.time) === phase[0]));
 }
 video.addEventListener('loadedmetadata', () => { video.currentTime = pendingTime; video.playbackRate = Number(document.querySelector('#speed').value); if (resume) play(); });
@@ -72,7 +75,7 @@ for (const event of ['timeupdate', 'play', 'pause', 'seeked']) video.addEventLis
 seek.oninput = () => { video.pause(); video.currentTime = Number(seek.value); update(); };
 document.querySelector('#play').onclick = () => video.paused ? play() : video.pause();
 document.querySelector('#speed').onchange = event => { video.playbackRate = Number(event.target.value); };
-document.querySelector('#boundary').onclick = () => { video.currentTime = 14; play(); };
+document.querySelector('#boundary').onclick = () => { video.currentTime = concepts[variant].duration - 2; play(); };
 function cycle(direction) { select(keys[(keys.indexOf(variant) + direction + keys.length) % keys.length]); }
 document.querySelector('#previous').onclick = () => cycle(-1);
 document.querySelector('#next').onclick = () => cycle(1);
