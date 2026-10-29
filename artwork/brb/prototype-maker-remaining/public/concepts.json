@@ -1,0 +1,96 @@
+{
+  "midnight": {
+    "title": "Midnight Workshop",
+    "description": "A delivery stop turns into friendship: a maker helps a tired drone, the drone returns the favor, and together they brighten a small visitor’s evening.",
+    "question": "Does the wordless story make the three characters’ mutual help clear? Do the reactions and pauses give the friendship room to feel natural?",
+    "duration": 60,
+    "fps": 24,
+    "poster_second": 38,
+    "beats": [
+      [
+        0,
+        "Quiet work"
+      ],
+      [
+        2,
+        "Heavy delivery"
+      ],
+      [
+        8,
+        "Lend a hand"
+      ],
+      [
+        16,
+        "Return the favor"
+      ],
+      [
+        26,
+        "A visitor"
+      ],
+      [
+        34,
+        "Help together"
+      ],
+      [
+        42,
+        "A little light"
+      ],
+      [
+        48,
+        "Restock"
+      ],
+      [
+        54,
+        "See you soon"
+      ],
+      [
+        59,
+        "Quiet again"
+      ]
+    ],
+    "revision": "friendship-doors-3"
+  },
+  "debug": {
+    "title": "Debug Quest",
+    "description": "Two circuit companions emerge through the left doorway, solve a bug together, then return through the right doorway before the loop resets behind closed doors.",
+    "question": "Do the doorway entry and exit feel physically connected to the illustrated set? Does chase → scan → repair → escort still read clearly?",
+    "duration": 16,
+    "fps": 24,
+    "poster_second": 6,
+    "beats": [
+      [
+        0,
+        "Door opens"
+      ],
+      [
+        1,
+        "Step outside"
+      ],
+      [
+        2.5,
+        "Chase"
+      ],
+      [
+        5,
+        "Scan"
+      ],
+      [
+        7.5,
+        "Repaired"
+      ],
+      [
+        8.5,
+        "Escort"
+      ],
+      [
+        12.5,
+        "Step inside"
+      ],
+      [
+        14.5,
+        "Doors close"
+      ]
+    ],
+    "revision": "friendship-doors-3"
+  }
+}

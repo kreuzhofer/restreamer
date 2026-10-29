@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maker motion studies · #52</title>
+<style>
+:root{color-scheme:dark;font-family:ui-sans-serif,system-ui,sans-serif;background:#10141a;color:#edf1ec;font-size:16px}*{box-sizing:border-box}body{margin:0}main{max-width:1200px;margin:auto;padding:40px 32px 120px}.eyebrow{font-size:11px;letter-spacing:.17em;color:#b3baaf;text-transform:uppercase}header{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:14px 0 28px}h1{font-size:clamp(27px,4vw,42px);font-weight:550;letter-spacing:-.04em;margin:0 0 10px}p{color:#b4bfbd;line-height:1.6;margin:0;max-width:66ch}.badge{flex:none;font-size:12px;border:1px solid #46514c;border-radius:99px;padding:7px 12px;color:#bed9c8}.screen{background:#080b10;border:1px solid #34413e;border-radius:10px;overflow:hidden}video{display:block;width:100%;aspect-ratio:16/9;image-rendering:pixelated;background:#080b10}.transport{display:flex;gap:12px;align-items:center;padding:14px 16px;border-top:1px solid #34413e;flex-wrap:wrap}button,select,a.button{font:inherit;font-size:13px;color:inherit;background:#202b2a;border:1px solid #435451;border-radius:6px;padding:9px 13px;text-decoration:none;cursor:pointer}button:hover,a.button:hover{background:#31413b}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #b9e2b8;outline-offset:3px}input[type=range]{min-width:80px;flex:1;accent-color:#c0e7b0}time{font:12px ui-monospace,monospace;color:#bac7c1}label{font-size:12px;color:#b4bfbd}.details{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding:28px 0}.details h2{font-size:13px;font-weight:600;margin:0 0 10px;color:#e1e9de}.beats{display:flex;gap:7px;flex-wrap:wrap}.beats button{padding:7px 9px;font-size:12px;background:transparent}.beats button[aria-current=true]{border-color:#b6dba6;color:#d9efcc;background:#26352b}.note{font-size:13px;color:#8faaa0;margin-top:12px}.switcher{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:calc(100% - 24px);padding:9px;background:#e2e9d9;color:#18211b;border:1px solid #f8ffef;box-shadow:0 8px 35px #0008;border-radius:12px}.switcher button{color:#18211b;background:transparent;border-color:#bcc8b7;padding:8px 12px}.switcher strong{font-size:13px;white-space:nowrap;min-width:174px;text-align:center}.error{color:#ffcaa8;padding:12px;display:none}@media(max-width:640px){main{padding:24px 14px 116px}header{display:block;margin-bottom:18px}.badge{display:inline-block;margin-top:14px}.details{grid-template-columns:1fr;gap:22px;padding-top:20px}.transport{gap:8px;padding:10px}time{order:2;width:100%}.switcher{bottom:14px}.switcher strong{min-width:155px}.eyebrow{font-size:10px}}
+</style>
+<main>
+<div class="eyebrow">Restreamer · maker explorations · issue #52</div>
+<header><div><h1 id="title">Midnight Workshop</h1><p id="description"></p></div><span class="badge">Motion prototype · not a live theme</span></header>
+<div class="screen">
+<video id="video" controls muted playsinline loop preload="auto" aria-label="Animated maker concept preview"></video>
+<div class="transport"><button id="play" type="button">Play loop</button><label for="seek">Inspect</label><input id="seek" type="range" min="0" max="60" step="0.0416667" value="0" aria-label="Animation time"><label for="speed">Speed</label><select id="speed"><option value="1">1×</option><option value="0.5">½×</option></select><button id="boundary" type="button">Watch loop seam</button><time id="clock">0.00 / 60.00 s</time><a class="button" id="download" download>Download MP4</a></div>
+<p id="error" class="error" role="alert"></p>
+</div>
+<div class="details"><section><h2>Follow the choreography</h2><div id="beats" class="beats"></div><p class="note" id="phase" aria-live="off"></p></section><section><h2>The design question</h2><p id="question"></p><p class="note">Flat illustrated pixel art and independent parts animated in Blender. <span id="format"></span>. Final art direction, editable text and production integration await review.</p></section></div>
+</main>
+<nav class="switcher" aria-label="Concept selector"><button type="button" id="previous" aria-label="Previous concept">←</button><strong id="variantName">1 · Midnight Workshop</strong><button type="button" id="next" aria-label="Next concept">→</button></nav>
+<script type="module">
+const response = await fetch('concepts.json');
+if (!response.ok) throw new Error('Concept timing metadata could not be loaded');
+const concepts = await response.json();
+const keys = Object.keys(concepts);
+const video = document.querySelector('#video');
+const seek = document.querySelector('#seek');
+let variant;
+let pendingTime = 0;
+let resume = false;
+const error = document.querySelector('#error');
+async function play() {
+  try { await video.play(); error.style.display = 'none'; }
+  catch { error.textContent = 'Playback did not start. Try the video’s native Play control or download the MP4.'; error.style.display = 'block'; }
+}
+function select(key, updateURL = true) {
+  const previousTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+  resume = !video.paused;
+  variant = keys.includes(key) ? key : 'midnight';
+  const data = concepts[variant];
+  pendingTime = Math.min(previousTime, data.duration - 1 / data.fps);
+  seek.max = data.duration - 1 / data.fps;
+  seek.step = 1 / data.fps;
+  document.querySelector('#format').textContent = `Silent · ${data.duration} seconds · ${data.fps} fps`;
+  document.querySelector('#title').textContent = data.title;
+  document.querySelector('#description').textContent = data.description;
+  document.querySelector('#question').textContent = data.question;
+  document.querySelector('#variantName').textContent = `${keys.indexOf(variant) + 1} · ${data.title}`;
+  document.querySelector('#download').href = `${variant}.mp4?v=${data.revision}`;
+  const beats = document.querySelector('#beats');
+  beats.replaceChildren();
+  for (const [time, name] of data.beats) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = name; button.dataset.time = time;
+    button.onclick = () => { video.pause(); video.currentTime = time; update(); };
+    beats.append(button);
+  }
+  video.poster = `${variant}.png?v=${data.revision}`; video.src = `${variant}.mp4?v=${data.revision}`; video.load();
+  error.style.display = 'none';
+  if (updateURL) { const url = new URL(location); url.searchParams.set('variant', variant); history.replaceState(null, '', url); }
+  update();
+}
+function update() {
+  const time = video.currentTime || 0;
+  seek.value = time;
+  document.querySelector('#clock').textContent = `${time.toFixed(2)} / ${concepts[variant].duration.toFixed(2)} s`;
+  document.querySelector('#play').textContent = video.paused ? 'Play loop' : 'Pause';
+  let phase = concepts[variant].beats[0];
+  for (const beat of concepts[variant].beats) if (time >= beat[0]) phase = beat;
+  document.querySelector('#phase').textContent = `Now: ${phase[1]} · ${variant} · source frame ${Math.floor(time * concepts[variant].fps)}`;
+  for (const button of document.querySelectorAll('#beats button')) button.setAttribute('aria-current', String(Number(button.dataset.time) === phase[0]));
+}
+video.addEventListener('loadedmetadata', () => { video.currentTime = pendingTime; video.playbackRate = Number(document.querySelector('#speed').value); if (resume) play(); });
+video.addEventListener('error', () => { error.textContent = 'The preview video could not be loaded. Run render.py to generate both previews, then start serve.py.'; error.style.display = 'block'; });
+for (const event of ['timeupdate', 'play', 'pause', 'seeked']) video.addEventListener(event, update);
+seek.oninput = () => { video.pause(); video.currentTime = Number(seek.value); update(); };
+document.querySelector('#play').onclick = () => video.paused ? play() : video.pause();
+document.querySelector('#speed').onchange = event => { video.playbackRate = Number(event.target.value); };
+document.querySelector('#boundary').onclick = () => { video.currentTime = concepts[variant].duration - 2; play(); };
+function cycle(direction) { select(keys[(keys.indexOf(variant) + direction + keys.length) % keys.length]); }
+document.querySelector('#previous').onclick = () => cycle(-1);
+document.querySelector('#next').onclick = () => cycle(1);
+document.addEventListener('keydown', event => {
+  if (event.target.closest('input, select, button, video, a, textarea, [contenteditable]')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); cycle(event.key === 'ArrowLeft' ? -1 : 1); }
+  if (event.code === 'Space') { event.preventDefault(); video.paused ? play() : video.pause(); }
+});
+select(new URLSearchParams(location.search).get('variant') || 'midnight', false);
+</script>
+</html>
