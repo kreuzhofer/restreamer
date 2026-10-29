@@ -1,0 +1,42 @@
+{
+  "midnight": {
+    "frames": 384,
+    "fps": 24,
+    "duration_seconds": 16,
+    "dimensions": [
+      2048,
+      1152
+    ],
+    "source_endpoint_matches_start": true,
+    "decode": "success",
+    "preceding_transition": {
+      "mean_absolute_channel_difference": 0.062113,
+      "changed_pixel_fraction": 0.001268
+    },
+    "loop_transition": {
+      "mean_absolute_channel_difference": 0.032423,
+      "changed_pixel_fraction": 0.000621
+    },
+    "video_sha256": "c57341d5ea6ff8e350ab0790f2229a96b1e2078df3d6b429352d65fbff8a33a9"
+  },
+  "debug": {
+    "frames": 384,
+    "fps": 24,
+    "duration_seconds": 16,
+    "dimensions": [
+      2048,
+      1152
+    ],
+    "source_endpoint_matches_start": true,
+    "decode": "success",
+    "preceding_transition": {
+      "mean_absolute_channel_difference": 0.028333,
+      "changed_pixel_fraction": 0.00019
+    },
+    "loop_transition": {
+      "mean_absolute_channel_difference": 0.040691,
+      "changed_pixel_fraction": 0.000298
+    },
+    "video_sha256": "84d88db1999646572b283ad720d8a250c7ff791e2a63931176175374063fea52"
+  }
+}
