@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src ws://127.0.0.1:*; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>Restreamer settings</title><link rel="stylesheet" href="inspector.css"></head>
+<body><main>
+<h1>Restreamer</h1><p id="action-help">Broadcast controls use the selections saved in Show setup.</p>
+<section id="clip-section" hidden><h2>Clip for this key</h2><label for="clip">Prepared video</label><select id="clip"><option value="">Choose a ready video…</option></select><p id="clip-help">This key keeps the exact saved render. A new render does not replace it.</p><button type="button" id="refresh" class="secondary">Refresh videos</button><p id="library-message" role="status"></p></section>
+<details id="connection"><summary>Server connection <span>Shared by all keys</span></summary>
+<form id="connection-form">
+<label for="endpoint">Server address</label><input id="endpoint" name="endpoint" type="url" placeholder="https://restreamer.example" required autocomplete="url"><p class="hint">Use the server address, without a page path.</p>
+<label for="username">Dashboard username</label><input id="username" name="username" autocomplete="username" required>
+<label for="password">Dashboard password</label><input id="password" name="password" type="password" autocomplete="current-password"><p id="password-hint" class="hint">Credentials are kept in Stream Deck’s global settings, outside exported profiles.</p>
+<label class="check"><input id="insecure" type="checkbox">Allow HTTP on my trusted network</label><p class="hint">HTTP sends credentials without encryption. Prefer HTTPS.</p>
+<button type="submit" id="save">Save connection</button>
+</form></details>
+<p id="message" role="status" aria-live="polite">Connecting to Stream Deck…</p>
+<p class="footnote">Status reports relay delivery, not platform-side public broadcast status.</p>
+</main><script src="inspector.js"></script></body></html>

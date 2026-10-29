@@ -1,0 +1,151 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.kreuzhofer.restreamer",
+  "Name": "Restreamer",
+  "Version": "1.0.0.0",
+  "Author": "Restreamer contributors",
+  "Description": "Operate Restreamer broadcast stages and monitor relay delivery.",
+  "Category": "Restreamer",
+  "CategoryIcon": "images/action",
+  "Icon": "images/plugin",
+  "CodePath": "bin/plugin.js",
+  "PropertyInspectorPath": "ui/inspector.html",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Actions": [
+    {
+      "UUID": "com.kreuzhofer.restreamer.prestream",
+      "Name": "Prestream",
+      "Icon": "images/action",
+      "Tooltip": "Prestream — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.go-live",
+      "Name": "Go live",
+      "Icon": "images/action",
+      "Tooltip": "Go live — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.brb-return",
+      "Name": "BRB / Return",
+      "Icon": "images/action",
+      "Tooltip": "BRB / Return — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.end-stream",
+      "Name": "End stream",
+      "Icon": "images/action",
+      "Tooltip": "End stream — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.play-clip",
+      "Name": "Play clip",
+      "Icon": "images/action",
+      "Tooltip": "Play clip — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.status",
+      "Name": "Status",
+      "Icon": "images/action",
+      "Tooltip": "Status — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.stop-now",
+      "Name": "Stop now",
+      "Icon": "images/action",
+      "Tooltip": "Stop now — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/key",
+          "ShowTitle": false
+        }
+      ]
+    }
+  ]
+}
