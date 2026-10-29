@@ -153,8 +153,8 @@ def robot(x,bottom,distance=0,wave=0,hidden=False):
  pose(hero['left arm'],x-5,y+10,7,20,angle=-stride*.12)
  pose(hero['right arm'],x+25,y+10,7,20,angle=stride*.12+wave)
  if not hidden:
-  for xx in (x+6,x+17):rect(F,xx,y-7,4,3,'cyan');rect(F,xx,y-7,1,1,'white')
-  line(F,x+10,y,x+13,y+1,'teal');line(F,x+13,y+1,x+16,y,'teal')
+  for xx in (x+6,x+17):rect(foreground_shapes,xx,y-7,4,3,'cyan');rect(foreground_shapes,xx,y-7,1,1,'white')
+  line(foreground_shapes,x+10,y,x+13,y+1,'teal');line(foreground_shapes,x+13,y+1,x+16,y,'teal')
 
 def chip(sh,x,y,good=False):
  for dx in (2,6,10,14):
@@ -200,27 +200,27 @@ def midnight(t):
  flight=smooth((t-7)/1)*(1-smooth((t-10.5)/1.5))
  dx=300+math.sin((t-7)/5*math.tau)*34*flight
  dy=174-43*flight
- drone(A,dx,dy,t,7<t<12)
+ drone(actor_shapes,dx,dy,t,7<t<12)
  # Articulated soldering tool approaches, repairs, then retracts clear of flight.
  repair=smooth((t-3)/1)*(1-smooth((t-6)/1))
  tx=mix(362,306,repair);ty=mix(163,171,repair)
  elbowx=350;elbowy=142-12*repair
  for ax,ay,bx,by in ((367,192,elbowx,elbowy),(elbowx,elbowy,tx,ty)):
-  line(A,ax,ay,bx,by,'ink',7);line(A,ax-1,ay-1,bx-1,by-1,'steel_light',4);line(A,ax-1,ay-1,bx-1,by-1,'glint',1)
- for xx,yy in ((367,192),(elbowx,elbowy),(tx,ty)):disc(A,xx,yy,4,'ink');disc(A,xx,yy,2.5,'orange');disc(A,xx,yy,1,'amber')
- line(F,tx,ty,tx-5,ty+5,'light',2);line(F,tx-5,ty+5,tx-7,ty+7,'amber')
+  line(actor_shapes,ax,ay,bx,by,'ink',7);line(actor_shapes,ax-1,ay-1,bx-1,by-1,'steel_light',4);line(actor_shapes,ax-1,ay-1,bx-1,by-1,'glint',1)
+ for xx,yy in ((367,192),(elbowx,elbowy),(tx,ty)):disc(actor_shapes,xx,yy,4,'ink');disc(actor_shapes,xx,yy,2.5,'orange');disc(actor_shapes,xx,yy,1,'amber')
+ line(foreground_shapes,tx,ty,tx-5,ty+5,'light',2);line(foreground_shapes,tx-5,ty+5,tx-7,ty+7,'amber')
  if 4<t<6:
   for i in range(6):
    a=i*math.tau/6+t*2;r=3+(t*25+i*3)%9
-   rect(F,tx-6+math.cos(a)*r,ty+7+math.sin(a)*r,1,1,'amber' if i%2 else 'white')
+   rect(foreground_shapes,tx-6+math.cos(a)*r,ty+7+math.sin(a)*r,1,1,'amber' if i%2 else 'white')
  # Rotating CAD is geometry over the empty monitor, not a color wash.
- cube(E,169,111,t)
+ cube(ambient_shapes,169,111,t)
  for i in range(14):
   xx=19+i*7;yy=12+(t*29+i*19)%88
-  line(E,xx,yy,xx-1,yy+3,'mid',.5)
+  line(ambient_shapes,xx,yy,xx-1,yy+3,'mid',.5)
  for i in range(3):
   yy=172-(t*7+i*7)%20;xx=398+math.sin(t*2+i)*2
-  rect(E,xx,yy,1,2,'mid')
+  rect(ambient_shapes,xx,yy,1,2,'mid')
 
 def cube(sh,x,y,t):
  angle=t*math.tau/16;points=[]
@@ -242,36 +242,36 @@ def debug(t):
  robot(x,184,walk,wave=.8*smooth((t-4)/.5)*(1-smooth((t-7.5)/.5)),hidden=x>520)
  bx=mix(-25,253,t/4) if t<4 else 253 if t<8 else mix(253,590,(t-8)/6) if t<14 else 590
  by=180
- if bx<540:bug(A,bx,by,t,t>=7)
+ if bx<540:bug(actor_shapes,bx,by,t,t>=7)
  if 4<=t<7:
   # Catch, scan, repair: visible scanner beam and screw/repair motion.
   reach=smooth((t-4)/.5)*(1-smooth((t-6.5)/.5))
-  line(F,237,158,237+reach*(bx-237),158,'cyan',2)
-  line(F,bx-13,149,bx+13,149,'cyan');line(F,bx-13,149,bx-13,175,'cyan');line(F,bx+13,149,bx+13,175,'cyan')
-  scan=151+(t*15)%22;line(F,bx-11,scan,bx+11,scan,'white')
-  chip(F,246,120,good=False)
-  for i in range(3):rect(F,248+i*5,114+(int(t*5)+i)%3,1,2,'amber')
+  line(foreground_shapes,237,158,237+reach*(bx-237),158,'cyan',2)
+  line(foreground_shapes,bx-13,149,bx+13,149,'cyan');line(foreground_shapes,bx-13,149,bx-13,175,'cyan');line(foreground_shapes,bx+13,149,bx+13,175,'cyan')
+  scan=151+(t*15)%22;line(foreground_shapes,bx-11,scan,bx+11,scan,'white')
+  chip(foreground_shapes,246,120,good=False)
+  for i in range(3):rect(foreground_shapes,248+i*5,114+(int(t*5)+i)%3,1,2,'amber')
  elif 7<=t<8:
-  chip(F,246,120,good=True)
-  text(F,'FIXED',243,110,'cyan',.6)
+  chip(foreground_shapes,246,120,good=True)
+  text(foreground_shapes,'FIXED',243,110,'cyan',.6)
  # Terminal progress cycles completely before the next visitor enters.
  progress=smooth((t-4)/3)*(1-smooth((t-13)/1))
- rect(E,250,151,29*progress,2,'cyan')
- text(E,'RUN' if t<4 or t>=14 else 'SCAN' if t<7 else 'PASS',251,157,'cyan',.55)
+ rect(ambient_shapes,250,151,29*progress,2,'cyan')
+ text(ambient_shapes,'RUN' if t<4 or t>=14 else 'SCAN' if t<7 else 'PASS',251,157,'cyan',.55)
  for row in range(3):
-  for col in range(6):rect(E,247+col*5,163+row*2,2,1,'cyan' if (row+col+int(t*2))%5<2 else 'steel_dark')
+  for col in range(6):rect(ambient_shapes,247+col*5,163+row*2,2,1,'cyan' if (row+col+int(t*2))%5<2 else 'steel_dark')
  # Flowing data motes trace a closed circuit, not an overlay rectangle.
  for i in range(12):
   p=(t/16+i/12)%1;x0=30+452*p
-  rect(E,x0,224+(i%3)*12,2,1,'cyan' if i%2 else 'amber')
+  rect(ambient_shapes,x0,224+(i%3)*12,2,1,'cyan' if i%2 else 'amber')
 
-A=[];F=[];E=[]
+actor_shapes=[];foreground_shapes=[];ambient_shapes=[]
 def animate(frame):
- global A,F,E
+ global actor_shapes,foreground_shapes,ambient_shapes
  t=(frame%384)/24
- A=[];F=[];E=[]
+ actor_shapes=[];foreground_shapes=[];ambient_shapes=[]
  midnight(t) if opts.variant=='midnight' else debug(t)
- geometry(actors,A);geometry(front,F);geometry(ambient,E)
+ geometry(actors,actor_shapes);geometry(front,foreground_shapes);geometry(ambient,ambient_shapes)
 
 animate(0)
 if opts.save:bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/f'{opts.variant}.blend'))
