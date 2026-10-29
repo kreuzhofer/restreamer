@@ -2,6 +2,7 @@ export type Stage = {
   stage:string; server_id:string; context:string; source:string; mode:string;
   pending?:{id:string}; error?:string; fallback_error?:string; return_stage?:string;
   media?:{revision?:string}; outcomes?:{id:string;state:string;reason?:string}[];
+  playback?:{state:string};
 };
 export type Snapshot = {stage:Stage; outputs:{enabled:boolean;can_enable:boolean;state:string;last_error?:string}[]};
 export type Face = {label:string; detail:string; tone:'gray'|'green'|'amber'|'red'|'blue'; symbol:string; description:string};

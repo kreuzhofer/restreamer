@@ -25,7 +25,7 @@ Prefer HTTPS. The explicit HTTP checkbox is for a trusted local network; HTTP se
 | Status | Show broadcast stage and relay delivery. Press to open `/live` in the browser; browser authentication remains separate. |
 | Stop now | **Hold for two seconds, then release.** A short press does nothing. Changing broadcast state or losing connection cancels the reviewed stop. |
 
-Active and pending appearances follow server status, including changes from other clients. Prestream, clip completion and ending run on the server even if Stream Deck exits. Normal keys perform their labeled action immediately; keep Stop now on its own key. The plugin preserves an already-running rehearsal's server mode rather than silently starting a real broadcast.
+Active and pending appearances follow server status, including changes from other clients. Go live is ACTIVE only while OBS is actually on air; fallback shows NO OBS. Prepared playback distinguishes ACTIVE, PAUSED and FAILED. Prestream, clip completion and ending run on the server even if Stream Deck exits. Normal keys perform their labeled action immediately; keep Stop now on its own key. The plugin preserves an already-running rehearsal's server mode rather than silently starting a real broadcast.
 
 ## Reading status
 
@@ -37,7 +37,7 @@ The large label is LIVE, PRE, BRB, CLIP, END or OFF. The fraction counts streami
 - Blue waiting dots: expected connection/keyframe startup without a recorded failure. Reconnecting after a failure stays alarming until delivery resumes.
 - Gray question mark with UNKNOWN: no current status. Failed requests invalidate status immediately; a hung request becomes unknown within about 3.5 seconds. OFF is gray; rehearsal is blue and never claims delivery success.
 
-AUTH means check the shared dashboard credentials. NOT READY means prepare compatible stage media. MISSING means the assigned revision was removed. CHANGED means review the state or choose the clip again; renamed clip assignments require reselection. No commands are queued or replayed after network recovery or server restart. A lost command response can still have taken effect: inspect the current stage before pressing again.
+INVALID means imported key settings are malformed: reselect that key’s clip or recreate the key; other keys keep working. AUTH means check the shared dashboard credentials. NOT READY means prepare compatible stage media. MISSING means the assigned revision was removed. CHANGED means review the state or choose the clip again; renamed clip assignments require reselection. No commands are queued or replayed after network recovery or server restart. A lost command response can still have taken effect: inspect the current stage before pressing again.
 
 ## Development and verification
 

@@ -3,12 +3,22 @@ import {health, keySVG, labels, type Face} from './keys.js';
 import {Restreamer, connectionSettings, type ConnectionSettings} from './client.js';
 
 type ClipSettings={revision?:string;name?:string};
-type Button={key:KeyAction<ClipSettings>;kind:string;settings:ClipSettings;image?:string;down?:number;context?:string;message?:string;until?:number};
+type Button={key:KeyAction<ClipSettings>;kind:string;settings:ClipSettings;invalid:boolean;image?:string;down?:number;context?:string;message?:string;until?:number};
 const buttons=new Map<string,Button>();
 const client=new Restreamer(render);
 // Trace logging includes settings payloads. Never enable it, and never log
 // server responses, URLs, headers or errors containing user-controlled data.
 streamDeck.logger.setLevel('error');
+// Imported profiles and restored settings arrive as untrusted JSON, regardless
+// of the SDK's compile-time generic. Keep invalid data out of the shared render.
+function readSettings(value:unknown):{settings:ClipSettings;invalid:boolean}{
+  const invalid={settings:{},invalid:true};
+  if(!value||typeof value!=='object'||Array.isArray(value))return invalid;
+  const candidate=value as Record<string,unknown>;
+  if(candidate.revision!==undefined&&(typeof candidate.revision!=='string'||!/^[a-f0-9]{64}$/.test(candidate.revision)))return invalid;
+  if(candidate.name!==undefined&&(typeof candidate.name!=='string'||candidate.name.length>512))return invalid;
+  return {settings:{revision:candidate.revision,name:candidate.name},invalid:false};
+}
 function feedback(button:Button,text:string){button.message=text;button.until=Date.now()+4000;render();}
 function render(){
   const snapshot=client.current();
@@ -16,11 +26,19 @@ function render(){
     let face:Face=health(snapshot);
     if(b.kind!=='status'){
       const stage=snapshot?.stage;
-      const active=stage?.stage===({'prestream':'PRESTREAM','go-live':'LIVE','brb-return':'BRB','end-stream':'ENDING','play-clip':'CLIP','stop-now':'OFF'} as Record<string,string>)[b.kind]&&(b.kind!=='play-clip'||stage?.media?.revision===b.settings.revision);
+      const selected=stage?.stage===({'prestream':'PRESTREAM','go-live':'LIVE','brb-return':'BRB','end-stream':'ENDING','play-clip':'CLIP','stop-now':'OFF'} as Record<string,string>)[b.kind]&&(b.kind!=='play-clip'||stage?.media?.revision===b.settings.revision);
+      const playingFile=stage?.source==='file'&&stage.playback?.state==='playing';
+      const sourceReady=b.kind==='go-live'?stage?.source==='obs':b.kind==='brb-return'?stage?.source==='brb'||playingFile:b.kind==='stop-now'?stage?.source==='off':playingFile;
+      const active=selected&&sourceReady&&!stage?.error&&!stage?.fallback_error;
       face={label:labels[b.kind],detail:snapshot?'READY':client.problem||'OFFLINE',tone:'gray',symbol:snapshot?'○':'?',description:snapshot?'READY':'UNKNOWN'};
       if(active)face={...face,tone:'green',symbol:'✓',detail:'ACTIVE',description:'ACTIVE'};
       if(b.kind==='brb-return'&&stage?.stage==='BRB')face.label='RETURN';
       if(b.kind==='play-clip'&&!active&&snapshot)face.detail=b.settings.name?.slice(0,12)||'SELECT CLIP';
+      if(selected&&!active){
+        const failed=stage?.error||stage?.fallback_error||stage?.playback?.state==='failed';
+        const detail=failed?'FAILED':b.kind==='go-live'?'NO OBS':stage?.playback?.state==='paused'?'PAUSED':'NOT READY';
+        face={...face,detail,tone:failed?'red':'amber',symbol:'!',description:detail};
+      }
       if(b.kind==='go-live'&&stage?.pending)face={...face,tone:'blue',symbol:'…',detail:'WAIT OBS',description:'PENDING'};
       if(b.kind==='stop-now'){
         face.detail='HOLD 2s';face.tone='gray';face.symbol='■';
@@ -29,6 +47,7 @@ function render(){
       if(b.message&&Date.now()<(b.until||0))face={...face,detail:b.message,tone:'amber',symbol:'!',description:b.message};
       if(!snapshot)face={...face,tone:'gray',symbol:'?',detail:client.problem||'OFFLINE',description:'UNKNOWN'};
     }else if(!snapshot)face.detail=client.problem||'OFFLINE';
+    if(b.invalid)face={label:labels[b.kind],detail:'INVALID',tone:'amber',symbol:'!',description:'INVALID SETTINGS — reselect this key’s clip or recreate the key'};
     const svg=keySVG(face);
     if(b.image!==svg){b.image=svg;void b.key.setImage(svg);}
   }
@@ -36,12 +55,13 @@ function render(){
 class Control extends SingletonAction<ClipSettings>{
   constructor(readonly kind:string){super();}
   override onWillAppear(ev:WillAppearEvent<ClipSettings>){
-    if(ev.action.isKey()){buttons.set(ev.action.id,{key:ev.action,kind:this.kind,settings:ev.payload.settings});render();}
+    if(ev.action.isKey()){buttons.set(ev.action.id,{key:ev.action,kind:this.kind,...readSettings(ev.payload.settings)});render();}
   }
   override onWillDisappear(ev:WillDisappearEvent<ClipSettings>){buttons.delete(ev.action.id);}
-  override onDidReceiveSettings(ev:DidReceiveSettingsEvent<ClipSettings>){const b=buttons.get(ev.action.id);if(b){b.settings=ev.payload.settings;b.message='';b.down=undefined;render();}}
+  override onDidReceiveSettings(ev:DidReceiveSettingsEvent<ClipSettings>){const b=buttons.get(ev.action.id);if(b){Object.assign(b,readSettings(ev.payload.settings));b.message='';b.down=undefined;render();}}
   override async onKeyDown(ev:KeyDownEvent<ClipSettings>){
     const b=buttons.get(ev.action.id);if(!b||b.down)return;
+    if(b.invalid){render();return;}
     b.down=Date.now();b.context=client.current()?.stage.context;
     if(this.kind==='status'){if(client.settings.endpoint)await streamDeck.system.openUrl(new URL('/live',client.settings.endpoint).href);return;}
     if(this.kind==='stop-now'){render();return;}

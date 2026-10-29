@@ -110,7 +110,7 @@ test('stage controls, independent exact clip selections, and server-confirmed ac
     r.key(kind,context,'keyUp');await wait(1100);
   }
   assert.equal(r.commands[3].revision,'a'.repeat(64));assert.equal(r.commands[4].revision,'b'.repeat(64));
-  r.state.stage.stage='CLIP';r.state.stage.media={revision:'b'.repeat(64)};
+  r.state.stage.stage='CLIP';r.state.stage.source='file';r.state.stage.playback={state:'playing'};r.state.stage.media={revision:'b'.repeat(64)};
   await eventually(()=>r.image('clip-b').includes('ACTIVE'));
   assert.doesNotMatch(r.image('clip-a'),/ACTIVE/);
   r.state.stage.stage='LIVE';await eventually(()=>!r.image('brb-return').includes('RETURN'));r.key('brb-return');
@@ -183,4 +183,37 @@ test('connection form rejects unsafe endpoints and stores secrets only in global
   assert.equal(r.messages.find(m=>m.event==='setGlobalSettings').payload.password,'dummy-password');
   assert.equal(r.messages.filter(m=>m.event==='setSettings').length,0);
   assert.doesNotMatch(JSON.stringify(r.messages.filter(m=>m.event==='sendToPropertyInspector')),/dummy-password/);
+});
+
+test('invalid imported key settings are isolated and a corrected selection recovers',async t=>{
+  const r=await rig(t);
+  r.appear('play-clip','bad-name',{revision:'a'.repeat(64),name:7});
+  r.appear('play-clip','bad-revision',{revision:7,name:'Hello'});
+  r.appear('play-clip','bad-shape',null);
+  r.appear('status');r.appear('prestream');
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  for(const key of ['bad-name','bad-revision','bad-shape'])assert.match(r.image(key),/INVALID/);
+  r.key('play-clip','bad-name');await wait(100);assert.equal(r.commands.length,0);
+  r.send('didReceiveSettings','prestream','prestream',{settings:{name:[]}});
+  await eventually(()=>r.image('prestream').includes('INVALID'));
+  r.api.status=401;await eventually(()=>r.image('status').includes('AUTH'));
+  r.api.status=200;await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.send('didReceiveSettings','bad-name','play-clip',{settings:{revision:'a'.repeat(64),name:'Hello'}});
+  await eventually(()=>r.image('bad-name').includes('Hello'));
+  r.key('play-clip','bad-name');await eventually(()=>r.commands.length===1);
+  assert.equal(r.commands[0].revision,'a'.repeat(64));
+});
+
+test('active keys distinguish intended stage from fallback, paused, and failed playback',async t=>{
+  const r=await rig(t);r.state.stage.stage='LIVE';r.state.stage.source='brb';
+  r.appear('go-live');r.appear('status');r.appear('play-clip','clip',{revision:'a'.repeat(64),name:'Hello'});
+  await eventually(()=>r.image('status').includes('DEGRADED'));
+  assert.doesNotMatch(r.image('go-live'),/ACTIVE/);assert.match(r.image('go-live'),/NO OBS/);
+  r.state.stage.source='obs';await eventually(()=>r.image('go-live').includes('ACTIVE'));
+  r.state.stage.stage='CLIP';r.state.stage.source='file';r.state.stage.media={revision:'a'.repeat(64)};r.state.stage.playback={state:'playing'};
+  await eventually(()=>r.image('clip').includes('ACTIVE'));
+  r.state.stage.source='brb';r.state.stage.playback={state:'paused'};
+  await eventually(()=>r.image('clip').includes('PAUSED'));assert.doesNotMatch(r.image('clip'),/ACTIVE/);
+  r.state.stage.playback={state:'failed'};r.state.stage.error='Prepared video cannot play';
+  await eventually(()=>r.image('clip').includes('FAILED'));assert.doesNotMatch(r.image('clip'),/ACTIVE/);
 });
