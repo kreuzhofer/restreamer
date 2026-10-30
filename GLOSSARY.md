@@ -8,7 +8,7 @@ Restreamer selects a broadcast source and forwards its media to destinations. Th
 The operator's selected phase of a show: OFF, PRESTREAM, LIVE, BRB, CLIP, or ENDING. The stage describes intent and can differ from the source currently on air.
 
 **On-air source**:
-The source of media currently selected for delivery to destinations, such as OBS, a prepared video, or BRB media. It does not confirm that a platform has made the broadcast publicly viewable.
+The source of media currently emitted on an output path, such as OBS, a prepared video, or BRB media. Paths may differ during transitions; an on-air source does not confirm platform-side public playback.
 
 **Clip**:
 A prepared library video selected as a temporary interruption of a broadcast stage. It normally plays once, with explicit looping available in the detailed playback controls.
@@ -76,3 +76,12 @@ A particular saved version of a style theme, explicitly selected by a design. Ed
 
 **Design revision**:
 A fixed snapshot of a show design used to generate media. Later draft edits do not alter that snapshot or the media revision produced from it.
+
+**Output profile**:
+The selected video and audio characteristics of a broadcast output delivered to destinations. Destinations with identical requirements can share one output profile.
+
+**Output path**:
+The media route selected for one or more destinations: passthrough or continuous output. Destinations sharing a path still have independent delivery states.
+
+**Continuous output**:
+An output mode that maintains a stable program timeline while broadcast sources change or become unavailable, supplying replacement content when needed. It does not imply protection against failure of the output engine, host, network, or destination platform.
