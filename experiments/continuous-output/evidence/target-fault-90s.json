@@ -1,0 +1,1465 @@
+{
+  "schema_version": 1,
+  "scope": "experimental_clocked_playout",
+  "status": "proof_completed",
+  "rollout_qualified": false,
+  "host": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "logical_cpus": 4,
+    "memory_total_bytes": 16769036288,
+    "cpu_model": "AMD EPYC 9354P 32-Core Processor",
+    "cgroup_cpu_max": "300000 100000"
+  },
+  "seconds": 90,
+  "input_sha256": {
+    "live": "ce9a45c286e2dc0cdbc9de8c4826e53e9537cf050fcf3974aacad01b6e2ec958",
+    "brb": "a1f16de1721a87615e43dfbac966a1e8fcee7e672335f0f4e6a33236cfa58272"
+  },
+  "source_sha256": {
+    "playout.py": "afa90a6dea05af63c83fac2bbaa33cbf2380690b1ae97148d520f450ece838b1",
+    "benchmark.py": "c7ee1faca8530bf3066d4decf0743efbfc2167d149b179008f0a8a6b689df94f",
+    "delivery.py": "40cc51a84ae4083a614118e2acbfcb869eb7e545eb09305b377b052c5acbe499"
+  },
+  "samples": [
+    {
+      "monotonic": 1087288.977490513,
+      "cpu_total": 438225411,
+      "cpu_busy": 40094140,
+      "memory_available_bytes": 13104078848,
+      "encoder_rss_bytes": 98713600,
+      "playout_rss_bytes": 121241600,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 24,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087289.977785888,
+      "cpu_total": 438225812,
+      "cpu_busy": 40094363,
+      "memory_available_bytes": 13039230976,
+      "encoder_rss_bytes": 96559104,
+      "playout_rss_bytes": 203583488,
+      "live_queue_frames": 27,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087290.977314357,
+      "cpu_total": 438226209,
+      "cpu_busy": 40094560,
+      "memory_available_bytes": 12911955968,
+      "encoder_rss_bytes": 96677888,
+      "playout_rss_bytes": 281616384,
+      "live_queue_frames": 52,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087291.978027291,
+      "cpu_total": 438226604,
+      "cpu_busy": 40094787,
+      "memory_available_bytes": 12827652096,
+      "encoder_rss_bytes": 96624640,
+      "playout_rss_bytes": 358961152,
+      "live_queue_frames": 76,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087292.978176386,
+      "cpu_total": 438227006,
+      "cpu_busy": 40094977,
+      "memory_available_bytes": 12829151232,
+      "encoder_rss_bytes": 96862208,
+      "playout_rss_bytes": 435331072,
+      "live_queue_frames": 101,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087293.978514266,
+      "cpu_total": 438227406,
+      "cpu_busy": 40095196,
+      "memory_available_bytes": 12839747584,
+      "encoder_rss_bytes": 96698368,
+      "playout_rss_bytes": 438321152,
+      "live_queue_frames": 101,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087294.978218691,
+      "cpu_total": 438227800,
+      "cpu_busy": 40095461,
+      "memory_available_bytes": 12854005760,
+      "encoder_rss_bytes": 96419840,
+      "playout_rss_bytes": 440823808,
+      "live_queue_frames": 101,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087295.97770679,
+      "cpu_total": 438228199,
+      "cpu_busy": 40095687,
+      "memory_available_bytes": 12850335744,
+      "encoder_rss_bytes": 96559104,
+      "playout_rss_bytes": 437723136,
+      "live_queue_frames": 101,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087296.977680242,
+      "cpu_total": 438228601,
+      "cpu_busy": 40095898,
+      "memory_available_bytes": 12857827328,
+      "encoder_rss_bytes": 96698368,
+      "playout_rss_bytes": 440836096,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087297.977515305,
+      "cpu_total": 438229002,
+      "cpu_busy": 40096084,
+      "memory_available_bytes": 12848877568,
+      "encoder_rss_bytes": 96628736,
+      "playout_rss_bytes": 440836096,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087298.978149372,
+      "cpu_total": 438229400,
+      "cpu_busy": 40096246,
+      "memory_available_bytes": 12842549248,
+      "encoder_rss_bytes": 96419840,
+      "playout_rss_bytes": 440844288,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087299.977865686,
+      "cpu_total": 438229795,
+      "cpu_busy": 40096465,
+      "memory_available_bytes": 12847874048,
+      "encoder_rss_bytes": 96751616,
+      "playout_rss_bytes": 438476800,
+      "live_queue_frames": 101,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087300.978547757,
+      "cpu_total": 438230194,
+      "cpu_busy": 40096661,
+      "memory_available_bytes": 12841103360,
+      "encoder_rss_bytes": 96718848,
+      "playout_rss_bytes": 441458688,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087301.978647339,
+      "cpu_total": 438230602,
+      "cpu_busy": 40096924,
+      "memory_available_bytes": 12846858240,
+      "encoder_rss_bytes": 96780288,
+      "playout_rss_bytes": 440975360,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087302.978377054,
+      "cpu_total": 438231013,
+      "cpu_busy": 40097154,
+      "memory_available_bytes": 12844576768,
+      "encoder_rss_bytes": 96464896,
+      "playout_rss_bytes": 440877056,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087303.979205807,
+      "cpu_total": 438231421,
+      "cpu_busy": 40097385,
+      "memory_available_bytes": 12850425856,
+      "encoder_rss_bytes": 96608256,
+      "playout_rss_bytes": 440881152,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087304.978659376,
+      "cpu_total": 438231826,
+      "cpu_busy": 40097675,
+      "memory_available_bytes": 12836745216,
+      "encoder_rss_bytes": 97284096,
+      "playout_rss_bytes": 443084800,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087305.978820954,
+      "cpu_total": 438232231,
+      "cpu_busy": 40097915,
+      "memory_available_bytes": 12830679040,
+      "encoder_rss_bytes": 97603584,
+      "playout_rss_bytes": 444002304,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 27,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087306.978479794,
+      "cpu_total": 438232642,
+      "cpu_busy": 40098153,
+      "memory_available_bytes": 12821176320,
+      "encoder_rss_bytes": 96833536,
+      "playout_rss_bytes": 442253312,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087307.978884177,
+      "cpu_total": 438233053,
+      "cpu_busy": 40098433,
+      "memory_available_bytes": 12798238720,
+      "encoder_rss_bytes": 96612352,
+      "playout_rss_bytes": 440967168,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087308.978621246,
+      "cpu_total": 438233454,
+      "cpu_busy": 40098649,
+      "memory_available_bytes": 12817813504,
+      "encoder_rss_bytes": 96518144,
+      "playout_rss_bytes": 441544704,
+      "live_queue_frames": 102,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087309.978907171,
+      "cpu_total": 438233863,
+      "cpu_busy": 40098855,
+      "memory_available_bytes": 12856508416,
+      "encoder_rss_bytes": 96530432,
+      "playout_rss_bytes": 363167744,
+      "live_queue_frames": 77,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087310.978762167,
+      "cpu_total": 438234276,
+      "cpu_busy": 40099071,
+      "memory_available_bytes": 12923711488,
+      "encoder_rss_bytes": 96501760,
+      "playout_rss_bytes": 285265920,
+      "live_queue_frames": 52,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087311.979116837,
+      "cpu_total": 438234689,
+      "cpu_busy": 40099289,
+      "memory_available_bytes": 13031022592,
+      "encoder_rss_bytes": 97009664,
+      "playout_rss_bytes": 207441920,
+      "live_queue_frames": 27,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087312.977877695,
+      "cpu_total": 438235106,
+      "cpu_busy": 40099492,
+      "memory_available_bytes": 13085278208,
+      "encoder_rss_bytes": 96657408,
+      "playout_rss_bytes": 132362240,
+      "live_queue_frames": 2,
+      "brb_queue_frames": 27,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087313.978318705,
+      "cpu_total": 438235513,
+      "cpu_busy": 40099674,
+      "memory_available_bytes": 13082390528,
+      "encoder_rss_bytes": 96559104,
+      "playout_rss_bytes": 126013440,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 27,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087314.977734551,
+      "cpu_total": 438235919,
+      "cpu_busy": 40099881,
+      "memory_available_bytes": 13068259328,
+      "encoder_rss_bytes": 96444416,
+      "playout_rss_bytes": 123293696,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087315.978049772,
+      "cpu_total": 438236327,
+      "cpu_busy": 40100059,
+      "memory_available_bytes": 13091946496,
+      "encoder_rss_bytes": 96714752,
+      "playout_rss_bytes": 122900480,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087316.978365324,
+      "cpu_total": 438236737,
+      "cpu_busy": 40100231,
+      "memory_available_bytes": 13093486592,
+      "encoder_rss_bytes": 96477184,
+      "playout_rss_bytes": 122908672,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087317.978527736,
+      "cpu_total": 438237150,
+      "cpu_busy": 40100465,
+      "memory_available_bytes": 13022511104,
+      "encoder_rss_bytes": 96530432,
+      "playout_rss_bytes": 210071552,
+      "live_queue_frames": 27,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087318.977681047,
+      "cpu_total": 438237556,
+      "cpu_busy": 40100675,
+      "memory_available_bytes": 12937519104,
+      "encoder_rss_bytes": 96489472,
+      "playout_rss_bytes": 291074048,
+      "live_queue_frames": 53,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087319.978140497,
+      "cpu_total": 438237967,
+      "cpu_busy": 40100910,
+      "memory_available_bytes": 12913864704,
+      "encoder_rss_bytes": 97972224,
+      "playout_rss_bytes": 371994624,
+      "live_queue_frames": 79,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087320.977620961,
+      "cpu_total": 438238373,
+      "cpu_busy": 40101141,
+      "memory_available_bytes": 12803112960,
+      "encoder_rss_bytes": 96546816,
+      "playout_rss_bytes": 454365184,
+      "live_queue_frames": 105,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087321.977928283,
+      "cpu_total": 438238778,
+      "cpu_busy": 40101404,
+      "memory_available_bytes": 12780318720,
+      "encoder_rss_bytes": 96698368,
+      "playout_rss_bytes": 456527872,
+      "live_queue_frames": 107,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087322.979197093,
+      "cpu_total": 438239185,
+      "cpu_busy": 40101642,
+      "memory_available_bytes": 12789063680,
+      "encoder_rss_bytes": 96776192,
+      "playout_rss_bytes": 459653120,
+      "live_queue_frames": 108,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087323.977924163,
+      "cpu_total": 438239588,
+      "cpu_busy": 40101896,
+      "memory_available_bytes": 12794994688,
+      "encoder_rss_bytes": 96485376,
+      "playout_rss_bytes": 462790656,
+      "live_queue_frames": 109,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087324.983274905,
+      "cpu_total": 438239992,
+      "cpu_busy": 40102144,
+      "memory_available_bytes": 12787019776,
+      "encoder_rss_bytes": 98361344,
+      "playout_rss_bytes": 464822272,
+      "live_queue_frames": 110,
+      "brb_queue_frames": 25,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087325.978711396,
+      "cpu_total": 438240394,
+      "cpu_busy": 40102414,
+      "memory_available_bytes": 12806377472,
+      "encoder_rss_bytes": 96821248,
+      "playout_rss_bytes": 470073344,
+      "live_queue_frames": 111,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087326.980321813,
+      "cpu_total": 438240805,
+      "cpu_busy": 40102666,
+      "memory_available_bytes": 12790349824,
+      "encoder_rss_bytes": 96894976,
+      "playout_rss_bytes": 473321472,
+      "live_queue_frames": 112,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087327.978589331,
+      "cpu_total": 438241211,
+      "cpu_busy": 40102914,
+      "memory_available_bytes": 12765310976,
+      "encoder_rss_bytes": 98754560,
+      "playout_rss_bytes": 478400512,
+      "live_queue_frames": 114,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087328.978784024,
+      "cpu_total": 438241619,
+      "cpu_busy": 40103141,
+      "memory_available_bytes": 12778274816,
+      "encoder_rss_bytes": 98877440,
+      "playout_rss_bytes": 481521664,
+      "live_queue_frames": 115,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087329.980102642,
+      "cpu_total": 438242026,
+      "cpu_busy": 40103379,
+      "memory_available_bytes": 12797513728,
+      "encoder_rss_bytes": 99246080,
+      "playout_rss_bytes": 487763968,
+      "live_queue_frames": 117,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087330.98276913,
+      "cpu_total": 438242442,
+      "cpu_busy": 40103665,
+      "memory_available_bytes": 12792823808,
+      "encoder_rss_bytes": 98996224,
+      "playout_rss_bytes": 490885120,
+      "live_queue_frames": 118,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087331.979356738,
+      "cpu_total": 438242850,
+      "cpu_busy": 40103972,
+      "memory_available_bytes": 12766355456,
+      "encoder_rss_bytes": 98942976,
+      "playout_rss_bytes": 494448640,
+      "live_queue_frames": 119,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087332.979459225,
+      "cpu_total": 438243259,
+      "cpu_busy": 40104230,
+      "memory_available_bytes": 12757352448,
+      "encoder_rss_bytes": 98639872,
+      "playout_rss_bytes": 497143808,
+      "live_queue_frames": 120,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087333.979365454,
+      "cpu_total": 438243671,
+      "cpu_busy": 40104470,
+      "memory_available_bytes": 12759564288,
+      "encoder_rss_bytes": 98545664,
+      "playout_rss_bytes": 506773504,
+      "live_queue_frames": 121,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087334.978881155,
+      "cpu_total": 438244078,
+      "cpu_busy": 40104707,
+      "memory_available_bytes": 12754071552,
+      "encoder_rss_bytes": 99028992,
+      "playout_rss_bytes": 508964864,
+      "live_queue_frames": 122,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087335.977752035,
+      "cpu_total": 438244484,
+      "cpu_busy": 40104966,
+      "memory_available_bytes": 12721852416,
+      "encoder_rss_bytes": 98795520,
+      "playout_rss_bytes": 512757760,
+      "live_queue_frames": 124,
+      "brb_queue_frames": 26,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087337.072383591,
+      "cpu_total": 438244952,
+      "cpu_busy": 40105285,
+      "memory_available_bytes": 12721500160,
+      "encoder_rss_bytes": 108470272,
+      "playout_rss_bytes": 496279552,
+      "live_queue_frames": 119,
+      "brb_queue_frames": 23,
+      "video_write_queue_frames": 1,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087338.133844404,
+      "cpu_total": 438245373,
+      "cpu_busy": 40105666,
+      "memory_available_bytes": 12762386432,
+      "encoder_rss_bytes": 112459776,
+      "playout_rss_bytes": 409313280,
+      "live_queue_frames": 106,
+      "brb_queue_frames": 10,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087339.007717223,
+      "cpu_total": 438245744,
+      "cpu_busy": 40105982,
+      "memory_available_bytes": 12787384320,
+      "encoder_rss_bytes": 146595840,
+      "playout_rss_bytes": 356622336,
+      "live_queue_frames": 93,
+      "brb_queue_frames": 5,
+      "video_write_queue_frames": 2,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087340.139279621,
+      "cpu_total": 438246213,
+      "cpu_busy": 40106364,
+      "memory_available_bytes": 12783702016,
+      "encoder_rss_bytes": 149532672,
+      "playout_rss_bytes": 363405312,
+      "live_queue_frames": 68,
+      "brb_queue_frames": 32,
+      "video_write_queue_frames": 2,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087340.98259081,
+      "cpu_total": 438246555,
+      "cpu_busy": 40106681,
+      "memory_available_bytes": 12820074496,
+      "encoder_rss_bytes": 146395136,
+      "playout_rss_bytes": 272310272,
+      "live_queue_frames": 43,
+      "brb_queue_frames": 30,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087341.98645689,
+      "cpu_total": 438246955,
+      "cpu_busy": 40107057,
+      "memory_available_bytes": 12872241152,
+      "encoder_rss_bytes": 130977792,
+      "playout_rss_bytes": 197697536,
+      "live_queue_frames": 18,
+      "brb_queue_frames": 31,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087342.977992927,
+      "cpu_total": 438247349,
+      "cpu_busy": 40107414,
+      "memory_available_bytes": 13027123200,
+      "encoder_rss_bytes": 102809600,
+      "playout_rss_bytes": 145580032,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 32,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087343.977681561,
+      "cpu_total": 438247750,
+      "cpu_busy": 40107669,
+      "memory_available_bytes": 12986245120,
+      "encoder_rss_bytes": 103997440,
+      "playout_rss_bytes": 149970944,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 34,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087344.977372429,
+      "cpu_total": 438248154,
+      "cpu_busy": 40107834,
+      "memory_available_bytes": 12974301184,
+      "encoder_rss_bytes": 104038400,
+      "playout_rss_bytes": 153083904,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 35,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087345.978349695,
+      "cpu_total": 438248550,
+      "cpu_busy": 40107990,
+      "memory_available_bytes": 12936114176,
+      "encoder_rss_bytes": 104280064,
+      "playout_rss_bytes": 156196864,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 36,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087346.978550612,
+      "cpu_total": 438248947,
+      "cpu_busy": 40108117,
+      "memory_available_bytes": 12975321088,
+      "encoder_rss_bytes": 104017920,
+      "playout_rss_bytes": 160006144,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 37,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087347.978321021,
+      "cpu_total": 438249350,
+      "cpu_busy": 40108351,
+      "memory_available_bytes": 12894203904,
+      "encoder_rss_bytes": 104124416,
+      "playout_rss_bytes": 325459968,
+      "live_queue_frames": 51,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087348.977531517,
+      "cpu_total": 438249748,
+      "cpu_busy": 40108524,
+      "memory_available_bytes": 12812087296,
+      "encoder_rss_bytes": 104091648,
+      "playout_rss_bytes": 403517440,
+      "live_queue_frames": 76,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087349.980121726,
+      "cpu_total": 438250150,
+      "cpu_busy": 40108792,
+      "memory_available_bytes": 12739883008,
+      "encoder_rss_bytes": 105385984,
+      "playout_rss_bytes": 492482560,
+      "live_queue_frames": 104,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087350.977853312,
+      "cpu_total": 438250547,
+      "cpu_busy": 40109045,
+      "memory_available_bytes": 12686315520,
+      "encoder_rss_bytes": 104067072,
+      "playout_rss_bytes": 575180800,
+      "live_queue_frames": 130,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087351.978350738,
+      "cpu_total": 438250944,
+      "cpu_busy": 40109340,
+      "memory_available_bytes": 12647116800,
+      "encoder_rss_bytes": 104144896,
+      "playout_rss_bytes": 572076032,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087352.97850162,
+      "cpu_total": 438251342,
+      "cpu_busy": 40109586,
+      "memory_available_bytes": 12644405248,
+      "encoder_rss_bytes": 104280064,
+      "playout_rss_bytes": 573034496,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087353.978124518,
+      "cpu_total": 438251740,
+      "cpu_busy": 40109799,
+      "memory_available_bytes": 12649644032,
+      "encoder_rss_bytes": 104103936,
+      "playout_rss_bytes": 571826176,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087354.978289964,
+      "cpu_total": 438252137,
+      "cpu_busy": 40109986,
+      "memory_available_bytes": 12654116864,
+      "encoder_rss_bytes": 104062976,
+      "playout_rss_bytes": 572088320,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087355.979187023,
+      "cpu_total": 438252534,
+      "cpu_busy": 40110277,
+      "memory_available_bytes": 12683198464,
+      "encoder_rss_bytes": 104058880,
+      "playout_rss_bytes": 562757632,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 38,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087356.980550544,
+      "cpu_total": 438252934,
+      "cpu_busy": 40110498,
+      "memory_available_bytes": 12658229248,
+      "encoder_rss_bytes": 104275968,
+      "playout_rss_bytes": 574685184,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087357.977608828,
+      "cpu_total": 438253334,
+      "cpu_busy": 40110693,
+      "memory_available_bytes": 12650881024,
+      "encoder_rss_bytes": 103923712,
+      "playout_rss_bytes": 572096512,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087358.97832883,
+      "cpu_total": 438253728,
+      "cpu_busy": 40110855,
+      "memory_available_bytes": 12644577280,
+      "encoder_rss_bytes": 106192896,
+      "playout_rss_bytes": 572096512,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087359.978274786,
+      "cpu_total": 438254132,
+      "cpu_busy": 40111051,
+      "memory_available_bytes": 12634112000,
+      "encoder_rss_bytes": 106418176,
+      "playout_rss_bytes": 572100608,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 1
+    },
+    {
+      "monotonic": 1087360.979250355,
+      "cpu_total": 438254527,
+      "cpu_busy": 40111255,
+      "memory_available_bytes": 12641873920,
+      "encoder_rss_bytes": 106369024,
+      "playout_rss_bytes": 572624896,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087361.979177693,
+      "cpu_total": 438254922,
+      "cpu_busy": 40111512,
+      "memory_available_bytes": 12653895680,
+      "encoder_rss_bytes": 106508288,
+      "playout_rss_bytes": 575213568,
+      "live_queue_frames": 130,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087362.977900276,
+      "cpu_total": 438255321,
+      "cpu_busy": 40111746,
+      "memory_available_bytes": 12659159040,
+      "encoder_rss_bytes": 106237952,
+      "playout_rss_bytes": 565874688,
+      "live_queue_frames": 127,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087363.978199144,
+      "cpu_total": 438255720,
+      "cpu_busy": 40111930,
+      "memory_available_bytes": 12651368448,
+      "encoder_rss_bytes": 106242048,
+      "playout_rss_bytes": 569249792,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087364.978380758,
+      "cpu_total": 438256119,
+      "cpu_busy": 40112128,
+      "memory_available_bytes": 12644605952,
+      "encoder_rss_bytes": 106348544,
+      "playout_rss_bytes": 572592128,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087365.978644393,
+      "cpu_total": 438256519,
+      "cpu_busy": 40112387,
+      "memory_available_bytes": 12657438720,
+      "encoder_rss_bytes": 106110976,
+      "playout_rss_bytes": 572596224,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087366.978133713,
+      "cpu_total": 438256919,
+      "cpu_busy": 40112612,
+      "memory_available_bytes": 12667785216,
+      "encoder_rss_bytes": 106409984,
+      "playout_rss_bytes": 572108800,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087367.979781566,
+      "cpu_total": 438257318,
+      "cpu_busy": 40112838,
+      "memory_available_bytes": 12632801280,
+      "encoder_rss_bytes": 105955328,
+      "playout_rss_bytes": 574722048,
+      "live_queue_frames": 130,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087368.977591985,
+      "cpu_total": 438257712,
+      "cpu_busy": 40113029,
+      "memory_available_bytes": 12653023232,
+      "encoder_rss_bytes": 106217472,
+      "playout_rss_bytes": 572108800,
+      "live_queue_frames": 129,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087369.978300814,
+      "cpu_total": 438258113,
+      "cpu_busy": 40113171,
+      "memory_available_bytes": 12702068736,
+      "encoder_rss_bytes": 106196992,
+      "playout_rss_bytes": 494284800,
+      "live_queue_frames": 104,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087370.978571202,
+      "cpu_total": 438258522,
+      "cpu_busy": 40113365,
+      "memory_available_bytes": 12775182336,
+      "encoder_rss_bytes": 106496000,
+      "playout_rss_bytes": 418656256,
+      "live_queue_frames": 79,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087371.978036347,
+      "cpu_total": 438258921,
+      "cpu_busy": 40113563,
+      "memory_available_bytes": 12890918912,
+      "encoder_rss_bytes": 106086400,
+      "playout_rss_bytes": 336867328,
+      "live_queue_frames": 54,
+      "brb_queue_frames": 40,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087372.979587185,
+      "cpu_total": 438259323,
+      "cpu_busy": 40113734,
+      "memory_available_bytes": 12945723392,
+      "encoder_rss_bytes": 106065920,
+      "playout_rss_bytes": 260943872,
+      "live_queue_frames": 29,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087373.979299982,
+      "cpu_total": 438259724,
+      "cpu_busy": 40113913,
+      "memory_available_bytes": 13006278656,
+      "encoder_rss_bytes": 106106880,
+      "playout_rss_bytes": 182857728,
+      "live_queue_frames": 4,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087374.977809147,
+      "cpu_total": 438260124,
+      "cpu_busy": 40114055,
+      "memory_available_bytes": 13003591680,
+      "encoder_rss_bytes": 106242048,
+      "playout_rss_bytes": 169766912,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087375.977521944,
+      "cpu_total": 438260523,
+      "cpu_busy": 40114238,
+      "memory_available_bytes": 13038108672,
+      "encoder_rss_bytes": 106270720,
+      "playout_rss_bytes": 169766912,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087376.978425447,
+      "cpu_total": 438260926,
+      "cpu_busy": 40114407,
+      "memory_available_bytes": 13074747392,
+      "encoder_rss_bytes": 107028480,
+      "playout_rss_bytes": 170684416,
+      "live_queue_frames": 0,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087377.977573292,
+      "cpu_total": 438261323,
+      "cpu_busy": 40114607,
+      "memory_available_bytes": 12965339136,
+      "encoder_rss_bytes": 106446848,
+      "playout_rss_bytes": 253816832,
+      "live_queue_frames": 27,
+      "brb_queue_frames": 41,
+      "video_write_queue_frames": 0,
+      "audio_write_queue_frames": 0
+    },
+    {
+      "monotonic": 1087378.979416771,
+      "cpu_total": 438261723,
+      "cpu_busy": 40114794,
+      "memory_available_bytes": 12894838784,
+      "encoder_rss_bytes": null
+    }
+  ],
+  "sources": {
+    "1": 801,
+    "0": 1269,
+    "3": 98,
+    "2": 82
+  },
+  "commands": [
+    {
+      "frame": 200,
+      "source": 1,
+      "at": 1087296.974149591,
+      "ready": true
+    },
+    {
+      "frame": 300,
+      "source": 0,
+      "at": 1087300.974161806,
+      "ready": true
+    },
+    {
+      "frame": 338,
+      "source": 1,
+      "at": 1087302.494162935,
+      "ready": true
+    },
+    {
+      "frame": 363,
+      "source": 0,
+      "at": 1087303.494147164,
+      "ready": true
+    },
+    {
+      "frame": 1700,
+      "source": 1,
+      "at": 1087356.976025915,
+      "ready": true
+    },
+    {
+      "frame": 1800,
+      "source": 0,
+      "at": 1087360.975026969,
+      "ready": true
+    },
+    {
+      "frame": 1838,
+      "source": 1,
+      "at": 1087362.494749711,
+      "ready": true
+    },
+    {
+      "frame": 1863,
+      "source": 0,
+      "at": 1087363.494141484,
+      "ready": true
+    }
+  ],
+  "maximum_clock_lag_seconds": 0.19435334391891956,
+  "unmeasured_gates": [
+    "representative_media",
+    "encoder_recovery",
+    "rendering_contention",
+    "stop_and_ending_controls"
+  ],
+  "encoder_command": [
+    "ffmpeg",
+    "-hide_banner",
+    "-nostdin",
+    "-v",
+    "warning",
+    "-n",
+    "-thread_queue_size",
+    "2",
+    "-probesize",
+    "32",
+    "-analyzeduration",
+    "0",
+    "-f",
+    "rawvideo",
+    "-pixel_format",
+    "yuv420p",
+    "-video_size",
+    "1920x1080",
+    "-framerate",
+    "25",
+    "-i",
+    "pipe:0",
+    "-thread_queue_size",
+    "2",
+    "-probesize",
+    "32",
+    "-analyzeduration",
+    "0",
+    "-f",
+    "s16le",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    "-i",
+    "pipe:9",
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-t",
+    "94",
+    "-c:v",
+    "libx264",
+    "-threads",
+    "3",
+    "-preset",
+    "veryfast",
+    "-tune",
+    "zerolatency",
+    "-pix_fmt",
+    "yuv420p",
+    "-b:v",
+    "8000k",
+    "-minrate",
+    "8000k",
+    "-maxrate",
+    "8000k",
+    "-bufsize",
+    "16000k",
+    "-g",
+    "50",
+    "-keyint_min",
+    "50",
+    "-sc_threshold",
+    "0",
+    "-x264-params",
+    "nal-hrd=cbr:force-cfr=1",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "160k",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    "-f",
+    "flv",
+    "rtmp://127.0.0.1:46803/live/benchmark-input-key"
+  ],
+  "warmup_frames_selected": 100,
+  "clock_anchor_unix_seconds": 1792280083.5305903,
+  "elapsed_seconds": 90.00534573104233,
+  "live_buffer_dropped_frames": 23,
+  "rtmp_sinks": [
+    {
+      "injected_disconnects": 1,
+      "connections": 2,
+      "rejected": 0,
+      "write_failures": 0
+    },
+    {
+      "injected_disconnects": 0,
+      "connections": 1,
+      "rejected": 0,
+      "write_failures": 0
+    }
+  ],
+  "delivered_video_frames": [
+    2250
+  ],
+  "warmup_frames_delivered": [
+    50
+  ],
+  "maximum_delivery_latency_seconds": 0.9738719388842583,
+  "maximum_ready_command_latency_seconds": 0.13575845723971725,
+  "ready_commands_checked": 8,
+  "maximum_live_relay_delay_seconds": 5.845582879148424,
+  "ingress_measurement": "decoded_frame_arrival; compressed-input decode delay is not included",
+  "maximum_av_sync_error_seconds": 0.018813000000001523,
+  "av_sync_events_checked": 82,
+  "recovery": {
+    "last_frame": 2249,
+    "gap_seconds": 2.844819758
+  },
+  "capture": {
+    "decode_ok": true,
+    "video_frames": 2300,
+    "width": 1920,
+    "height": 1080,
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "audio_rate": "48000",
+    "audio_channels": 2,
+    "timestamp_discontinuities": 0,
+    "maximum_frame_gap_seconds": 0.04000000000000625,
+    "first_video_pts": 0.0,
+    "last_video_pts": 91.96,
+    "bytes": 93841334
+  },
+  "cpu_windows": [
+    {
+      "start_seconds": 0.0,
+      "duration_seconds": 60.000041004037485,
+      "host_cpu_percent": 59.103422771911085
+    },
+    {
+      "start_seconds": 1.000295375008136,
+      "duration_seconds": 60.0023358380422,
+      "host_cpu_percent": 59.28589037718794
+    },
+    {
+      "start_seconds": 1.9998238440603018,
+      "duration_seconds": 60.000538954976946,
+      "host_cpu_percent": 59.51598323609171
+    },
+    {
+      "start_seconds": 3.000536778010428,
+      "duration_seconds": 60.00032344716601,
+      "host_cpu_percent": 59.790468364831554
+    },
+    {
+      "start_seconds": 4.0006858732085675,
+      "duration_seconds": 60.00032523390837,
+      "host_cpu_percent": 60.03040762656147
+    },
+    {
+      "start_seconds": 5.001023753080517,
+      "duration_seconds": 60.99977569794282,
+      "host_cpu_percent": 59.80348550402329
+    },
+    {
+      "start_seconds": 6.000728178070858,
+      "duration_seconds": 60.00007127295248,
+      "host_cpu_percent": 59.68278752516744
+    },
+    {
+      "start_seconds": 7.000216277083382,
+      "duration_seconds": 60.00148023292422,
+      "host_cpu_percent": 59.9547976166016
+    },
+    {
+      "start_seconds": 8.0001897290349,
+      "duration_seconds": 60.00287030218169,
+      "host_cpu_percent": 60.00082192906752
+    },
+    {
+      "start_seconds": 9.000024792039767,
+      "duration_seconds": 60.00009352318011,
+      "host_cpu_percent": 60.04027617951669
+    },
+    {
+      "start_seconds": 10.000658859033138,
+      "duration_seconds": 60.00017945817672,
+      "host_cpu_percent": 60.050147977638936
+    },
+    {
+      "start_seconds": 11.000375173054636,
+      "duration_seconds": 60.000409099971876,
+      "host_cpu_percent": 59.933434687923736
+    },
+    {
+      "start_seconds": 12.001057244138792,
+      "duration_seconds": 60.00070259789936,
+      "host_cpu_percent": 59.97616405704188
+    },
+    {
+      "start_seconds": 13.001156826037914,
+      "duration_seconds": 60.00053035398014,
+      "host_cpu_percent": 59.983552631578945
+    },
+    {
+      "start_seconds": 14.000886541092768,
+      "duration_seconds": 60.99982208991423,
+      "host_cpu_percent": 59.80491358724248
+    },
+    {
+      "start_seconds": 15.001715294085443,
+      "duration_seconds": 60.999174951110035,
+      "host_cpu_percent": 59.693092558101874
+    },
+    {
+      "start_seconds": 16.00116886314936,
+      "duration_seconds": 60.99998501688242,
+      "host_cpu_percent": 59.579637954076055
+    },
+    {
+      "start_seconds": 17.001330441096798,
+      "duration_seconds": 60.9993127589114,
+      "host_cpu_percent": 59.530946208684384
+    },
+    {
+      "start_seconds": 18.00098928110674,
+      "duration_seconds": 61.00130177196115,
+      "host_cpu_percent": 59.51126600745664
+    },
+    {
+      "start_seconds": 19.001393664162606,
+      "duration_seconds": 60.00089738890529,
+      "host_cpu_percent": 59.36534102616938
+    },
+    {
+      "start_seconds": 20.00113073317334,
+      "duration_seconds": 60.999679567990825,
+      "host_cpu_percent": 58.89127701853279
+    },
+    {
+      "start_seconds": 21.001416658051312,
+      "duration_seconds": 60.99966403096914,
+      "host_cpu_percent": 58.84261324465712
+    },
+    {
+      "start_seconds": 22.001271654153243,
+      "duration_seconds": 60.9992741800379,
+      "host_cpu_percent": 58.80300263745182
+    },
+    {
+      "start_seconds": 23.001626324141398,
+      "duration_seconds": 61.000470347935334,
+      "host_cpu_percent": 58.63846715921085
+    },
+    {
+      "start_seconds": 24.000387182226405,
+      "duration_seconds": 60.00170948985033,
+      "host_cpu_percent": 58.80992691084775
+    },
+    {
+      "start_seconds": 25.000828192103654,
+      "duration_seconds": 60.0009812770877,
+      "host_cpu_percent": 58.81211019784396
+    },
+    {
+      "start_seconds": 26.000244038179517,
+      "duration_seconds": 60.00007459591143,
+      "host_cpu_percent": 58.558149142739104
+    },
+    {
+      "start_seconds": 27.000559259206057,
+      "duration_seconds": 61.00037567480467,
+      "host_cpu_percent": 58.32757429163787
+    },
+    {
+      "start_seconds": 28.00087481108494,
+      "duration_seconds": 60.00006012292579,
+      "host_cpu_percent": 58.60515110174046
+    },
+    {
+      "start_seconds": 29.001037223031744,
+      "duration_seconds": 61.00088903517462,
+      "host_cpu_percent": 58.31196842062426
+    },
+    {
+      "start_seconds": 30.000190534163266,
+      "duration_seconds": 60.0017357240431,
+      "host_cpu_percent": 58.42264244631109
+    }
+  ],
+  "cpu_gate": "pass"
+}

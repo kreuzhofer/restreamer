@@ -1,8 +1,11 @@
-# Continuous-output capacity screen
+# Continuous-output experiments
 
-This is the first measurement tool for the [confirmed design](../../docs/design/continuous-output.md).
-It does **not** implement continuous source selection or qualify production rollout.
+These isolated measurement tools support the [confirmed design](../../docs/design/continuous-output.md).
+They include a capacity screen and a clocked source-switching proof. Neither
+qualifies production rollout or selects the production implementation library.
 The normal Restreamer executable and saved configuration are unchanged.
+
+## Capacity screen
 
 The screen runs one persistent software H.264/AAC encoder over a local recording,
 loops its input, captures the result, and independently decodes every captured
@@ -69,41 +72,115 @@ The report captures the exact encoder command, including local file paths. Do
 not put credentials in input filenames. Review paths and media before sharing
 artifacts; the tool uploads nothing.
 
-## Remaining benchmark work
+## Clocked switching proof
 
-A successful screen is necessary evidence, not the complete design gate. The
-next proof must maintain an independent video/audio clock and test:
+`playout.py` decodes two local files into bounded queues and selects video/audio
+on an independent 25 fps clock. One H.264/AAC encoder remains connected to an
+isolated instance of the real Restreamer executable, which fans out to two
+loopback RTMP capture listeners. The experiment uses fresh dummy credentials,
+its own config and authenticated stage commands. It never opens a platform URL.
 
-1. Bounded live-input buffering before selection; input/video/audio outages;
-   hold-last-picture, fallback BRB, emergency media, and automatic recovery.
-2. Ready source switches within one second, with output timing measured from
-   decoded frame/audio markers; A/V content synchronization within 80 ms and
-   added relay delay targeted at four seconds, bounded at eight.
-3. Local RTMP destinations, independently failing sinks, connection counts,
-   supervised encoder failure/recovery, and immediate Stop versus ending drain.
-4. Admitted and rejected rendering contention, bounded queues and memory growth.
-5. A complete four-hour run on the intended VPS, then the separately arranged
-   platform comparison. Steady re-encoding for four hours alone is insufficient.
+```text
+local live file → decoder → bounded four-second buffer ┐
+local BRB file  → decoder → bounded prepared queue      ├→ clock → encoder
+hold picture / silence / emergency black               ┘             ↓
+                                          isolated native relay → two local sinks
+```
 
-Media timestamps show cadence, not end-to-end latency or lip synchronization.
-The Mac can validate the harness; it cannot establish the 4-vCPU VPS capacity.
-No claim about fixing the unexplained YouTube green screen follows from this
-screen. Results must be reconciled with the design before production integration.
+Build the helper and relay with `make check-continuous-benchmark`, or use the
+container below. `--relay` and `--sinks` must be supplied together. Without them,
+the proof writes a local capture and leaves delivery gates unmeasured.
+
+```sh
+python3 experiments/continuous-output/playout.py \
+  --live /path/to/live.mp4 --brb /path/to/brb.mp4 \
+  --output /path/to/new-clock-run --seconds 90 \
+  --relay bin/continuous-bench-relay --sinks bin/continuous-bench-sinks
+```
+
+A repeating 60-second script selects manual BRB at 8–12 and 13.5–14.5 seconds,
+pauses the live decoder at 20–28 and 50–58 seconds, marks incoming live audio
+unavailable at 40–44 seconds, and makes fallback BRB unavailable at 54–58 seconds.
+Buffered live drains before hold-last-picture with silence (up to one second),
+BRB fallback and emergency black. The decoder resumes and live re-primes.
+These are controlled decoder pauses/audio-availability faults; they do not test
+real network-input EOF or supervised decoder/encoder replacement.
+
+The first four seconds warm up the native output connections. Warm-up delivery
+is reported separately; every subsequent measured frame must reach both sinks
+with the correct source marker, frame ID and 40 ms timestamp cadence. Ordinary
+switches and source outages must not reconnect either destination. Ready manual
+commands must reach the sink within one second. All-frame selection-to-arrival
+latency is also recorded, but is not the ready-command gate. The eight-second
+live delay check currently starts at **decoded-frame arrival**; compressed-input
+decoding time is excluded, so this does not establish full server-ingress delay.
+
+For input-to-output A/V content checks, `prepare_markers.py` creates a separate
+fixture with a one-frame flash and matching right-channel chirp before encoding:
+
+```sh
+python3 experiments/continuous-output/prepare_markers.py \
+  --output /path/to/noise-markers.mp4
+python3 experiments/continuous-output/prepare_markers.py \
+  --artwork /path/to/workshop.mp4 --output /path/to/workshop-markers.mp4
+```
+
+Pass those fixtures to `playout.py --sync-markers`. Each observed flash must have
+a matching decoded chirp within 80 ms. Fixtures use synthetic audio; this is not
+an operation for replacing the audio of an original recording. Without the flag,
+the proof preserves the left source channel and adds right-channel output-clock
+chirps, leaving input A/V synchronization explicitly unmeasured.
+
+`--target-fault` is a separate 20–180-second probe: the first sink deliberately
+closes its first connection after 15 seconds. The healthy sink must receive all
+measured frames without reconnecting; the affected sink must reconnect exactly
+once, resume at a keyframe without replay, decode cleanly and reach the final
+frame. A ten-second recovery-gap screen is an experimental sanity check, not a
+production SLA. Run this probe separately from ordinary zero-reconnect evidence.
+
+Clocked runs retain `selected-frames.jsonl`, per-connection FLV captures and packet
+arrival logs, source hashes, encoder settings, CPU/RSS/queue samples, decoder
+logs and a `report.json`. Evidence processing decodes the captures after playback;
+allow additional time for it to finish. Two four-hour captures need roughly
+30 GB plus preflight margin, source files and other workload storage.
+
+## Remaining qualification work
+
+A successful short proof is partial evidence. Production integration remains
+gated on representative-media endurance and the complete confirmed contract:
+
+1. Four-hour real-recording run on the intended VPS, with bounded memory/queues
+   and whole-host CPU headroom; visual-quality review of the candidate profile.
+2. True compressed-input ingress-to-egress delay, network input loss/reconnect,
+   supervised encoder failure/recovery and explicit failure state.
+3. Admitted and rejected asset-generation contention; immediate Stop with a
+   buffered tail, normal ending drain and existing music-loop behavior.
+4. Separate approval and evidence for the YouTube-continuous/Twitch-passthrough
+   comparison. No claim that the unexplained green-screen incident is fixed.
+
+Every report keeps `rollout_qualified: false` and names unmeasured gates. A short
+run can complete with CPU unmeasured; it cannot qualify host capacity. The Mac
+validates the harness, not the 4-vCPU VPS. A successful subprocess exit alone is
+not approval to implement or deploy the production feature.
 
 ## Tests
 
 ```sh
-REQUIRE_FFMPEG_TESTS=1 python3 -m unittest discover \
-  -s experiments/continuous-output -v
+REQUIRE_FFMPEG_TESTS=1 make check-continuous-benchmark
 ```
 
 Tests exercise the CLI with real moving video/audio, decode its capture, verify
 failure and interruption reporting, and ensure prior results cannot be replaced.
+Real-media integration tests exercise both RTMP outputs, source switches, A/V
+markers and independent destination recovery. The capture helper runs with the
+Go race detector. CI also enables the 65-second Linux CPU-window integration.
+Loopback socket access is required; no platform credentials are used.
 
 ## Isolated container option
 
-The included Dockerfile adds Python to the released Restreamer media image,
-without starting Restreamer. It pins the initial release under test; an explicit
+The included Dockerfile adds Python and builds the loopback capture helper on
+the released Restreamer media image. Capacity-only mode does not start Restreamer;
+clocked RTMP mode starts a separate instance inside the isolated container. It pins the initial release under test; an explicit
 `RESTREAMER_IMAGE` build argument can select a different release for a recorded
 comparison. Record the resolved base-image digest with the result.
 
@@ -124,3 +201,19 @@ applies to **total host CPU**, not just the container. A quota-limited or short
 successful run alone cannot qualify the architecture; resource limits and other
 host activity must accompany the evidence. The capture is retained in the bind
 mount when the disposable container exits.
+
+Run the clocked proof in the same isolation by overriding the entrypoint:
+
+```sh
+docker run --rm --network none --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --cpus 3 --memory 2g --pids-limit 128 \
+  --tmpfs /tmp:rw,noexec,nosuid,size=128m --entrypoint python3 \
+  -v /path/to/benchmark-data:/bench restreamer-continuous-benchmark \
+  /opt/continuous-benchmark/playout.py \
+  --live /bench/noise-markers.mp4 --brb /bench/workshop-markers.mp4 \
+  --output /bench/clock-90s --seconds 90 --sync-markers \
+  --relay /restreamer --sinks /opt/continuous-benchmark/rtmp-sinks
+```
+
+The original recording must remain untouched. Mount it read-only when supplied
+separately; place any instrumented copies and results in benchmark storage.

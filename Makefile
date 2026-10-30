@@ -16,6 +16,8 @@ check-pacman-artwork:
 	node --test artwork/pacman-maze/motion.test.mjs
 	node artwork/pacman-maze/render.mjs --check
 check-continuous-benchmark:
+	go build -race -o bin/continuous-bench-sinks ./experiments/continuous-output/sinks
+	go build -o bin/continuous-bench-relay ./cmd/restreamer
 	python3 -m unittest discover -s experiments/continuous-output -v
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/restreamer ./cmd/restreamer

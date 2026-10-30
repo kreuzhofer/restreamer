@@ -256,9 +256,12 @@ scope. Continuous output is not a guarantee of platform-side public playback.
 The operator confirmed the complete plan and the one-second ready-source
 response target on 2026-10-30. The next step is the runnable media benchmark;
 production implementation remains gated on its results. A standalone
-[capacity-screen harness](../../experiments/continuous-output/README.md) is the
-first experimental step. It does not yet implement the source-switching proof
-or qualify any production rollout; intended-host qualification remains pending.
+[experimental harness](../../experiments/continuous-output/README.md) provides
+a capacity screen and an independently clocked switching proof with two local
+RTMP sinks. Its reports distinguish measured gates from remaining qualification
+work; it does not qualify production rollout. Representative-media endurance,
+full ingress-delay measurement and the remaining failure/contention/control
+gates are still required before production implementation.
 
 ## Evidence to collect
 
