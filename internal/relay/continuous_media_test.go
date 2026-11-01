@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -518,21 +519,49 @@ func TestContinuousAudioLossFallsBackAndRecoversWithoutReconnect(t *testing.T) {
 	if w := stageRequest(t, s, "go_live", nil); w.Code != 202 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	var droppedAudio, videoDuringOutage atomic.Uint64
 	startPublisher := func(dropAudio bool) (context.CancelFunc, <-chan error) {
 		ctx, cancel := context.WithCancel(context.Background())
+		publisher := publishInput(t, address)
 		args := []string{"-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000"}
-		if dropAudio {
-			args = append(args, "-af", "aselect='lt(t,6)'")
-		}
-		args = append(args, "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "0", "-c:a", "aac", "-ac", "2", "-max_interleave_delta", "100000", "-f", "flv", address+"/input-key-1234567890")
+		args = append(args, "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "0", "-c:a", "aac", "-ac", "2", "-max_interleave_delta", "100000", "-f", "flv", "pipe:1")
 		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		output, err := cmd.StdoutPipe()
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
 		if err := cmd.Start(); err != nil {
 			cancel()
 			t.Fatal(err)
 		}
 		done := make(chan error, 1)
-		go func() { done <- cmd.Wait(); close(done) }()
-		return cancel, done
+		go func() {
+			// Drop encoded packets at the RTMP boundary. Audio filtering inside
+			// FFmpeg leaves muxing/encoder buffering in control of the outage.
+			err := readProgramFLV(output, func(m *rtmp.Message) error {
+				if dropAudio && m.Timestamp >= 6*time.Second {
+					if m.Type == rtmp.Audio {
+						droppedAudio.Add(1)
+						return nil
+					}
+					if isVideoFrame(m) {
+						videoDuringOutage.Add(1)
+					}
+				}
+				m.MessageStreamID = rtmp.StreamID
+				m.ChunkStreamID = 6
+				if m.Type == rtmp.Audio {
+					m.ChunkStreamID = 4
+				}
+				return publisher.Write(m)
+			})
+			cancel()
+			_ = cmd.Wait()
+			done <- err
+			close(done)
+		}()
+		return func() { cancel(); publisher.Net.Close() }, done
 	}
 	cancel, done := startPublisher(true)
 	defer func() { cancel(); <-done }()
@@ -545,10 +574,13 @@ func TestContinuousAudioLossFallsBackAndRecoversWithoutReconnect(t *testing.T) {
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
-		t.Fatalf("expected %s: %+v", source, readStage(t, s).Continuous)
+		t.Fatalf("expected %s: %+v; dropped audio packets=%d, outage video frames=%d", source, readStage(t, s).Continuous, droppedAudio.Load(), videoDuringOutage.Load())
 	}
 	wait("obs", 8)
 	wait("brb", 12)
+	if droppedAudio.Load() == 0 || videoDuringOutage.Load() < 25 {
+		t.Fatal("fixture did not sustain video during the audio outage", droppedAudio.Load(), videoDuringOutage.Load())
+	}
 	cancel()
 	<-done
 	cancel, done = startPublisher(false)
