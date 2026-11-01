@@ -9,6 +9,11 @@ import (
 )
 
 type ContinuousStatus struct {
+	LiveBufferFrames     int    `json:"live_buffer_frames"`
+	PreparedBufferFrames int    `json:"prepared_buffer_frames"`
+	DroppedDecodedFrames uint64 `json:"dropped_decoded_frames"`
+	SourceQueueOverflows uint64 `json:"source_queue_overflows"`
+
 	RequestedSource     string `json:"requested_source"`
 	SelectionPending    bool   `json:"selection_pending"`
 	Epoch               uint64 `json:"epoch"`
@@ -110,6 +115,7 @@ func (p *continuousProgram) offer(e programEvent) {
 	}
 	if p.bytes+n > 16<<20 {
 		p.overflow = true
+		p.status.SourceQueueOverflows++
 		return
 	}
 	select {
@@ -117,6 +123,7 @@ func (p *continuousProgram) offer(e programEvent) {
 		p.bytes += n
 	default:
 		p.overflow = true
+		p.status.SourceQueueOverflows++
 	}
 }
 
@@ -278,7 +285,11 @@ func (p *continuousProgram) run(ctx context.Context) {
 					(*decoder).close()
 					*decoder = nil
 				}
-				d, err := startProgramDecoder(ctx, m.Timestamp)
+				frameLimit := 50
+				if e.live {
+					frameLimit = 130
+				}
+				d, err := startProgramDecoder(ctx, m.Timestamp, frameLimit)
 				if err != nil {
 					p.mu.Lock()
 					p.status.Error = "Continuous source decoder unavailable; check FFmpeg"
@@ -311,6 +322,7 @@ func (p *continuousProgram) run(ctx context.Context) {
 				p.mu.Lock()
 				p.status.State, p.status.Source, p.status.RetryAt, p.status.DelayMS = "off", "off", 0, nil
 				p.status.Error = ""
+				p.status.LiveBufferFrames, p.status.PreparedBufferFrames = 0, 0
 				p.drainRequested, p.drainDone = false, false
 				p.mu.Unlock()
 				draining, flushing = false, false
@@ -430,6 +442,13 @@ func (p *continuousProgram) run(ctx context.Context) {
 					lastPrepared, preparedGood = f, now
 				}
 			}
+			liveFrames, liveDropped := live.queueStatus()
+			preparedFrames, preparedDropped := prepared.queueStatus()
+			p.mu.Lock()
+			p.status.LiveBufferFrames, p.status.PreparedBufferFrames = liveFrames, preparedFrames
+			p.status.DroppedDecodedFrames = liveDropped + preparedDropped
+			p.mu.Unlock()
+
 			source := want.source
 			fallback := emergency
 			if lastPrepared != nil && now.Sub(preparedGood) <= continuousFrameTime {

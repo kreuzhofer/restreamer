@@ -185,7 +185,9 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   cancel.onclick = () => { reset(); name.focus(); };
   retry.onclick = () => refresh().then(() => { message.textContent = 'Destinations refreshed. Your draft is retained.'; }).catch(error => { message.textContent = error.message + ' Try Refresh destinations again.'; });
   refresh().catch(error => { fields.disabled = true; message.textContent = error.message + ' Use Refresh destinations to retry.'; });
-  return {refresh};
+  const updateStage = (stage, online) => { stageSnapshot = online ? stage : null; updateModeHint(); };
+  window.updateDestinationStage = updateStage;
+  return {refresh, updateStage};
 };
 
 document.querySelectorAll("[data-destination-settings]").forEach(window.mountDestinationSettings);

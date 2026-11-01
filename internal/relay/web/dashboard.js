@@ -62,6 +62,7 @@ function badge(element, state) {
 function render() {
  if (!snapshot) return;
  window.broadcastStages?.update(snapshot, connected);
+ window.updateDestinationStage?.(snapshot.stage, connected);
  window.streamProfile?.update(snapshot, connected, false);
  window.updatePreview?.(connected && snapshot.publishing);
  window.updateLibrary?.(snapshot, connected);
@@ -118,6 +119,9 @@ function render() {
   }
   $('.target-message', card).textContent = `${modeName} · ${message}`;
   $('.target-brief', card).textContent = !connected ? 'Status stale · controls unavailable' : !output.can_enable ? output.unavailable_reason : output.state === 'streaming' ? `Relay sending · ${current ? rate(last.outputs[output.name] || 0) : '—'} Mbps · ${Number.isFinite(output.dropped_frames) ? output.dropped_frames.toLocaleString() : '—'} drops` : output.state === 'retrying' ? `Connection failed · ${message.toLowerCase()}` : snapshot.stage?.mode === 'preview_only' ? 'Rehearsal · delivery blocked' : snapshot.stage?.stage === 'OFF' ? 'OFF · delivery stopped' : message;
+  if (connected && output.enabled && output.output_mode === 'continuous' && snapshot.stage?.stage !== 'OFF' && program?.state !== 'running') {
+    $('.target-brief', card).textContent = `Encoder ${program?.state || 'status unknown'} · waiting for output`;
+  }
   $('.target-brief', card).textContent = `${modeName} · ${$('.target-brief', card).textContent}`;
   card.classList.toggle('destination-failing', connected && output.enabled && output.state === 'retrying');
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;

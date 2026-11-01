@@ -48,7 +48,7 @@
   <nav class="remote-panels" aria-label="Remote panels"><button type="button" data-remote-panel="operate" aria-controls="live-primary" aria-pressed="true">Operate</button><button type="button" data-remote-panel="signals" aria-controls="live-sidebar" aria-pressed="false">Signals &amp; destinations</button></nav>
   <div id="live-console" class="live-console">
    <div id="live-primary" class="live-primary" aria-label="Broadcast operation">
-  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="panel-heading"><div><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><label id="broadcast-path-label" class="monitor-path" hidden>Monitor output<select id="broadcast-path"><option value="passthrough">Passthrough</option><option value="continuous">Continuous · 1080p25</option></select></label><p id="broadcast-path-status" class="library-help" role="status"></p><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
+  <section class="panel broadcast-panel" aria-labelledby="broadcast-title"><div class="monitor-heading"><div class="panel-heading"><div><h2 id="broadcast-title">Broadcast monitor</h2></div><button id="broadcast-toggle" class="preview-button" type="button" aria-pressed="true">Pause preview</button></div><label id="broadcast-path-label" class="monitor-path" hidden>Monitor output<select id="broadcast-path"><option value="passthrough">Passthrough</option><option value="continuous">Continuous · 1080p25</option></select></label><p id="broadcast-path-status" class="library-help" role="status"></p></div><div class="live-program-screen"><video id="broadcast-video" controls muted playsinline aria-label="Broadcast preview"></video></div><p id="broadcast-status" role="status" class="library-help">Broadcast is off</p><p class="monitor-caption">Selected feed · audio starts muted · browser preview only</p></section>
   <section class="panel stage-panel" aria-labelledby="stage-title">
    <div class="panel-heading"><div><h2 id="stage-title">Broadcast stages</h2></div><span id="stage-badge" class="badge">Loading</span></div>
    <div id="delivery-banner" class="delivery-banner" role="status" hidden></div>
@@ -135,6 +135,7 @@
    <div id="input-profile" class="input-profile" hidden>
     <h2>Shared streaming profile</h2>
     <p id="profile-active" class="brb-active-profile"></p>
+    <p id="profile-continuous" class="profile-help" hidden>Continuous destinations share a fixed 1920 × 1080, 25 fps output: H.264 at 8 Mbps with stereo AAC at 48 kHz. Sources are fitted to this format. The settings below apply to OBS, prepared media and passthrough.</p>
     <p class="profile-help">Required OBS output settings, also used for BRB and prepared videos. Set OBS to match; saving here does not configure OBS. H.264 video and AAC-LC stereo audio.</p>
     <form id="profile-form">
      <fieldset id="profile-fields"><legend>Required OBS settings</legend><div class="profile-fields">
@@ -142,7 +143,7 @@
       <label>Frame rate <select id="profile-fps"><option>24</option><option>25</option><option>30</option><option>50</option><option>60</option></select></label>
       <label>Audio sample rate <select id="profile-sample-rate"><option value="48000">48 kHz</option><option value="44100">44.1 kHz</option></select></label>
      </div></fieldset>
-     <p id="profile-locked" class="profile-help" hidden>Stop the broadcast or rehearsal before changing this profile.</p>
+     <p id="profile-locked" class="profile-help" hidden>Stop the broadcast or rehearsal and cancel pending starts before changing this profile.</p>
      <div id="profile-unsaved" class="brb-unsaved" role="status" hidden><strong>Unsaved profile changes</strong><p>Saving will rebuild BRB and re-prepare your video library. Original uploads are preserved. Each video becomes playable when its new conversion is ready.</p></div>
      <div class="profile-actions"><button id="profile-save" class="preview-button" type="submit" disabled>Save &amp; rebuild</button><button id="profile-cancel" class="preview-button" type="button" disabled>Cancel changes</button></div>
      <p id="profile-save-status" class="profile-help" role="status"></p>

@@ -183,6 +183,56 @@ continue, but no destination receives media. Target states include `idle`,
 `drained`; `streaming` means
 media is being written, not that a platform has made the broadcast public.
 
+## Optional continuous output
+
+In **Settings → Destinations**, choose **Continuous · 1080p25** for a destination
+while the broadcast is OFF and no start is pending. Existing destinations remain
+**Passthrough**. Starting a rehearsal exercises the selected path without opening
+destination connections.
+
+Continuous destinations share one persistent H.264 encoder at 1920 × 1080,
+25 fps, 8 Mbps, with stereo AAC at 48 kHz. Incoming and prepared sources are
+scaled to fit with letterboxing as needed. The existing OBS/prepared-media
+profile continues to govern passthrough; selecting continuous output does not
+change that saved profile or configure OBS.
+
+The continuous path buffers live input before source selection, targeting about
+four seconds of additional relay delay. Ready manual scene changes bypass that
+live buffer. After input runs out, it briefly holds the last picture with silence,
+then uses fallback BRB or an independent silent emergency screen. An encoder
+failure is reported and retried with bounded backoff; affected destinations
+reconnect, while passthrough destinations remain independent. It never silently
+changes back to passthrough.
+
+The existing Live monitor identifies the selected output path, actual source,
+recovery state, and estimated relay delay. When both paths are configured, use
+**Monitor output** to choose which feed to inspect. Unknown delay stays unknown;
+this estimate excludes platform playback and browser buffering. API clients can
+read `stage.continuous` alongside destination `output_mode` and connection state;
+a requested LIVE stage alone does not prove that continuous output is showing OBS.
+
+Continuous output reserves media-preparation capacity, including during rehearsal.
+An active render attempt is cancelled safely and restarts from its captured inputs
+after Stop; queued jobs wait. Previous ready videos remain available. Cancelling a
+job prevents its restart. Request-scoped uploads and previews remain cancellable
+and retain their existing request deadlines; disconnected or timed-out requests
+must be submitted again. Application restart marks unfinished jobs interrupted
+rather than silently retrying them.
+
+**Stop now** discards queued output and cancels recovery. Fixed endings finish
+encoder and destination writes before stopping; music-driven endings keep looping.
+To roll back, stop first and select **Passthrough** for the affected destination.
+No automatic hardware purchase or quality reduction occurs.
+
+For file-based configurations, an individual target can include
+`"output_mode": "continuous"`; an omitted value means `"passthrough"`. Unknown
+values are rejected, including on disabled destinations. Managed destinations
+retain this setting in their existing private destination file.
+
+See [continuous-output validation and rollout](docs/testing/continuous-output.md)
+for evidence, limits, and the separate test-channel trial. This feature does not
+establish the cause of the earlier YouTube green-screen incident.
+
 ## Dashboard and live controls
 
 Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS

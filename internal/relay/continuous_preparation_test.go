@@ -64,3 +64,49 @@ func TestContinuousRehearsalDefersCapturedGenerationAndCancellationWins(t *testi
 		t.Fatal("cancelled work restarted", j)
 	}
 }
+
+func TestContinuousInterruptedGenerationRestartsItsCapturedRevision(t *testing.T) {
+	s := libraryServer(t)
+	generatorServe(t, s)
+	ready := waitGeneratorJob(t, s, submitGenerator(t, s, generatorDraft(t, s, 1)).ID)
+	if ready.State != "ready" {
+		t.Fatal(ready)
+	}
+	if w := dashboardRequest(s, "PUT", "/api/stage-media", fmt.Sprintf(`{"prestream":%q,"shortcuts":[]}`, ready.MediaRevision)); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := dashboardRequest(s, "POST", "/api/destinations/import", `{"version":0}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := dashboardRequest(s, "POST", "/api/destinations", `{"version":1,"name":"local","url":"rtmp://localhost/app","stream_key":"test-key","output_mode":"continuous"}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	draft := generatorDraft(t, s, 120)
+	job := submitGenerator(t, s, draft)
+	eventually(t, func() bool {
+		j := generatorJob(t, dashboardRequest(s, "GET", "/api/generator/jobs/"+job.ID, ""))
+		return j.State == "running" && j.Progress > 0
+	})
+	if w := stageRequest(t, s, "prestream", map[string]any{"mode": "preview_only"}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool {
+		j := generatorJob(t, dashboardRequest(s, "GET", "/api/generator/jobs/"+job.ID, ""))
+		return strings.Contains(j.Message, "broadcast capacity") && j.Progress == 0
+	})
+	draft.Scenes[0].Text = "New draft while captured work waits"
+	data, _ := json.Marshal(draft)
+	if w := dashboardRequest(s, "PUT", "/api/generator/designs/"+draft.ID, string(data)); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	resumed := waitGeneratorJob(t, s, job.ID)
+	if resumed.State != "ready" || resumed.DesignRevision != job.DesignRevision || resumed.Design.Scenes[0].Text != job.Design.Scenes[0].Text {
+		t.Fatal("interrupted attempt did not resume captured inputs", resumed)
+	}
+	if w := dashboardRequest(s, "GET", "/api/library/revisions/"+ready.MediaRevision+"/preview", ""); w.Code != 200 {
+		t.Fatal("previous ready media lost", w.Code, w.Body.String())
+	}
+}

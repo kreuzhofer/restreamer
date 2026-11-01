@@ -120,7 +120,7 @@
     const states = {waiting_capacity: 'Waiting for rendering to stop', starting: 'Starting encoder', recovering: 'Recovering encoder', failed: 'Encoder unavailable', off: 'Off'};
     const delay = Number.isFinite(program.estimated_delay_ms) ? `about ${(program.estimated_delay_ms / 1000).toFixed(1)} s relay delay` : 'relay delay unknown';
     el('broadcast-path-status').textContent = !online ? 'Output status unavailable' : mode === 'continuous'
-      ? `Continuous · ${states[program.state] || actual}${stage.stage !== 'OFF' ? ` · ${delay}` : ''}${program.error ? ` · ${program.error}` : ''}`
+      ? `Continuous · ${states[program.state] || actual}${program.selection_pending ? ` · waiting for ${programSource(program.requested_source)}` : ''}${stage.stage !== 'OFF' ? ` · ${delay}` : ''}${program.error ? ` · ${program.error}` : ''}`
       : `Passthrough · ${actual}`;
     if (processed && stage.stage !== 'OFF' && program.state !== 'running') el('stage-badge').className = 'badge warn';
     window.broadcastPreview?.setPath(`/api/broadcast-preview?output_mode=${mode}`, `${mode === 'continuous' ? 'Continuous' : 'Passthrough'} output preview · audio starts muted`);

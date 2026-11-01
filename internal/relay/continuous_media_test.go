@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -268,6 +270,26 @@ func TestContinuousRecoveryIsIsolatedAndStopCancelsRestart(t *testing.T) {
 	if native.count() != 1 {
 		t.Fatal("encoder recovery interrupted passthrough", native.count())
 	}
+	// Even Stop followed immediately by a fresh start must discard the old live
+	// buffer and encoder session, rather than hiding OFF between engine ticks.
+	oldEpoch := readStage(t, s).Continuous.Epoch
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return readStage(t, s).Continuous.Epoch > oldEpoch })
+	if got := readStage(t, s).Continuous; got.Source == "obs" {
+		t.Fatal("fresh broadcast reused buffered media from before Stop", got)
+	}
+	restarted := time.Now().Add(10 * time.Second)
+	for readStage(t, s).Continuous.Source != "obs" {
+		if time.Now().After(restarted) {
+			t.Fatal("fresh broadcast did not become ready", readStage(t, s).Continuous)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	for len(native.packets) > 0 {
 		<-native.packets
 	}
@@ -298,7 +320,7 @@ func TestContinuousOutputPreservesAudioVideoMarkerSync(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	publisher := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "aevalsrc=if(lt(mod(t\\,1)\\,0.04)\\,0.7*sin(2*PI*2000*t)\\,0)|0.1*sin(2*PI*880*t):s=48000", "-t", "8", "-vf", "drawbox=x=0:y=0:w=32:h=32:color=white:t=fill:enable='eq(mod(n,25),0)'", "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "0", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-f", "flv", address+"/input-key-1234567890")
+	publisher := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "aevalsrc=if(lt(mod(t\\,1)\\,0.04)\\,0.7*sin(2*PI*2000*t)\\,0)|0.1*sin(2*PI*880*t):s=48000", "-t", "8", "-vf", "drawbox=x=0:y=0:w=32:h=32:color=white:t=fill:enable='eq(mod(n,25),0)'", "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "2", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-f", "flv", address+"/input-key-1234567890")
 	var diagnostics bytes.Buffer
 	publisher.Stderr = &diagnostics
 	if err := publisher.Start(); err != nil {
@@ -371,12 +393,179 @@ capture:
 		for _, pulse := range pulses {
 			nearest = math.Min(nearest, math.Abs(pulse-at))
 		}
-		if nearest > 0.08 {
+		if nearest > 0.080001 { // Allow floating-point rounding at exactly 80 ms.
 			t.Fatalf("flash at %.3fs has nearest audio marker %.3fs away (pulses %v)", at, nearest, pulses)
 		}
 		matched++
 	}
 	if matched < 5 {
 		t.Fatalf("too few synchronized markers: %d (pulses %v)", matched, pulses)
+	}
+}
+
+func TestContinuousReadySceneSwitchesAndMonitorKeepOneHealthySession(t *testing.T) {
+	requireFFmpeg(t)
+	healthy, failing := newSink(t), newSink(t)
+	first, second := healthy.target("healthy"), failing.target("recovering")
+	first.OutputMode, second.OutputMode = "continuous", "continuous"
+	s, address, _ := startDrainRelay(t, []config.Target{first, second})
+	if w := stageRequest(t, s, "prestream", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	publisher := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "0", "-c:a", "aac", "-ac", "2", "-f", "flv", address+"/input-key-1234567890")
+	if err := publisher.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cancel(); _ = publisher.Wait() }()
+	// Buffer OBS before selecting it; the prepared prestream keeps playing.
+	until := time.NewTimer(6 * time.Second)
+	defer until.Stop()
+	var packets []*rtmp.Message
+buffer:
+	for {
+		select {
+		case m := <-healthy.packets:
+			packets = append(packets, m)
+		case <-until.C:
+			break buffer
+		}
+	}
+	waitSource := func(source string, limit time.Duration) {
+		t.Helper()
+		started := time.Now()
+		for time.Since(started) < limit {
+			if readStage(t, s).Continuous.Source == source {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("source %s did not reach output within %s: %+v", source, limit, readStage(t, s).Continuous)
+	}
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 200 && w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" })
+	waitSource("obs", time.Second)
+	if w := stageRequest(t, s, "brb", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	waitSource("brb", time.Second)
+	// The monitor packages the processed output itself, with authenticated access.
+	httpServer := httptest.NewServer(s.Handler())
+	defer httpServer.Close()
+	monitorCtx, stopMonitor := context.WithTimeout(ctx, 5*time.Second)
+	defer stopMonitor()
+	request, _ := http.NewRequestWithContext(monitorCtx, "GET", httpServer.URL+"/api/broadcast-preview?output_mode=continuous", nil)
+	request.SetBasicAuth(s.cfg.DashboardUsername, s.cfg.DashboardPassword)
+	response, err := httpServer.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := make([]byte, 512)
+	_, err = io.ReadFull(response.Body, data)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || response.Header.Get("X-Preview-Codecs") == "" {
+		t.Fatalf("processed monitor: %d %v", response.StatusCode, err)
+	}
+	failing.disconnect()
+	eventually(t, func() bool { return failing.count() >= 2 })
+	if readStage(t, s).Stage != "BRB" {
+		t.Fatal("OBS ended deliberate break")
+	}
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 200 && w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" })
+	waitSource("obs", time.Second)
+	if healthy.count() != 1 {
+		t.Fatalf("healthy output reconnected %d times", healthy.count())
+	}
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	for len(healthy.packets) > 0 {
+		packets = append(packets, <-healthy.packets)
+	}
+	path := filepath.Join(t.TempDir(), "switches.flv")
+	writeTestFLV(t, path, packets)
+	if out, err := exec.Command("ffmpeg", "-v", "error", "-xerror", "-i", path, "-f", "null", "-").CombinedOutput(); err != nil {
+		t.Fatalf("switch decode: %v %s", err, out)
+	}
+	var previous time.Duration
+	count := 0
+	for _, m := range packets {
+		if isVideoFrame(m) {
+			if count > 0 && m.Timestamp-previous != 40*time.Millisecond {
+				t.Fatal("switch changed cadence", previous, m.Timestamp)
+			}
+			previous = m.Timestamp
+			count++
+		}
+	}
+	if count < 200 {
+		t.Fatal("insufficient continuous frames", count)
+	}
+}
+
+func TestContinuousAudioLossFallsBackAndRecoversWithoutReconnect(t *testing.T) {
+	requireFFmpeg(t)
+	destination := newSink(t)
+	target := destination.target("continuous")
+	target.OutputMode = "continuous"
+	s, address, _ := startDrainRelay(t, []config.Target{target})
+	if w := stageRequest(t, s, "go_live", nil); w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	startPublisher := func(dropAudio bool) (context.CancelFunc, <-chan error) {
+		ctx, cancel := context.WithCancel(context.Background())
+		args := []string{"-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000"}
+		if dropAudio {
+			args = append(args, "-af", "aselect='lt(t,6)'")
+		}
+		args = append(args, "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "0", "-c:a", "aac", "-ac", "2", "-max_interleave_delta", "100000", "-f", "flv", address+"/input-key-1234567890")
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		if err := cmd.Start(); err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait(); close(done) }()
+		return cancel, done
+	}
+	cancel, done := startPublisher(true)
+	defer func() { cancel(); <-done }()
+	wait := func(source string, seconds int) {
+		t.Helper()
+		deadline := time.Now().Add(time.Duration(seconds) * time.Second)
+		for time.Now().Before(deadline) {
+			if readStage(t, s).Continuous.Source == source {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("expected %s: %+v", source, readStage(t, s).Continuous)
+	}
+	wait("obs", 8)
+	wait("brb", 12)
+	cancel()
+	<-done
+	cancel, done = startPublisher(false)
+	wait("obs", 8)
+	if stage := readStage(t, s); stage.Stage != "LIVE" || stage.Continuous.Restarts != 0 || destination.count() != 1 {
+		t.Fatal("audio outage changed intent or output session", stage, destination.count())
+	}
+	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var packets []*rtmp.Message
+	for len(destination.packets) > 0 {
+		packets = append(packets, <-destination.packets)
+	}
+	path := filepath.Join(t.TempDir(), "audio-outage.flv")
+	writeTestFLV(t, path, packets)
+	if out, err := exec.Command("ffmpeg", "-v", "error", "-xerror", "-i", path, "-f", "null", "-").CombinedOutput(); err != nil {
+		t.Fatalf("outage decode: %v %s", err, out)
 	}
 }

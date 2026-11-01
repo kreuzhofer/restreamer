@@ -32,6 +32,8 @@ type ingressFrame struct {
 }
 
 type programDecoder struct {
+	frameLimit    int
+	dropped       uint64
 	mu            sync.Mutex
 	frames        []*programFrame
 	ingress       []ingressFrame
@@ -49,14 +51,14 @@ type programDecoder struct {
 	wg            sync.WaitGroup
 }
 
-func startProgramDecoder(parent context.Context, base time.Duration) (*programDecoder, error) {
+func startProgramDecoder(parent context.Context, base time.Duration, frameLimit int) (*programDecoder, error) {
 	ctx, cancel := context.WithCancel(parent)
 	audioRead, audioWrite, err := os.Pipe()
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	d := &programDecoder{base: base, ctx: ctx, cancel: cancel, packets: make(chan *rtmp.Message, 512), audio: audioRead, done: make(chan struct{})}
+	d := &programDecoder{frameLimit: frameLimit, base: base, ctx: ctx, cancel: cancel, packets: make(chan *rtmp.Message, 512), audio: audioRead, done: make(chan struct{})}
 	d.cmd = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-protocol_whitelist", "pipe,file", "-threads", "2", "-probesize", "32768", "-analyzeduration", "100000", "-f", "flv", "-i", "pipe:0", "-filter_threads", "1", "-map", "0:v:0", "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=25:start_time=0,format=yuv420p", "-c:v", "rawvideo", "-threads", "1", "-f", "rawvideo", "pipe:1", "-map", "0:a:0", "-af", "aresample=48000:async=1000:min_hard_comp=0.001:first_pts=0", "-ac", "2", "-f", "s16le", "pipe:3")
 	d.cmd.ExtraFiles = []*os.File{audioWrite}
 	// Decoder diagnostics may contain untrusted input; expose only safe states.
@@ -145,14 +147,16 @@ func startProgramDecoder(parent context.Context, base time.Duration) (*programDe
 			now := time.Now()
 			d.mu.Lock()
 			at := time.Time{}
+			nearestPTS := time.Duration(-1 << 63)
 			for _, candidate := range d.ingress {
-				if candidate.pts <= sequence+continuousFrameTime/2 && (at.IsZero() || candidate.at.After(at)) {
-					at = candidate.at
+				if candidate.pts <= sequence+continuousFrameTime/2 && (at.IsZero() || candidate.pts > nearestPTS) {
+					at, nearestPTS = candidate.at, candidate.pts
 				}
 			}
-			if len(d.frames) == 130 {
+			if len(d.frames) == d.frameLimit {
+				d.dropped++
 				copy(d.frames, d.frames[1:])
-				d.frames = d.frames[:129]
+				d.frames = d.frames[:d.frameLimit-1]
 			}
 			d.frames = append(d.frames, &programFrame{video: video, audio: audio, ingress: at, decoded: now})
 			d.mu.Unlock()
@@ -230,6 +234,15 @@ func (d *programDecoder) drained() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return len(d.frames) == 0
+}
+
+func (d *programDecoder) queueStatus() (int, uint64) {
+	if d == nil {
+		return 0, 0
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.frames), d.dropped
 }
 
 func (d *programDecoder) next(now time.Time, delay time.Duration) *programFrame {
