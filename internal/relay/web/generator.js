@@ -699,7 +699,9 @@
       const label = document.createElement('p'); label.textContent = `${job.design_snapshot.name} · captured draft v${job.design_snapshot.version} · ${job.state}${job.queue_position ? ` · queue #${job.queue_position}` : ` · ${job.progress}%`}`;
       const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button studio-authoring'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = !jobsCurrent || job.state === 'cancelling';
       cancel.addEventListener('click', async () => { cancel.disabled = true; try { await request(`/api/generator/jobs/${job.id}/cancel`, 'POST', {}); await loadJobs(); } catch (error) { queueError(error.message); cancel.disabled = false; } });
-      row.append(label, cancel); $('generation-queue').append(row);
+      row.append(label);
+      if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
+      row.append(cancel); $('generation-queue').append(row);
     }
     if (!draft) {
       historySignature = '';

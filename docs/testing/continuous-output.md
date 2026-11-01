@@ -38,10 +38,34 @@ This first smoke binary came from checkpoint `1c050f5` plus settings/monitor cha
 
 Raw evidence is retained locally in `output/continuous-output-checkpoint-20261101/integrated-180s-report.json` and on the VPS under `/var/tmp/restreamer-continuous-integration-20261101/data/run-180s/`. Reports and source recordings are not committed. The earlier four-hour experimental clock run remains separate evidence; it did not exercise this production implementation.
 
+### Committed-engine repeat
+
+The same isolated 180-second schedule passed again with a clean build of
+`72d48aef86683f350a37fbefd87646fbfe54c19f` (`vcs.modified=false`), including the
+final decoder queue/PTS changes. All three captures decoded; the healthy sink
+again received 4,522 frames with zero timestamp discontinuities and one
+connection. The faulted sink made exactly two connections. There were no encoder
+restarts, decoded-frame drops or source-queue overflows. Sampled queue peaks were
+127 live frames and three prepared frames. Peak relay-process RSS was 869.6 MiB
+(this excludes FFmpeg child processes). Total-host one-minute CPU windows ranged
+from 33.96% to 38.94%. The engine's estimated OBS relay delay had a median of
+5.348 s and maximum of 5.549 s; this remains an estimate, not independent matched
+ingress-to-sink measurement. Raw evidence is retained in
+`output/continuous-output-checkpoint-20261101/integrated-72d48ae-report.json`
+and VPS `data/run-72d48ae/` under the same scratch root.
+
+## Browser verification
+
+Authenticated desktop Chrome verified destination import/edit/save, mode selection, rehearsal, both monitor paths and actual H.264/AAC playback. This found a layout defect: inserting monitor controls directly into the existing four-row grid assigned the flexible video row to the selector. Grouping those controls in the heading restores the original video row. Intentional path cancellation also no longer appears as a playback failure; its regression test failed before the correction and passes afterward.
+
+Final visual verification of that correction, narrow desktop and phone layouts remains pending: native Chrome access dropped with `cgWindowNotFound`; the browser connector and in-app browser also report an unavailable host. Local screenshots of the initial checks are retained privately in `output/continuous-output-checkpoint-20261101/screenshots/`. Do not treat them as screenshots of the corrected final layout or as iPhone playback evidence.
+
 ## Remaining qualification and platform trial
 
 Before production opt-in, run the final production binary on the intended host for at least four hours with representative media. Verify the accepted design gates: zero outgoing decode errors and ordinary-source reconnects, stable 25 fps, matched compressed-ingress-to-sink delay no greater than eight seconds, A/V alignment within 80 ms without drift, every one-minute total-host CPU window below 75%, and bounded memory/backlog after warm-up. Include input/audio outages, decoder/encoder failure, individual destination faults, pending readiness, Stop, final-ending drain and deferred render restart. Concurrency with heavy rendering has not been qualified and is therefore not admitted.
 
 Then agree a test-channel session with the operator: YouTube continuous, Twitch passthrough, with controlled source changes and platform ingest-health/video/audio review. Keep platform latency separate from relay delay. A subsequent comparison may use both destinations on the shared continuous encoder. Rollback is explicit: stop the broadcast and pending start, change the destination to Passthrough, save, then start again. Never change production selections automatically.
+
+For a binary rollback to a version predating this feature, stop delivery first, back up the configuration and saved destinations privately, and remove their optional `output_mode` fields before launching the older binary. Switching the mode in the UI alone does not remove a field that older strict JSON readers reject. Preserve destination keys and permissions.
 
 Delivery additionally requires successful GitHub CI for the exact pushed SHA. Branch CI does not imply main image publication or deployment.

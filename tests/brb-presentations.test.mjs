@@ -26,7 +26,7 @@ async function fixture({delaySave=false,failSave=false,delayJob=false}={}) {
  vm.createContext(context);
  for(const name of ['design-edit-state','music-selection','media-presentation','brb-presentations']) vm.runInContext(readFileSync(`internal/relay/web/${name}.js`,'utf8'),context);
  const flush=()=>new Promise(resolve=>setImmediate(resolve));await flush();
- return {root,calls,resolveSave,resolveJob,flush,generate:root.all().find(e=>e.tag==='button'&&e.textContent==='Generate video'),input:label=>root.all().find(e=>e.tag==='label'&&e.textContent===label).children[0],form:root.all().find(e=>e.tag==='form'),save:root.all().find(e=>e.tag==='button'&&e.textContent==='Save changes'),video:()=>root.all().find(e=>e.tag==='video'),async poll(){timers[0]();await flush();},queue(){jobs=[...jobs,{id:'new',kind:'brb',state:'running',sequence:2,duration:40,progress:20,design_snapshot:{name:'Next',duration_mode:'music'}}];}};
+ return {root,calls,resolveSave,resolveJob,flush,generate:root.all().find(e=>e.tag==='button'&&e.textContent==='Generate video'),input:label=>root.all().find(e=>e.tag==='label'&&e.textContent===label).children[0],form:root.all().find(e=>e.tag==='form'),save:root.all().find(e=>e.tag==='button'&&e.textContent==='Save changes'),video:()=>root.all().find(e=>e.tag==='video'),async poll(){timers[0]();await flush();},queue(message=''){jobs=[...jobs,{id:'new',kind:'brb',state:'running',sequence:2,duration:40,progress:20,message,design_snapshot:{name:'Next',duration_mode:'music'}}];}};
 }
 test('status polling preserves the exact video element being reviewed',async()=>{
  const ui=await fixture(),video=ui.video();video.currentTime=12;video.paused=false;
@@ -115,4 +115,10 @@ test('edits during job creation stay unsaved after the response arrives',async()
  await ui.save.onclick();
  const saves=ui.calls.filter(c=>c.path.startsWith('/api/generator/designs')&&c.method!=='GET');
  assert.equal(saves.length,2);assert.equal(JSON.parse(saves[1].body).scenes[0].text,'After generation started');
+});
+
+test('BRB result explains capacity deferral while preserving cancellation',async()=>{
+ const ui=await fixture();ui.queue('Waiting for broadcast capacity; rendering restarts from the beginning after Stop.');await ui.poll();
+ assert.ok(ui.root.all().some(e=>e.textContent.includes('Waiting for broadcast capacity')));
+ assert.ok(ui.root.all().some(e=>e.tag==='button'&&e.textContent==='Cancel preparation'));
 });

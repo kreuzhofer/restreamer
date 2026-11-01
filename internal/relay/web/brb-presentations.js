@@ -166,6 +166,7 @@
         row.append(node('strong',`${job.name||`Render ${job.sequence}`} · ${job.state}`),node('p',`${job.duration.toFixed(2)} seconds per download${job.reused_visual?' · visual reused':''}${job.design_snapshot.duration_mode==='music'?' · loops until you leave BRB':''}`));
         const draftState=node('p',draftMatch(job));draftState.className='assignment-note';
         row.append(node('p',`${window.mediaPresentation.date(job.created_at)} · ${capturedMusic(job)}`),node('p',window.mediaPresentation.changes(job,ordered[ordered.indexOf(job)+1])),draftState);
+        if (job.message) row.append(node('p',job.message));
         if (job.error) row.append(node('p',job.error));
         if (['queued','running','cancelling'].includes(job.state)) {
           const progress=node('progress');progress.max=100;progress.value=job.progress;row.append(progress);
