@@ -20,6 +20,11 @@ var errPreviewCodec = errors.New("Preview requires browser-compatible H.264 and 
 // Each viewer repackages encoded packets, without decoding or transcoding.
 // Its bounded subscription can overflow independently of destination queues.
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
+	mode := r.URL.Query().Get("output_mode")
+	if mode != "" && mode != "passthrough" && mode != "continuous" {
+		http.Error(w, "Choose passthrough or continuous preview", 400)
+		return
+	}
 	select {
 	case s.previewSlots <- struct{}{}:
 		defer func() { <-s.previewSlots }()
@@ -46,6 +51,17 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 		done = s.broadcast.previewChanged
 		epoch = s.broadcast.previewEpoch
 		s.broadcast.mu.Unlock()
+		if mode == "continuous" {
+			program := s.broadcast.continuous
+			program.mu.Lock()
+			h, done, epoch = program.hub, program.changed, program.status.Epoch
+			state := program.status.State
+			program.mu.Unlock()
+			if state != "running" {
+				http.Error(w, "Continuous output is "+state+"; review its status in Live", 503)
+				return
+			}
+		}
 	}
 	if h == nil {
 		http.Error(w, "Waiting for OBS input", http.StatusServiceUnavailable)

@@ -3,6 +3,7 @@
   const el = id => document.getElementById(id);
   const commandID = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
   const time = seconds => { const value = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`; };
+  let monitorChoice;
   let snapshot, online = false, refreshing = false, review, inflight, lastCommand, lastOutcome, resolving = false, message = '', serverID;
   let selections = {prestream: '', ending: '', shortcuts: []}, revisions = [], shortcutSignature = '';
   const current = () => snapshot?.stage;
@@ -105,6 +106,27 @@
     el('stage-dialog-confirm').className = request.action === 'stop_now' ? 'danger-button' : 'preview-button';
     render(); el('stage-dialog').showModal(); el('stage-dialog-cancel').focus();
   }
+  const programSource = source => ({obs: 'OBS', brb: 'Fallback BRB', file: 'Prepared video', held: 'Last picture · silent', emergency: 'Emergency screen · silent', unavailable: 'Unavailable', off: 'Off'})[source] || 'Unknown';
+  function renderMonitor(stage) {
+    const outputs = snapshot.outputs || [];
+    const processed = outputs.some(output => output.output_mode === 'continuous');
+    const native = outputs.some(output => output.output_mode !== 'continuous');
+    const mode = processed && (!native || monitorChoice === 'continuous') ? 'continuous' : 'passthrough';
+    const select = el('broadcast-path'); select.value = mode;
+    el('broadcast-path-label').hidden = !(processed && native);
+    const program = stage.continuous || {};
+    const actual = mode === 'continuous' ? programSource(program.source) : sourceName(stage);
+    el('stage-source').textContent = !online ? 'Unknown · disconnected' : actual;
+    const states = {waiting_capacity: 'Waiting for rendering to stop', starting: 'Starting encoder', recovering: 'Recovering encoder', failed: 'Encoder unavailable', off: 'Off'};
+    const delay = Number.isFinite(program.estimated_delay_ms) ? `about ${(program.estimated_delay_ms / 1000).toFixed(1)} s relay delay` : 'relay delay unknown';
+    el('broadcast-path-status').textContent = !online ? 'Output status unavailable' : mode === 'continuous'
+      ? `Continuous · ${states[program.state] || actual}${stage.stage !== 'OFF' ? ` · ${delay}` : ''}${program.error ? ` · ${program.error}` : ''}`
+      : `Passthrough · ${actual}`;
+    if (processed && stage.stage !== 'OFF' && program.state !== 'running') el('stage-badge').className = 'badge warn';
+    window.broadcastPreview?.setPath(`/api/broadcast-preview?output_mode=${mode}`, `${mode === 'continuous' ? 'Continuous' : 'Passthrough'} output preview · audio starts muted`);
+    window.broadcastPreview?.update(online && stage.stage !== 'OFF' && (mode !== 'continuous' || program.state === 'running'), mode === 'continuous' ? program.epoch : stage.playback?.epoch);
+  }
+  el('broadcast-path').addEventListener('change', event => { monitorChoice = event.target.value; render(); });
   function render() {
     const stage = current();
     if (!stage) return;
@@ -112,7 +134,7 @@
     el('stage-badge').textContent = !online ? 'Disconnected · last known state' : stage.ending?.draining ? 'Finishing destination writes' : stage.stage;
     el('stage-badge').className = `badge ${stage.stage === 'OFF' ? '' : stage.mode === 'preview_only' ? 'warn' : 'live'}`;
     el('stage-selected').textContent = stage.stage;
-    el('stage-source').textContent = sourceName(stage);
+    renderMonitor(stage);
     const retained = stage.return_playback;
     el('stage-return').textContent = stage.return_stage ? `${stage.return_stage}${retained ? ` · ${retained.state === 'paused' ? 'paused by operator' : 'suspended'} · ${time(retained.loop && retained.duration > 0 ? retained.position % retained.duration : retained.position)} / ${time(retained.duration)}${retained.loop ? ' · looping' : ''}` : ''}` : 'None';
     const p = stage.playback || {};
@@ -182,7 +204,7 @@
       el('stage-dialog-stale').textContent = `The broadcast changed. Current state: ${stage.stage} · ${sourceName(stage)}${stage.media?.revision ? ` · ${label(stage.media)}` : ''}. Cancel and review this state before trying again.`;
       el('stage-dialog-confirm').disabled = stale || !usable;
     }
-    window.broadcastPreview?.update(online && stage.stage !== 'OFF', p.epoch);
+
     document.dispatchEvent(new Event('stage-command-state'));
   }
   for (const [id, action] of [['prestream', 'prestream'], ['live', 'go_live'], ['brb', 'brb'], ['ending', 'end_stream'], ['return-button', 'return'], ['retry', 'retry'], ['stop', 'stop_now']]) el(`stage-${id}`).addEventListener('click', () => request(action === 'retry' && current()?.fallback_error ? {action:'replace_fallback',revision:selections.fallback_mode==='override'?selections.fallback:selections.brb} : {action}));

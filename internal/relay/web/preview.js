@@ -151,7 +151,10 @@ function createPreview(prefix, url, liveText, waitingText) {
     update(publishing);
   });
   window.addEventListener('pagehide', stop);
-return {update, position: () => ({epoch:Number(video.dataset.epoch),timeMS:Number(video.dataset.baseMs)+video.currentTime*1000,ready:video.readyState>=2})};
+return {update, setPath: (path, label) => {
+    if (url !== path) { url = path; if (controller) stop(); retryAt = 0; }
+    liveText = label;
+  }, position: () => ({epoch:Number(video.dataset.epoch),timeMS:Number(video.dataset.baseMs)+video.currentTime*1000,ready:!url.includes('continuous') && video.readyState>=2})};
 }
 window.updatePreview = createPreview('preview','/api/preview','Live input preview','Waiting for OBS input').update;
 window.broadcastPreview = createPreview('broadcast','/api/broadcast-preview','Broadcast-source preview · selected feed','Broadcast is off');

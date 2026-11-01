@@ -14,6 +14,7 @@ import (
 
 type OutputStatus struct {
 	Name              string `json:"name"`
+	OutputMode        string `json:"output_mode"`
 	Enabled           bool   `json:"enabled"`
 	State             string `json:"state"`
 	Attempts          uint64 `json:"attempts"`
