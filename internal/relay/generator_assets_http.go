@@ -115,20 +115,36 @@ func (s *Server) generatorAssetUpload(w http.ResponseWriter, r *http.Request) {
 	normalized := filepath.Join(temp, "source"+extension)
 	uploadCtx, cancel := context.WithTimeout(r.Context(), deadline)
 	defer cancel()
-	release, err := s.preparation.acquire(uploadCtx)
+	// Retain the uploaded bytes before admission so capacity cancellation can
+	// retry normalization from the beginning without rereading the HTTP body.
+	rawPath := filepath.Join(temp, "upload")
+	raw, err := os.Create(rawPath)
 	if err != nil {
-		http.Error(w, "Asset preparation timed out while waiting; try again after current work finishes", 503)
+		http.Error(w, "Cannot stage upload", 507)
+		return
+	}
+	n, copyErr := io.Copy(raw, io.LimitReader(part, limit+1))
+	closeErr := raw.Close()
+	if copyErr != nil || closeErr != nil || n > limit {
+		http.Error(w, "Cannot retain upload within its size limit", 422)
 		return
 	}
 	var meta AssetRevision
-	if kind == "video" {
-		meta, err = stageGeneratorVideo(uploadCtx, part, normalized)
-	} else if kind == "audio" {
-		meta, err = stageGeneratorMusic(uploadCtx, part, normalized)
-	} else {
-		meta, err = normalizeGeneratorImage(part, normalized)
-	}
-	release()
+	err = s.preparation.run(uploadCtx, deadline, nil, func(attempt context.Context) error {
+		source, err := os.Open(rawPath)
+		if err != nil {
+			return errors.New("Cannot reopen retained upload")
+		}
+		defer source.Close()
+		if kind == "video" {
+			meta, err = stageGeneratorVideo(attempt, source, normalized)
+		} else if kind == "audio" {
+			meta, err = stageGeneratorMusic(attempt, source, normalized)
+		} else {
+			meta, err = normalizeGeneratorImage(source, normalized)
+		}
+		return err
+	})
 	if err != nil {
 		http.Error(w, err.Error(), 422)
 		return

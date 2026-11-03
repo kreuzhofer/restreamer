@@ -77,3 +77,14 @@ test('successful save adopts the refreshed active profile', async () => {
   assert.equal(ui.el('profile-save').disabled, true);
   assert.equal(ui.el('profile-unsaved').hidden, true);
 });
+
+test('pending starts lock profile changes while preserving the draft', async () => {
+ const ui=setup();ui.change('profile-fps','30');
+ ui.state({stage:{stage:'OFF',pending:{action:'go_live'}}});
+ assert.equal(ui.el('profile-save').disabled,true);
+ assert.equal(ui.el('profile-fields').disabled,true);
+ await ui.save();assert.equal(ui.requests.length,0);
+ ui.state({stage:{stage:'OFF'}});
+ assert.equal(ui.el('profile-fps').value,'30');
+ assert.equal(ui.el('profile-save').disabled,false);
+});

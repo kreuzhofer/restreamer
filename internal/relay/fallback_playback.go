@@ -70,12 +70,12 @@ func (s *Server) prepareEmergencyProfile(profile config.BRBProfile) (*brbMedia, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		return nil, errors.New("Cannot prepare emergency screen while media preparation is busy; retry")
-	}
-	defer release()
-	media, err := encodeBRB(ctx, profile, dir, true, false, 0, defaultBRBText)
+	var media *brbMedia
+	err = s.preparation.run(ctx, time.Minute, nil, func(attempt context.Context) error {
+		var attemptErr error
+		media, attemptErr = encodeBRB(attempt, profile, dir, true, false, 0, defaultBRBText)
+		return attemptErr
+	})
 	if err != nil {
 		return nil, errors.New("Cannot prepare independent silent emergency screen")
 	}

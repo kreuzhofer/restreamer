@@ -16,10 +16,27 @@ import (
 )
 
 type Target struct {
-	Name      string     `json:"name"`
-	URL       string     `json:"url"`
-	StreamKey string     `json:"stream_key"`
-	Enabled   EnableFlag `json:"enabled,omitempty"`
+	Name       string     `json:"name"`
+	URL        string     `json:"url"`
+	StreamKey  string     `json:"stream_key"`
+	Enabled    EnableFlag `json:"enabled,omitempty"`
+	OutputMode string     `json:"output_mode,omitempty"`
+}
+
+// Mode preserves native passthrough for configurations written before output
+// paths were selectable. Unknown explicit values are rejected at the boundary.
+func (t Target) Mode() string {
+	if t.OutputMode == "" {
+		return "passthrough"
+	}
+	return t.OutputMode
+}
+
+func (t Target) ValidateOutputMode() error {
+	if t.Mode() != "passthrough" && t.Mode() != "continuous" {
+		return errors.New("output_mode must be passthrough or continuous")
+	}
+	return nil
 }
 
 // EnableFlag accepts a JSON boolean or a string containing an environment
@@ -219,6 +236,9 @@ func (c Config) Validate() error {
 	}
 	names := make(map[string]bool)
 	for i, t := range c.Targets {
+		if err := t.ValidateOutputMode(); err != nil {
+			return fmt.Errorf("target %d: %s", i+1, err)
+		}
 		if !targetName.MatchString(t.Name) || strings.TrimSpace(t.Name) != t.Name || names[t.Name] {
 			return fmt.Errorf("target %d needs a unique name using letters A–Z, digits, spaces, underscores or hyphens, without leading or trailing spaces", i+1)
 		}
@@ -238,6 +258,9 @@ func (c Config) Validate() error {
 
 // ReadyError is safe to display: it never includes URLs or credentials.
 func (t Target) ReadyError() error {
+	if err := t.ValidateOutputMode(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(t.StreamKey) == "" {
 		return errors.New("missing stream key")
 	}

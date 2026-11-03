@@ -292,7 +292,7 @@ func (l *videoLibrary) worker(ctx context.Context) {
 			}
 			continue
 		}
-		jobCtx, cancel := context.WithTimeout(ctx, 12*time.Hour)
+		jobCtx, cancel := context.WithCancel(ctx)
 		l.cancel = cancel
 		l.jobID = job.ID
 		l.mu.Unlock()
@@ -325,18 +325,15 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 		e.Message = "Waiting for media preparation; live delivery continues."
 	}
 	l.mu.Unlock()
-	release, admissionErr := l.preparation.acquire(ctx)
-	if admissionErr != nil {
+	_ = l.preparation.run(ctx, 12*time.Hour, func() {
 		l.mu.Lock()
-		if e := l.entries[job.ID]; e != nil && e.key == job.key && ctx.Err() == context.DeadlineExceeded {
-			e.Message = ""
-			e.State = "failed"
-			e.Error = "Preparation exceeded the 12-hour deadline while waiting for other media preparation"
+		defer l.mu.Unlock()
+		if e := l.entries[job.ID]; e != nil && e.key == job.key {
+			e.Message, e.Progress = broadcastCapacityMessage, 0
 		}
-		l.mu.Unlock()
-		return
-	}
-	defer release()
+	}, func(attempt context.Context) error { return l.prepareAttempt(attempt, job) })
+}
+func (l *videoLibrary) prepareAttempt(ctx context.Context, job *LibraryEntry) error {
 	l.mu.Lock()
 	if e := l.entries[job.ID]; e != nil && e.key == job.key {
 		e.Message = "Preparing media."
@@ -385,8 +382,11 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	e := l.entries[job.ID]
-	if e == nil || e.key != job.key || ctx.Err() == context.Canceled {
-		return
+	if e == nil || e.key != job.key {
+		return nil
+	}
+	if ctx.Err() == context.Canceled {
+		return ctx.Err()
 	}
 	if ctx.Err() == context.DeadlineExceeded {
 		err = errors.New("Preparation exceeded the 12-hour deadline")
@@ -398,7 +398,7 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 		if err != nil && strings.HasPrefix(err.Error(), "MP4 duration") {
 			e.Error = err.Error()
 		}
-		return
+		return nil
 	}
 	e.State = "ready"
 	e.Message = ""
@@ -411,7 +411,7 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 		e.Message = ""
 		e.State = "failed"
 		e.Error = "Cannot retain prepared revision; check storage"
-		return
+		return nil
 	}
 	// Keep originals; obsolete conversions can be unlinked after replacement.
 	// An already-open playing file remains readable on the supported Unix hosts.
@@ -421,7 +421,9 @@ func (l *videoLibrary) prepare(ctx context.Context, job *LibraryEntry) {
 			os.Remove(filepath.Join(l.root, "prepared", f.Name()))
 		}
 	}
+	return nil
 }
+
 func (l *videoLibrary) open(id string) (*clipPlayback, config.BRBProfile, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -311,10 +311,17 @@ func TestMusicPresentationMissingAudioAndEncoderFailuresAreExplicit(t *testing.T
 }
 
 func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
+	testMusicPresentationLocalRTMPAndRehearsal(t, "passthrough")
+}
+func TestContinuousMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
+	testMusicPresentationLocalRTMPAndRehearsal(t, "continuous")
+}
+func testMusicPresentationLocalRTMPAndRehearsal(t *testing.T, mode string) {
 	prepared := libraryServer(t)
 	destination := newSink(t)
 	cfg := prepared.cfg
 	cfg.Targets = []config.Target{destination.target("local")}
+	cfg.Targets[0].OutputMode = mode
 	s := New(cfg, prepared.log)
 	serveEndingActivation(t, s)
 	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "first.wav", musicFixture(t, "sine=frequency=440:sample_rate=48000", .4)))
@@ -359,7 +366,11 @@ func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
 	}
 	start := time.Now()
 	packets := []*rtmp.Message{}
-	for time.Since(start) < 2400*time.Millisecond {
+	captureDuration := 2400 * time.Millisecond
+	if mode == "continuous" {
+		captureDuration = 4 * time.Second
+	}
+	for time.Since(start) < captureDuration {
 		select {
 		case msg := <-destination.packets:
 			packets = append(packets, msg)
@@ -379,7 +390,11 @@ func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
 	// Local sink joins at the next visual keyframe; inspect periodic tone content
 	// across several cycles rather than assuming network startup has zero latency.
 	var first, second int
-	for at := .2; at < 1.8; at += .1 {
+	firstSample, lastSample := .2, 1.8
+	if mode == "continuous" {
+		firstSample, lastSample = 1, 3.5
+	}
+	for at := firstSample; at < lastSample; at += .1 {
 		if tonePower(pcm, at, 440) > 1e10 {
 			first++
 		}

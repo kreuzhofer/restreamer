@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -27,12 +28,14 @@ type result struct {
 }
 
 type sink struct {
-	disconnectAfter time.Duration
-	listener        net.Listener
-	mu              sync.Mutex
-	result          result
-	directory       string
-	start           time.Time
+	disconnectAfter    time.Duration
+	listener           net.Listener
+	mu                 sync.Mutex
+	result             result
+	directory          string
+	start              time.Time
+	proxyURL, proxyKey string
+	controlPath        string
 }
 
 func (s *sink) serve(ctx context.Context, workers *sync.WaitGroup) {
@@ -58,7 +61,12 @@ func (s *sink) serve(ctx context.Context, workers *sync.WaitGroup) {
 			defer n.Close()
 			stop := context.AfterFunc(ctx, func() { n.Close() })
 			defer stop()
-			c, err := rtmp.Accept(n, func(app, key string) bool { return app == "app" && key == "benchmark-local-key" })
+			c, err := rtmp.Accept(n, func(app, key string) bool {
+				if s.proxyURL != "" {
+					return app == "live" && key == "benchmark-input-key"
+				}
+				return app == "app" && key == "benchmark-local-key"
+			})
 			if err != nil {
 				s.mu.Lock()
 				s.result.Rejected++
@@ -78,7 +86,55 @@ func (s *sink) serve(ctx context.Context, workers *sync.WaitGroup) {
 				})
 				defer timer.Stop()
 			}
-			if err := s.capture(c, number); err != nil {
+			var forward func(*rtmp.Message) error
+			if s.proxyURL != "" {
+				upstream, _, dialErr := rtmp.Dial(ctx, s.proxyURL, s.proxyKey)
+				if dialErr != nil {
+					s.mu.Lock()
+					s.result.WriteFailures++
+					s.mu.Unlock()
+					return
+				}
+				upstreamDone := make(chan struct{})
+				go func() {
+					defer close(upstreamDone)
+					for {
+						message, err := upstream.Read()
+						if err != nil || rtmp.CheckControl(message) != nil {
+							upstream.Net.Close()
+							n.Close()
+							return
+						}
+					}
+				}()
+				defer func() { upstream.Net.Close(); <-upstreamDone }()
+				stopUpstream := context.AfterFunc(ctx, func() { upstream.Net.Close() })
+				defer stopUpstream()
+				var control struct {
+					DropAudio bool `json:"drop_audio"`
+				}
+				var checked time.Time
+				forward = func(m *rtmp.Message) error {
+					if time.Since(checked) >= 100*time.Millisecond {
+						data, err := os.ReadFile(s.controlPath)
+						if err != nil || json.Unmarshal(data, &control) != nil {
+							return fmt.Errorf("invalid ingress fault control")
+						}
+						checked = time.Now()
+					}
+					if control.DropAudio && m.Type == rtmp.Audio {
+						return nil
+					}
+					copy := *m
+					copy.MessageStreamID = rtmp.StreamID
+					copy.ChunkStreamID = 6
+					if m.Type == rtmp.Audio {
+						copy.ChunkStreamID = 4
+					}
+					return upstream.Write(&copy)
+				}
+			}
+			if err := s.capture(c, number, forward); err != nil {
 				s.mu.Lock()
 				s.result.WriteFailures++
 				s.mu.Unlock()
@@ -87,7 +143,7 @@ func (s *sink) serve(ctx context.Context, workers *sync.WaitGroup) {
 	}
 }
 
-func (s *sink) capture(c *rtmp.Conn, number int) (err error) {
+func (s *sink) capture(c *rtmp.Conn, number int, forward func(*rtmp.Message) error) (err error) {
 	path := filepath.Join(s.directory, fmt.Sprintf("connection-%03d", number))
 	media, err := os.OpenFile(path+".flv", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
@@ -147,6 +203,11 @@ func (s *sink) capture(c *rtmp.Conn, number int) (err error) {
 				return err
 			}
 		}
+		if forward != nil {
+			if err := forward(m); err != nil {
+				return fmt.Errorf("ingress forwarding failed")
+			}
+		}
 	}
 }
 
@@ -154,7 +215,15 @@ func run() error {
 	directory := flag.String("output", "", "New capture directory")
 	seconds := flag.Int("seconds", 14500, "Bounded lifetime")
 	disconnect := flag.Duration("disconnect-after", 0, "Disconnect only the first destination once after accepting its first connection")
+	proxyURL := flag.String("proxy-upstream", "", "Optional loopback-only upstream for ingress capture")
+	proxyKey := flag.String("proxy-key", "", "Dummy upstream stream key for ingress capture")
 	flag.Parse()
+	if *proxyURL != "" {
+		u, err := url.Parse(*proxyURL)
+		if err != nil || u.Scheme != "rtmp" || u.User != nil || !net.ParseIP(u.Hostname()).IsLoopback() || *proxyKey == "" {
+			return fmt.Errorf("ingress upstream must be loopback RTMP with a dummy key")
+		}
+	}
 	if *directory == "" || *seconds < 1 || *seconds > 14500 || *disconnect < 0 || *disconnect > 10*time.Minute {
 		return fmt.Errorf("output and lifetime are required")
 	}
@@ -169,8 +238,15 @@ func run() error {
 	var targets []map[string]string
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
-	for index := 1; index <= 2; index++ {
+	count := 2
+	if *proxyURL != "" {
+		count = 1
+	}
+	for index := 1; index <= count; index++ {
 		dir := filepath.Join(*directory, fmt.Sprintf("sink-%d", index))
+		if *proxyURL != "" {
+			dir = filepath.Join(*directory, "source")
+		}
 		if err := os.Mkdir(dir, 0700); err != nil {
 			return err
 		}
@@ -178,7 +254,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		s := &sink{listener: listener, directory: dir, start: time.Now()}
+		s := &sink{listener: listener, directory: dir, start: time.Now(), proxyURL: *proxyURL, proxyKey: *proxyKey}
+		if *proxyURL != "" {
+			s.controlPath = filepath.Join(*directory, "control.json")
+			if err := os.WriteFile(s.controlPath, []byte(`{"drop_audio":false}`), 0600); err != nil {
+				listener.Close()
+				return err
+			}
+		}
 		if index == 1 {
 			s.disconnectAfter = *disconnect
 		}
@@ -187,7 +270,11 @@ func run() error {
 		workers.Add(1)
 		go s.serve(ctx, &workers)
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"targets": targets}); err != nil {
+	ready := map[string]any{"targets": targets}
+	if *proxyURL != "" {
+		ready["url"] = "rtmp://" + sinks[0].listener.Addr().String() + "/live/benchmark-input-key"
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(ready); err != nil {
 		return err
 	}
 	<-ctx.Done()

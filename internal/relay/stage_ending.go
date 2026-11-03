@@ -60,25 +60,41 @@ func (b *broadcast) finishEndingPlayback(now time.Time) {
 	b.manual, b.live, b.active = false, false, false
 	b.control.ending.Draining = true
 	b.control.version++
+	b.continuous.beginDrain(now)
 	// A rehearsal never opens or drains destination sessions.
 	if b.control.mode == "real" {
 		deadline := now.Add(10 * time.Second)
 		for _, output := range b.server.outputSnapshot() {
-			output.beginDrain(deadline)
+			if output.config.Mode() != "continuous" {
+				output.beginDrain(deadline)
+			}
 		}
 	}
 	b.tickEndingDrain(now)
 }
 
 // Call before playback/fallback so EOF cannot admit new packets into a drain.
-func (b *broadcast) tickEndingDrain(_ time.Time) bool {
+func (b *broadcast) tickEndingDrain(now time.Time) bool {
 	if !b.control.ending.Draining {
 		return false
 	}
 	results := []EndingDestinationResult{}
 	done := true
+	requested, encoded, encoderError := b.continuous.drainState(now)
+	if requested && !encoded {
+		done = false
+	}
 	if b.control.mode == "real" {
 		for _, output := range b.server.outputSnapshot() {
+			if output.config.Mode() == "continuous" {
+				if requested && !encoded {
+					continue
+				}
+				output.beginDrain(now.Add(10 * time.Second))
+				if encoderError != "" {
+					output.finishDrain(false, encoderError)
+				}
+			}
 			finished, complete, reason := output.drainStatus()
 			done = done && finished
 			if finished {
