@@ -10,7 +10,7 @@ RUN GOMAXPROCS=2 CGO_ENABLED=0 go build -trimpath -o /out/rtmp-sinks ./experimen
 FROM ${RESTREAMER_IMAGE}
 USER root
 RUN apk add --no-cache python3
-COPY experiments/continuous-output/benchmark.py experiments/continuous-output/playout.py experiments/continuous-output/delivery.py experiments/continuous-output/prepare_markers.py /opt/continuous-benchmark/
+COPY experiments/continuous-output/benchmark.py experiments/continuous-output/playout.py experiments/continuous-output/delivery.py experiments/continuous-output/prepare_markers.py experiments/continuous-output/endurance.py /opt/continuous-benchmark/
 COPY --from=captures /out/rtmp-sinks /opt/continuous-benchmark/rtmp-sinks
 USER 65532:65532
 HEALTHCHECK NONE

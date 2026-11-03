@@ -76,8 +76,13 @@ class Delivery:
         request = urllib.request.Request('http://' + self.http + path,
                                          data=json.dumps(data).encode() if data is not None else None,
                                          headers=headers)
-        with urllib.request.urlopen(request, timeout=3) as response:
-            return json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=3) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            # This adapter owns an isolated relay with dummy credentials only.
+            detail = error.read(2048).decode('utf-8', errors='replace')
+            raise benchmark.ScreenError('isolated {} rejected ({}): {}'.format(path, error.code, detail)) from None
 
     def command(self, action):
         state = self.request('/api/stage')
