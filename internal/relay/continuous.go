@@ -289,7 +289,7 @@ func (p *continuousProgram) run(ctx context.Context) {
 				if e.live {
 					frameLimit = 130
 				}
-				d, err := startProgramDecoder(ctx, m.Timestamp, frameLimit)
+				d, err := startProgramDecoder(ctx, m.Timestamp, programCompositionOffset(m), frameLimit)
 				if err != nil {
 					p.mu.Lock()
 					p.status.Error = "Continuous source decoder unavailable; check FFmpeg"

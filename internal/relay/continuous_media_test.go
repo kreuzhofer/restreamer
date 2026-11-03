@@ -311,6 +311,12 @@ func TestContinuousRecoveryIsIsolatedAndStopCancelsRestart(t *testing.T) {
 }
 
 func TestContinuousOutputPreservesAudioVideoMarkerSync(t *testing.T) {
+	for _, preroll := range []string{"0", "0.12"} {
+		t.Run("presentation_preroll_"+preroll, func(t *testing.T) { testContinuousMarkerSync(t, preroll) })
+	}
+}
+
+func testContinuousMarkerSync(t *testing.T, preroll string) {
 	requireFFmpeg(t)
 	dest := newSink(t)
 	target := dest.target("continuous")
@@ -321,7 +327,7 @@ func TestContinuousOutputPreservesAudioVideoMarkerSync(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	publisher := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "aevalsrc=if(lt(mod(t\\,1)\\,0.04)\\,0.7*sin(2*PI*2000*t)\\,0)|0.1*sin(2*PI*880*t):s=48000", "-t", "8", "-vf", "drawbox=x=0:y=0:w=32:h=32:color=white:t=fill:enable='eq(mod(n,25),0)'", "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "2", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-f", "flv", address+"/input-key-1234567890")
+	publisher := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-nostdin", "-re", "-f", "lavfi", "-i", "color=red:size=320x180:rate=25", "-f", "lavfi", "-i", "aevalsrc=if(lt(mod(t\\,1)\\,0.04)\\,0.7*sin(2*PI*2000*t)\\,0)|0.1*sin(2*PI*880*t):s=48000", "-t", "8", "-vf", "drawbox=x=0:y=0:w=32:h=32:color=white:t=fill:enable='eq(mod(n,25),0)'", "-c:v", "libx264", "-threads", "2", "-g", "25", "-bf", "2", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-bsf:v", "setts=pts=PTS+"+preroll+"/TB", "-bsf:a", "setts=pts=PTS+"+preroll+"/TB:dts=DTS+"+preroll+"/TB", "-f", "flv", address+"/input-key-1234567890")
 	var diagnostics bytes.Buffer
 	publisher.Stderr = &diagnostics
 	if err := publisher.Start(); err != nil {

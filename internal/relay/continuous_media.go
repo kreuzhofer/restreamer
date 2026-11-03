@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,7 +52,7 @@ type programDecoder struct {
 	wg            sync.WaitGroup
 }
 
-func startProgramDecoder(parent context.Context, base time.Duration, frameLimit int) (*programDecoder, error) {
+func startProgramDecoder(parent context.Context, base, presentationOrigin time.Duration, frameLimit int) (*programDecoder, error) {
 	ctx, cancel := context.WithCancel(parent)
 	audioRead, audioWrite, err := os.Pipe()
 	if err != nil {
@@ -59,7 +60,13 @@ func startProgramDecoder(parent context.Context, base time.Duration, frameLimit 
 		return nil, err
 	}
 	d := &programDecoder{frameLimit: frameLimit, base: base, ctx: ctx, cancel: cancel, packets: make(chan *rtmp.Message, 512), audio: audioRead, done: make(chan struct{})}
-	d.cmd = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-protocol_whitelist", "pipe,file", "-threads", "2", "-probesize", "32768", "-analyzeduration", "100000", "-f", "flv", "-i", "pipe:0", "-filter_threads", "1", "-map", "0:v:0", "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=25:start_time=0,format=yuv420p", "-c:v", "rawvideo", "-threads", "1", "-f", "rawvideo", "pipe:1", "-map", "0:a:0", "-af", "aresample=48000:async=1000:min_hard_comp=0.001:first_pts=0", "-ac", "2", "-f", "s16le", "pipe:3")
+	// A keyframe can be decoded before its presentation time (B-frame
+	// reordering). Start both raw streams at that same presentation origin;
+	// padding the first picture back to DTS zero would show it before its audio.
+	origin := strconv.FormatFloat(presentationOrigin.Seconds(), 'f', 3, 64)
+	videoFilter := "setpts=PTS-(" + origin + ")/TB,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=25:start_time=0,format=yuv420p"
+	audioFilter := "atrim=start=" + origin + ",asetpts=PTS-(" + origin + ")/TB,aresample=48000:async=1000:min_hard_comp=0.001:first_pts=0"
+	d.cmd = exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-protocol_whitelist", "pipe,file", "-threads", "2", "-probesize", "32768", "-analyzeduration", "100000", "-f", "flv", "-i", "pipe:0", "-filter_threads", "1", "-map", "0:v:0", "-vf", videoFilter, "-c:v", "rawvideo", "-threads", "1", "-f", "rawvideo", "pipe:1", "-map", "0:a:0", "-af", audioFilter, "-ac", "2", "-f", "s16le", "pipe:3")
 	d.cmd.ExtraFiles = []*os.File{audioWrite}
 	// Decoder diagnostics may contain untrusted input; expose only safe states.
 	d.cmd.Stderr = io.Discard
@@ -126,7 +133,7 @@ func startProgramDecoder(parent context.Context, base time.Duration, frameLimit 
 	go read(d.audio, continuousAudioBytes, audios)
 	go func() {
 		defer close(d.done)
-		sequence := time.Duration(0)
+		sequence := presentationOrigin
 		for {
 			var video, audio []byte
 			var ok bool
@@ -172,6 +179,15 @@ func startProgramDecoder(parent context.Context, base time.Duration, frameLimit 
 	return d, nil
 }
 
+// Called only for an AVC video frame, after its five-byte header is validated.
+func programCompositionOffset(m *rtmp.Message) time.Duration {
+	cts := int32(m.Body[2])<<16 | int32(m.Body[3])<<8 | int32(m.Body[4])
+	if cts&0x800000 != 0 {
+		cts -= 1 << 24
+	}
+	return time.Duration(cts) * time.Millisecond
+}
+
 // Feed never blocks the publisher or broadcast controller. Overflow invalidates
 // this decoder; the engine can rejoin at a fresh keyframe without unbounded lag.
 func (d *programDecoder) feed(m *rtmp.Message, at time.Time) bool {
@@ -183,12 +199,7 @@ func (d *programDecoder) feed(m *rtmp.Message, at time.Time) bool {
 	copy := *m
 	copy.Timestamp = max(0, m.Timestamp-d.base)
 	if isVideoFrame(m) {
-		pts := copy.Timestamp
-		cts := int32(m.Body[2])<<16 | int32(m.Body[3])<<8 | int32(m.Body[4])
-		if cts&0x800000 != 0 {
-			cts -= 1 << 24
-		}
-		pts += time.Duration(cts) * time.Millisecond
+		pts := copy.Timestamp + programCompositionOffset(m)
 		if len(d.ingress) == 512 {
 			copyIngress := d.ingress[1:]
 			d.ingress = append(d.ingress[:0], copyIngress...)
