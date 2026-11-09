@@ -33,6 +33,8 @@ jobs:
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
+      - name: Smoke test the standalone HTTPS installer
+        run: bash tests/install-smoke.sh
       - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
