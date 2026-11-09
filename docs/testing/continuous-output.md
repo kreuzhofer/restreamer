@@ -82,15 +82,14 @@ one session, 40 ms timestamp cadence, catch-up, decoded flash/chirp sync within
 The recovery test additionally covers a worker that stays paused, actual process
 termination, passthrough isolation and cancellation of pending restart.
 
-A new intended-host endurance run and final visual verification are required
-before rollout. See draft PR #76 for the latest qualification and CI evidence;
+A new intended-host endurance run is required before rollout. See draft PR #76 for the latest qualification and CI evidence;
 passing a short regression alone does not qualify production use.
 
 ## Browser verification
 
 Authenticated desktop Chrome verified destination import/edit/save, mode selection, rehearsal, both monitor paths and actual H.264/AAC playback. This found a layout defect: inserting monitor controls directly into the existing four-row grid assigned the flexible video row to the selector. Grouping those controls in the heading restores the original video row. Intentional path cancellation also no longer appears as a playback failure; its regression test failed before the correction and passes afterward.
 
-Final visual verification of that correction, narrow desktop and phone layouts remains pending: native Chrome access dropped with `cgWindowNotFound`; the browser connector and in-app browser also report an unavailable host. Local screenshots of the initial checks are retained privately in `output/continuous-output-checkpoint-20261101/screenshots/`. Do not treat them as screenshots of the corrected final layout or as iPhone playback evidence.
+Native Chrome access recovered on November 9. The isolated authenticated fixture was checked at full desktop, 900px narrow desktop and 390px emulated phone width, including actual passthrough/continuous playback and destination-blocked rehearsal. This exposed a second layout defect: the fixed minimum monitor track could clip its caption when stage controls expanded. Content-sized minimum tracks with size containment on the video now preserve the monitor status and caption without making the video force its intrinsic dimensions. The corrected layouts were inspected in Chrome; emulation is not physical-iPhone playback evidence. Earlier screenshots in `output/continuous-output-checkpoint-20261101/screenshots/` predate this correction.
 
 ## Remaining qualification and platform trial
 
@@ -101,3 +100,9 @@ Then agree a test-channel session with the operator: YouTube continuous, Twitch 
 For a binary rollback to a version predating this feature, stop delivery first, back up the configuration and saved destinations privately, and remove their optional `output_mode` fields before launching the older binary. Switching the mode in the UI alone does not remove a field that older strict JSON readers reject. Preserve destination keys and permissions.
 
 Delivery additionally requires successful GitHub CI for the exact pushed SHA. Branch CI does not imply main image publication or deployment.
+
+## Additional regression corrections from diagnosis
+
+The complete local suite exposed an ending-frame defect at 30 fps: predictive encoding left eight RGB samples at value 1 instead of exact black. Encoding the final faded frame as a keyframe preserves the exact-black endpoint and the original duration. The unchanged strict frame-boundary regression passes at 24, 25 and 30 fps with FFmpeg 7 and 9.
+
+The playlist integration test also assumed that four seconds of wall-clock capture guaranteed four seconds of received audio. A late keyframe join could leave a shorter capture and let tone analysis read past its buffer. Capture now waits for the required received AAC timestamp span with a hard wall-clock deadline, and validates the complete decoded analysis window. Both continuous and passthrough music tests passed three consecutive runs.
