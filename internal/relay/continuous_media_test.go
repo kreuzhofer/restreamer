@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -247,7 +248,7 @@ func TestContinuousRecoveryIsIsolatedAndStopCancelsRestart(t *testing.T) {
 	if after := readTargetDashboard(t, s).Outputs[0].SkippedFrames; after != before {
 		t.Fatalf("healthy continuous output counted native packets as skipped: %d -> %d", before, after)
 	}
-	killEncoder := func() {
+	signalEncoder := func(signal os.Signal) {
 		t.Helper()
 		raw, err := os.ReadFile(pidFile)
 		if err != nil {
@@ -261,11 +262,13 @@ func TestContinuousRecoveryIsIsolatedAndStopCancelsRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := process.Kill(); err != nil {
+		if err := process.Signal(signal); err != nil {
 			t.Fatal(err)
 		}
 	}
-	killEncoder()
+	// A worker that stays stalled beyond the bounded buffer must still be
+	// replaced; short-stall tolerance must not leave a hung broadcast forever.
+	signalEncoder(syscall.SIGSTOP)
 	eventually(t, func() bool { return readStage(t, s).Continuous.Restarts > 0 })
 	eventually(t, func() bool { return processed.count() == 2 && readStage(t, s).Continuous.Source == "obs" })
 	if native.count() != 1 {
@@ -297,7 +300,7 @@ func TestContinuousRecoveryIsIsolatedAndStopCancelsRestart(t *testing.T) {
 	if m := receive(t, native); m == nil {
 		t.Fatal("passthrough stopped forwarding")
 	}
-	killEncoder()
+	signalEncoder(syscall.SIGKILL)
 	eventually(t, func() bool { return readStage(t, s).Continuous.State == "recovering" })
 	if w := stageRequest(t, s, "stop_now", nil); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())

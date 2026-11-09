@@ -22,6 +22,14 @@ const continuousFrameBytes = 1920 * 1080 * 3 / 2
 const continuousAudioBytes = 48000 / continuousFPS * 2 * 2
 const continuousFrameTime = time.Second / continuousFPS
 
+// Absorb up to two seconds of transient encoder scheduling delay. The clock
+// keeps selecting paired video/audio frames so the worker can catch up without
+// changing the session or accumulating a new delay after each stall.
+const continuousEncoderQueueFrames = 2 * continuousFPS
+
+// Track the admitted frames plus bounded pipe/codec buffering until emission.
+const continuousEncoderInFlightFrames = continuousEncoderQueueFrames + 16
+
 type programFrame struct {
 	video, audio     []byte
 	ingress, decoded time.Time
@@ -368,7 +376,7 @@ func startProgramEncoder(parent context.Context, emit func(*rtmp.Message) error)
 		}
 		return nil, errors.New("Cannot start continuous encoder; check FFmpeg and libx264")
 	}
-	e := &programEncoder{ctx: ctx, cancel: cancel, video: make(chan []byte, 2), audio: make(chan []byte, 2), done: make(chan struct{})}
+	e := &programEncoder{ctx: ctx, cancel: cancel, video: make(chan []byte, continuousEncoderQueueFrames), audio: make(chan []byte, continuousEncoderQueueFrames), done: make(chan struct{})}
 	var writers sync.WaitGroup
 	writers.Add(2)
 	write := func(w io.WriteCloser, items <-chan []byte) {

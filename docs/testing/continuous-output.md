@@ -1,6 +1,6 @@
 # Continuous output integration evidence
 
-Status: implementation under validation on 2026-11-01. Passthrough remains the default. This document does not authorize production opt-in or claim that the YouTube green-screen incident is fixed.
+Status: implementation under validation on 2026-11-09. Passthrough remains the default. This document does not authorize production opt-in or claim that the YouTube green-screen incident is fixed.
 
 ## Implementation and verification boundary
 
@@ -8,7 +8,7 @@ The Go server owns the source selector, 25 Hz clock, bounded queues, stage inten
 
 The candidate output uses x264 veryfast, three encoder threads, zerolatency, 8 Mbps CBR, a 16 Mbps VBV buffer, 50-frame GOPs, and 160 kbps stereo AAC at 48 kHz. The existing streaming profile still governs input compatibility and prepared assets. Continuous output has its own fixed 1920×1080p25 format; this release does not add more encoded profiles.
 
-Compressed source admission is bounded to 512 events and 16 MiB. Decoded queues hold at most 130 live frames and 50 prepared frames. Raw encoder admission is bounded, and worker cancellation closes its pipes and waits for exit. Status exposes current decoder queue lengths, drops for the current decoder instances, source-admission overflows, encoder restarts and nullable estimated relay delay. The estimate matches decoded presentation timestamps back to compressed input arrivals, including reordered B-frames; it excludes platform playback latency and is not an independently measured ingress-to-sink gate.
+Compressed source admission is bounded to 512 events and 16 MiB. Decoded queues hold at most 130 live frames and 50 prepared frames. Raw encoder admission holds at most 50 video frames and their paired audio blocks (two seconds at 25 fps), with at most 66 admitted frames tracked through pipe/codec buffering until emission. Worker cancellation closes its pipes and waits for exit. Status exposes current decoder queue lengths, drops for the current decoder instances, source-admission overflows, encoder restarts and nullable estimated relay delay. The estimate matches decoded presentation timestamps back to compressed input arrivals, including reordered B-frames; it excludes platform playback latency and is not an independently measured ingress-to-sink gate.
 
 ## Automated behavioral evidence
 
@@ -53,6 +53,38 @@ from 33.96% to 38.94%. The engine's estimated OBS relay delay had a median of
 ingress-to-sink measurement. Raw evidence is retained in
 `output/continuous-output-checkpoint-20261101/integrated-72d48ae-report.json`
 and VPS `data/run-72d48ae/` under the same scratch root.
+
+## Endurance failure and brief-stall correction
+
+The clean `fbc420f` candidate completed four hours on November 3 but failed
+qualification: 13 encoder restarts caused 15 connections at the deliberately
+faulted sink and 14 at the healthy sink. The deferred render resumed after Stop,
+and there were no source-admission overflows. Peak rolling-minute host CPU was
+51.19%, but samples around the restarts showed brief CPU bursts of roughly
+80–97%. All restarts occurred near a wall-clock minute boundary. This correlation
+does not identify which host workload caused the bursts. The run did not reach
+final captured-media analysis and must not be reported as passing A/V or delay
+evidence. Original captures remain recoverable as hash-verified gzip archives.
+
+A short local reproduction pauses only the synthetic fixture's encoder process.
+With the old two-frame input queue, a one-second pause consistently reaches the
+200 ms input-write deadline, cancels the worker, and reconnects both destinations.
+The same fixture without the pause remains connected. Targeted temporary tracing
+confirmed the input-queue deadline as the cancellation path; tracing was removed.
+
+The corrected queues absorb two seconds of transient scheduling delay while the
+Go clock continues selecting paired frames. The worker can then catch up without
+adding a permanent pause to its media timeline. Buffers remain bounded; a longer
+stall still triggers recovery. `TestContinuousBriefEncoderStallsPreserveSessionAndCatchUp`
+checks repeated one- and two-second stalls through HTTP status and local RTMP:
+one session, 40 ms timestamp cadence, catch-up, decoded flash/chirp sync within
+80 ms, relay delay below eight seconds, and prompt Stop with a stalled backlog.
+The recovery test additionally covers a worker that stays paused, actual process
+termination, passthrough isolation and cancellation of pending restart.
+
+A new intended-host endurance run and final visual verification are required
+before rollout. See draft PR #76 for the latest qualification and CI evidence;
+passing a short regression alone does not qualify production use.
 
 ## Browser verification
 

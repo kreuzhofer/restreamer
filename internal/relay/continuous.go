@@ -204,7 +204,7 @@ func (p *continuousProgram) run(ctx context.Context) {
 	draining, flushing := false, false
 	silence := make([]byte, continuousAudioBytes)
 	var emergency *programFrame
-	selected := make(chan selectedProgramFrame, 16)
+	selected := make(chan selectedProgramFrame, continuousEncoderInFlightFrames)
 	closeSources := func() {
 		if live != nil {
 			live.close()
