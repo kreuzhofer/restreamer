@@ -46,7 +46,14 @@ fs.appendFileSync(process.env.CALL_LOG, JSON.stringify([name, ...args])+'\\n');
 if (name === 'id') console.log('0');
 if (name === 'uname') console.log('Linux');
 if (name === 'stat') console.log('0');
-if (name === 'docker' && args.includes('volume')) process.exit(process.env.EXISTING_VOLUME ? 0 : 1);
+if (name === 'docker' && args.includes('volume')) {
+  if (process.env.FAIL_VOLUME_QUERY) process.exit(1);
+  if (args.includes('ls')) {
+    if (process.env.EXISTING_VOLUME) console.log('restreamer-standalone_restreamer-state');
+    process.exit(0);
+  }
+  process.exit(process.env.EXISTING_VOLUME ? 0 : 1);
+}
 if (name === 'docker' && args.includes('up') && process.env.FAIL_UP) process.exit(1);
 if (name === 'curl') {
   if (process.env.FAIL_TLS) process.exit(60);
@@ -58,8 +65,13 @@ if (name === 'curl') {
   }
   env.PATH = `${bin}:${process.env.PATH}`;
   env.CALL_LOG = join(root, 'calls.jsonl');
-  env.EXISTING_VOLUME = '1';
+  env.FAIL_VOLUME_QUERY = '1';
   let result = run('--domain', 'studio.example.com');
+  assert.notEqual(result.status, 0, 'Docker query failures must not be treated as absent volumes');
+  assert.doesNotMatch(result.stdout, /Ready at/);
+  delete env.FAIL_VOLUME_QUERY;
+  env.EXISTING_VOLUME = '1';
+  result = run('--domain', 'studio.example.com');
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Saved standalone data already exists/);
   assert.doesNotMatch(result.stdout, /Ready at/);

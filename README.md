@@ -82,8 +82,9 @@ The complete script is parsed before installation begins. You can also download
 and inspect [install.sh](install.sh), then run `sudo bash install.sh`. For an
 unattended invocation, pass `--domain studio.example.com`. Other Linux systems
 need Docker Engine and the Compose v2 plugin installed beforehand. On Ubuntu
-24.04 the installer installs missing Docker from the distribution's repositories;
-it does not replace an existing Docker installation.
+24.04 the installer installs missing Docker from the distribution's repositories,
+or adds the missing Compose plugin to an existing Ubuntu-packaged Docker Engine.
+It does not replace Docker CE or another existing Docker distribution.
 
 The installer creates `/opt/restreamer`, a random dashboard password, and persistent
 Docker volumes for app data and certificates. It reports **Ready** only after

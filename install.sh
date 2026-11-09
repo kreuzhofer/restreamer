@@ -4,7 +4,7 @@ set -euo pipefail
 
 main() {
   local directory=/opt/restreamer domain= image= source_dir= ref=main prepare=false stage=
-  local file password existing=false label attempt code
+  local file password existing=false label attempt code volumes containers cleanup
   fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
   usage() {
     cat <<'USAGE'
@@ -66,7 +66,9 @@ USAGE
     umask 077
     mkdir -p "$(dirname "$directory")"
     stage=$(mktemp -d "${directory}.prepare.XXXXXX")
-    trap 'if [ -n "${stage:-}" ]; then rm -rf -- "$stage"; fi' EXIT
+    # Capture the path now: newer Bash unwinds function locals before EXIT traps.
+    printf -v cleanup 'rm -rf -- %q' "$stage"
+    trap "$cleanup" EXIT
     for file in docker-compose.yml deploy/compose.https.yml deploy/Caddyfile; do
       if [ -n "$source_dir" ]; then
         cp "$source_dir/$file" "$stage/$(basename "$file")"
@@ -96,6 +98,7 @@ ENV
     cp -R "$stage/." "$directory/"
     rm -rf -- "$stage"
     stage=
+    trap - EXIT
   fi
   if $prepare; then
     printf 'Prepared %s. No services started. Credentials are in %s/.env.\n' "$directory" "$directory"
@@ -119,6 +122,15 @@ ENV
     apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 ca-certificates curl
     systemctl enable --now docker
+  elif ! docker_cli compose version >/dev/null 2>&1; then
+    # Add only the plugin to an Ubuntu-packaged Engine. Never replace Docker CE
+    # or restart a running daemon just to install Compose.
+    [ -r /etc/os-release ] || fail 'Install the Compose v2 plugin for your existing Docker installation.'
+    . /etc/os-release
+    [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 24.04 ] && \
+      [ "$(dpkg-query -W -f='${Status}' docker.io 2>/dev/null)" = 'install ok installed' ] || fail 'Install the Compose v2 plugin for your existing Docker installation; Docker packages were not replaced.'
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get install -y --no-install-recommends docker-compose-v2
   fi
   docker_cli compose version >/dev/null || fail 'Install the Docker Compose v2 plugin; existing Docker packages were not changed.'
   docker_cli info >/dev/null || fail 'The local Docker daemon is unavailable. Start Docker, then rerun this command.'
@@ -128,9 +140,11 @@ ENV
       --env-file "$directory/.env" -f "$directory/docker-compose.yml" -f "$directory/compose.https.yml" "$@"
   }
   if [ ! -f "$directory/.deployment-initialized" ]; then
-    [ -z "$(docker_cli ps -aq --filter label=com.docker.compose.project=restreamer-standalone)" ] || fail 'A standalone installation already exists in Docker; use its original installation directory.'
+    containers=$(docker_cli ps -aq --filter label=com.docker.compose.project=restreamer-standalone) || fail 'Could not inspect existing Docker containers; refusing to initialize.'
+    [ -z "$containers" ] || fail 'A standalone installation already exists in Docker; use its original installation directory.'
+    volumes=$(docker_cli volume ls --format '{{.Name}}') || fail 'Could not inspect existing Docker volumes; refusing to initialize.'
     for label in restreamer-state caddy-data caddy-config; do
-      if docker_cli volume inspect "restreamer-standalone_$label" >/dev/null 2>&1; then
+      if printf '%s\n' "$volumes" | grep -Fxq "restreamer-standalone_$label"; then
         fail 'Saved standalone data already exists in Docker; use its original installation directory. No data was changed.'
       fi
     done
