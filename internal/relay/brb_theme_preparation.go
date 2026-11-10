@@ -24,6 +24,7 @@ type brbThemePreparation struct {
 	Settings    brbSettings `json:"settings"`
 	CandidateID string      `json:"candidate_id,omitempty"`
 	Error       string      `json:"error,omitempty"`
+	Message     string      `json:"message,omitempty"`
 }
 
 func (p *brbThemePreparation) pending() bool { return p.State == "running" || p.State == "cancelling" }
@@ -192,7 +193,7 @@ func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot retain BRB preparation status", 507)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	s.brbPreparationCancel = cancel
 	s.brbPreparationDone = done
@@ -221,8 +222,21 @@ func (s *Server) brbThemePrepare(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) runBRBPreparation(ctx context.Context, cancel context.CancelFunc, done chan struct{}, p *brbThemePreparation, source brbSettings, dir string) {
 	defer cancel()
-	candidate, err := s.buildBRBCandidate(ctx, p, source, dir)
+	var candidate *brbThemeCandidate
+	err := s.preparation.run(ctx, 2*time.Minute, func() {
+		s.brbPreparationMu.Lock()
+		p.Message = broadcastCapacityMessage
+		s.brbPreparationMu.Unlock()
+	}, func(attempt context.Context) error {
+		s.brbPreparationMu.Lock()
+		p.Message = "Preparing captured BRB theme."
+		s.brbPreparationMu.Unlock()
+		var err error
+		candidate, err = s.buildBRBCandidate(attempt, p, source, dir)
+		return err
+	})
 	s.brbPreparationMu.Lock()
+	p.Message = ""
 	// Serialize cancellation with candidate publication: a successful cancel can never publish.
 	if ctx.Err() != nil || p.State == "cancelling" || s.brbPreparationStopped {
 		if s.brbPreparationStopped {
@@ -280,11 +294,6 @@ func (s *Server) buildBRBCandidate(ctx context.Context, p *brbThemePreparation, 
 			return nil, err
 		}
 	}
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		return nil, errors.New("BRB preparation interrupted while waiting for other media preparation")
-	}
-	defer release()
 	media, err := s.encodeBRBSettings(ctx, settings, dir)
 	if err != nil {
 		return nil, err

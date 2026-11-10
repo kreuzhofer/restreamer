@@ -154,8 +154,8 @@ func (b *broadcast) startClip(now time.Time) error {
 		b.resetBroadcastPreview()
 	}
 	p.continuation = false
-	b.emit(p.reader.index.Video, p.broadcastBase)
-	b.emit(p.reader.index.Audio, p.broadcastBase)
+	b.emitPrepared(p.reader.index.Video, p.broadcastBase)
+	b.emitPrepared(p.reader.index.Audio, p.broadcastBase)
 	return nil
 }
 
@@ -217,7 +217,7 @@ func (b *broadcast) tickClip(now time.Time) bool {
 		if p.pending.Timestamp-p.startPosition > elapsed {
 			return true
 		}
-		b.emit(p.pending, p.broadcastBase+p.pending.Timestamp-p.startPosition)
+		b.emitPrepared(p.pending, p.broadcastBase+p.pending.Timestamp-p.startPosition)
 		p.pending = nil
 	}
 	return true

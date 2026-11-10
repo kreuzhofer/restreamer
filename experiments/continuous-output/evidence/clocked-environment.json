@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-30",
+  "image_id": "sha256:cadddafb2e90eca15ca462688685305387f6ada3431dbe721d7e9a5e8f4323c1",
+  "base_release": "85f678e36daa8b28e104cfb5330d717d4d22688d",
+  "base_image_digest": "sha256:5c7770d34424950515c9abce6fb1e843d07a1615f77f77823243ff114f17b059",
+  "network": "none",
+  "cpu_quota": 3,
+  "memory_bytes": 2147483648,
+  "pids_limit": 128,
+  "read_only_root": true,
+  "capabilities": "all dropped",
+  "source_sha256": {
+    "benchmark.py": "c7ee1faca8530bf3066d4decf0743efbfc2167d149b179008f0a8a6b689df94f",
+    "playout.py": "afa90a6dea05af63c83fac2bbaa33cbf2380690b1ae97148d520f450ece838b1",
+    "delivery.py": "40cc51a84ae4083a614118e2acbfcb869eb7e545eb09305b377b052c5acbe499",
+    "prepare_markers.py": "26164f78915ced2d6e4300eebf472b59f2a8078ae9c3c83602d46502dd03bcb5",
+    "sinks/main.go": "fb4ac8eace346eacfcf5d87546f7aef8e75af9bf0aba1ef67ab5adcb85ff2040",
+    "Dockerfile": "b11a7ecc7f2037797ea32737d6c2d5a4bc75c7b7c3caf34f7ea7e07cf5409ee2"
+  }
+}

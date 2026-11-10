@@ -37,6 +37,7 @@ type broadcast struct {
 	mu                              sync.Mutex
 	server                          *Server
 	hub                             *hub
+	continuous                      *continuousProgram
 	media                           *brbMedia
 	manual, active, live            bool
 	headers                         [3]*rtmp.Message
@@ -53,7 +54,8 @@ type broadcast struct {
 }
 
 func newBroadcast(s *Server, media *brbMedia) *broadcast {
-	b := &broadcast{server: s, control: newStageControl(), hub: newHub(s.cfg.QueueBytes, s.outputSnapshot()...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
+	b := &broadcast{server: s, control: newStageControl(), hub: newHub(s.cfg.QueueBytes, s.pathOutputs("passthrough")...), media: media, started: time.Now(), previewChanged: make(chan struct{})}
+	b.continuous = newContinuousProgram(s)
 	if s.forwarding.Load() {
 		b.control.stage, b.control.mode = "LIVE", "real"
 	}
@@ -61,6 +63,9 @@ func newBroadcast(s *Server, media *brbMedia) *broadcast {
 }
 
 func (b *broadcast) run(ctx context.Context) {
+	engineDone := make(chan struct{})
+	go func() { defer close(engineDone); b.continuous.run(ctx) }()
+	defer func() { <-engineDone }()
 	defer func() {
 		b.mu.Lock()
 		b.stopClip("")
@@ -120,6 +125,7 @@ func (b *broadcast) inputLost() {
 	b.resetInput()
 }
 func (b *broadcast) resetInput() {
+	b.continuous.offer(programEvent{end: true})
 	b.headers = [3]*rtmp.Message{}
 	b.lastVideo = time.Time{}
 	b.lastAudio = time.Time{}
@@ -137,6 +143,7 @@ func (b *broadcast) attach(closeInput func()) {
 func (b *broadcast) tick(now time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	defer b.syncContinuousLocked()
 	previousTick := b.lastTick
 	b.lastTick = now
 	b.expirePending(now)
@@ -195,8 +202,8 @@ func (b *broadcast) startLegacyFallback(now time.Time) {
 	b.videoIndex, b.audioIndex = 0, 0
 	b.videoLoop, b.audioLoop = 0, 0
 	b.hub.clearHeaders()
-	b.emit(b.fallbackMedia.video.header, b.fallbackBase)
-	b.emit(b.fallbackMedia.audio.header, b.fallbackBase)
+	b.emitPrepared(b.fallbackMedia.video.header, b.fallbackBase)
+	b.emitPrepared(b.fallbackMedia.audio.header, b.fallbackBase)
 	b.server.log.Info("BRB active", "manual", b.manual)
 }
 
@@ -210,14 +217,14 @@ func (b *broadcast) sendFallback(now time.Time) {
 			return
 		}
 		if vt <= at {
-			b.emit(v, b.fallbackBase+vt)
+			b.emitPrepared(v, b.fallbackBase+vt)
 			b.videoIndex++
 			if b.videoIndex == len(b.fallbackMedia.video.frames) {
 				b.videoIndex = 0
 				b.videoLoop += b.fallbackMedia.video.duration
 			}
 		} else {
-			b.emit(a, b.fallbackBase+at)
+			b.emitPrepared(a, b.fallbackBase+at)
 			b.audioIndex++
 			if b.audioIndex == len(b.fallbackMedia.audio.frames) {
 				b.audioIndex = 0
@@ -232,6 +239,7 @@ func (b *broadcast) sendFallback(now time.Time) {
 func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.continuous.offer(programEvent{live: true, message: m, at: now})
 	header := -1
 	if m.Type == rtmp.Data && isMetadata(m.Body) {
 		header = 0
@@ -261,7 +269,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	}
 	if b.control.stage != "LIVE" || b.manual || b.clip != nil {
 		if isVideoFrame(m) {
-			for _, o := range b.server.outputSnapshot() {
+			for _, o := range b.server.pathOutputs("passthrough") {
 				o.discardFrames(1, true)
 			}
 		}
@@ -270,7 +278,7 @@ func (b *broadcast) ingest(m *rtmp.Message, now time.Time) {
 	if !b.live {
 		if !ready {
 			if isVideoFrame(m) {
-				for _, o := range b.server.outputSnapshot() {
+				for _, o := range b.server.pathOutputs("passthrough") {
 					o.discardFrames(1, true)
 				}
 			}

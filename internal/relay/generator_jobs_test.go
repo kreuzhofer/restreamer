@@ -21,6 +21,7 @@ import (
 )
 
 type generatorJobView struct {
+	Message        string             `json:"message"`
 	ID             string             `json:"id"`
 	Sequence       uint64             `json:"sequence"`
 	Progress       int                `json:"progress"`

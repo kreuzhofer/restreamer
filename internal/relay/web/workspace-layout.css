@@ -31,7 +31,7 @@
   body[data-workspace=live] .live-console { display: grid; grid-template-columns: minmax(0, 1fr); }
   .live-console > .layout-divider, .live-console[data-layout-panel=operation] > .live-sidebar, .live-console[data-layout-panel=signals] > .live-primary { display: none; }
   .live-sidebar { overflow: auto; border-left: 0; }
-  .live-primary { display: grid; overflow: auto; grid-template-rows: minmax(140px, 1fr) auto; }
+  .live-primary { display: grid; overflow: auto; grid-template-rows: minmax(min-content, 1fr) auto; }
   .live-primary .broadcast-panel { display: grid; }
   .live-program-screen { aspect-ratio: auto; }
 }

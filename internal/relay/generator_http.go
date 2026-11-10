@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -26,7 +27,7 @@ func generatorJSON(w http.ResponseWriter, status int, value any) {
 
 func (s *Server) generatorAvailable(w http.ResponseWriter) bool {
 	if s.generator == nil {
-		http.Error(w, "Enable BRB and its video library to author media", 409)
+		http.Error(w, "Media authoring is unavailable; check server startup and media storage", 409)
 		return false
 	}
 	return true
@@ -270,7 +271,11 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		artworkFrame := frame
 		plan, _ := mediaauthor.PlanTiming(draft, profile.FPS)
 		artworkFrame += plan.Scenes[sceneIndex].Start
-		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, artworkFrame, theme.Style, draft.Stage)
+		err = s.preparation.run(r.Context(), 30*time.Second, nil, func(attempt context.Context) error {
+			var attemptErr error
+			inputs.Background, attemptErr = artworkPreviewFrame(attempt, profile, artworkFrame, theme.Style, draft.Stage)
+			return attemptErr
+		})
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

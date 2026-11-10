@@ -4,8 +4,8 @@
 window.mountDestinationSettings = function mountDestinationSettings(container) {
   if (!container || container.dataset.destinationsMounted) return;
   container.dataset.destinationsMounted = 'true';
-  let snapshot, editing = '', busy = false, baseline = '';
-  const dirty = () => JSON.stringify([name.value, url.value, key.value]) !== baseline;
+  let stageSnapshot, snapshot, editing = '', busy = false, baseline = '';
+  const dirty = () => JSON.stringify([name.value, url.value, key.value, outputMode.value]) !== baseline;
   const node = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
   const heading = node('h2', 'Destinations');
   const message = node('p'); message.setAttribute('role', 'status');
@@ -37,6 +37,23 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   name.setAttribute('aria-describedby', nameHint.id); name.title = 'Use letters A–Z, numbers, spaces, underscores or hyphens, with no leading or trailing spaces.'; fields.append(nameHint);
   const url = input('RTMP or RTMPS server URL', 'url', 'destination_url'); url.required = true; url.maxLength = 2048;
   const key = input('Stream key', 'password', 'destination_key'); key.autocomplete = 'new-password'; key.maxLength = 2048;
+  const modeLabel = node('label', 'Output mode');
+  const outputMode = node('select'); outputMode.name = 'destination_output_mode';
+  for (const [value, label] of [['passthrough', 'Passthrough'], ['continuous', 'Continuous · 1080p25']]) {
+    const option = node('option', label); option.value = value; outputMode.append(option);
+  }
+  outputMode.value = 'passthrough'; modeLabel.append(outputMode);
+  const modeHint = node('p'); modeHint.id = 'destination-output-hint';
+  outputMode.setAttribute('aria-describedby', modeHint.id); fields.append(modeLabel, modeHint);
+  const updateModeHint = () => {
+    outputMode.disabled = !stageSnapshot || stageSnapshot.stage !== 'OFF' || !!stageSnapshot.pending;
+    modeHint.textContent = outputMode.disabled
+      ? 'Stop the broadcast or rehearsal and cancel any pending start to change output mode.'
+      : outputMode.value === 'continuous'
+        ? 'All continuous destinations share one 1080p25 encoder: H.264 at 8 Mbps, stereo AAC at 48 kHz. Targets about 4 seconds of added delay. Rendering waits until Stop.'
+        : 'Forwards the selected source without re-encoding. Continuous output is optional and uses additional server capacity.';
+  };
+  outputMode.onchange = updateModeHint;
   const platformHint = node('p'); platformHint.id = 'destination-platform-hint';
   platform.setAttribute('aria-describedby', platformHint.id); fields.append(platformHint);
   const serverLabel = node('label', 'Twitch server');
@@ -93,7 +110,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   const add=node('button','Add destination');add.type='button';add.className='primary-button';add.onclick=()=>{form.hidden=false;name.focus();};
   const headingRow=node('div');headingRow.className='destination-heading';headingRow.append(heading,add);
   form.hidden=true;container.replaceChildren(headingRow,message,list,form,retry);
-  baseline = JSON.stringify([name.value, url.value, key.value]);
+  baseline = JSON.stringify([name.value, url.value, key.value, outputMode.value]);
   window.addEventListener('beforeunload', event => {
     if (!window.workspace?.departureApproved && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; }
   });
@@ -104,11 +121,13 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   }
   function reset() {
     editing = ''; discovery++; serverLabel.hidden = true; discover.hidden = true; form.hidden = true; form.reset(); cancel.hidden = true; save.textContent = 'Add destination'; key.placeholder = '';
+    outputMode.value = 'passthrough'; updateModeHint();
     platform.value = 'custom'; platform.disabled = false; platformLabel.hidden = false; platformHint.textContent = '';
     hint.textContent = 'New destinations start disabled. Enable delivery in Live after checking readiness.';
-    baseline = JSON.stringify([name.value, url.value, key.value]);
+    baseline = JSON.stringify([name.value, url.value, key.value, outputMode.value]);
   }
   function render() {
+    updateModeHint();
     list.replaceChildren(); retry.disabled = busy; fields.disabled = busy || !snapshot.available || (!snapshot.managed && snapshot.destinations.length > 0);
     if (!snapshot.available) message.textContent = 'Destination storage is not configured. Configure a persistent destinations_file.';
     if (!snapshot.managed && snapshot.destinations.length) {
@@ -119,17 +138,17 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     for (const destination of snapshot.destinations) {
       const row = node('article');
       const info=node('div');info.className='destination-info';
-      info.append(node('h3', destination.name), node('p', destination.url), node('p', `${destination.has_key ? 'Key stored ••••••••' : 'No key'} · ${destination.ready ? 'Ready' : destination.reason}`));
+      info.append(node('h3', destination.name), node('p', destination.output_mode === 'continuous' ? 'Continuous · 1080p25' : 'Passthrough'), node('p', destination.url), node('p', `${destination.has_key ? 'Key stored ••••••••' : 'No key'} · ${destination.ready ? 'Ready' : destination.reason}`));
       const edit = node('button', 'Edit'); edit.type = 'button'; edit.className='preview-button'; edit.disabled = busy || !snapshot.managed;
       edit.onclick = () => {
         if (dirty() && !window.confirm('Discard the unsaved destination draft and edit this destination?')) return;
-        editing = destination.name;form.hidden=false;discovery++;serverLabel.hidden=true; name.value = destination.name; url.value = destination.url; key.value = '';
+        editing = destination.name;outputMode.value=destination.output_mode || 'passthrough';updateModeHint();form.hidden=false;discovery++;serverLabel.hidden=true; name.value = destination.name; url.value = destination.url; key.value = '';
         platform.disabled = true; platformLabel.hidden = true; platformHint.textContent = '';
         discover.hidden = !/\.(?:live-video\.net|twitch\.tv)(?::[0-9]+)?\//.test(destination.url);
         discover.disabled = false; discover.textContent = 'Choose Twitch server';
         key.placeholder = destination.has_key ? 'Leave blank to keep stored key' : 'Enter stream key';
         hint.textContent = 'Leaving the key blank preserves the stored key. Saving an active destination reconnects only that destination.';
-        save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value]); name.focus();
+        save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value, outputMode.value]); name.focus();
       };
       const remove = node('button', 'Remove'); remove.type = 'button'; remove.className='text-button danger-text'; remove.disabled = busy || !snapshot.managed;
       remove.onclick = () => mutate(`/api/destinations/${encodeURIComponent(destination.name)}`, 'DELETE', {}, `Remove ${destination.name} and its stored key? Its delivery will stop. Removing the last destination leaves the show and preview running without delivery.`);
@@ -137,13 +156,13 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
     }
     if (!snapshot.destinations.length) list.append(node('p', 'No destinations yet. Add one below, or use preview-only rehearsal in Live.'));
   }
-  async function refresh() { snapshot = await request('/api/destinations'); render(); if (message.textContent === 'Loading destination settings…') message.textContent = 'Destination credentials stay private. Configure here; control delivery in Live.'; }
+  async function refresh() { [snapshot, stageSnapshot] = await Promise.all([request('/api/destinations'), request('/api/stage')]); render(); if (message.textContent === 'Loading destination settings…') message.textContent = 'Destination credentials stay private. Configure here; control delivery in Live.'; }
   async function mutate(path, method, values, confirmation) {
     if (busy) return;
     busy = true; render();
     let saved = false;
     try {
-      const stage = await request('/api/stage');
+      const stage = await request('/api/stage'); stageSnapshot = stage;
       if (confirmation && !window.confirm(confirmation + (method === 'DELETE' && editing && path.endsWith('/' + encodeURIComponent(editing)) && dirty() ? ' This also discards your unsaved edits for this destination.' : ''))) return;
       if (method === 'PUT' && stage.mode === 'real' && stage.stage !== 'OFF' && !window.confirm('Saving disconnects this destination and reconnects it with the new settings. Other outputs continue. Apply to the current broadcast?')) return;
       busy = true; render(); message.textContent = 'Saving…';
@@ -159,14 +178,16 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   }
   form.onsubmit = event => {
     event.preventDefault();
-    const values = {name: name.value.trim(), url: url.value.trim()};
+    const values = {name: name.value.trim(), url: url.value.trim(), output_mode: outputMode.value};
     if (key.value || !editing) values.stream_key = key.value;
     mutate(editing ? `/api/destinations/${encodeURIComponent(editing)}` : '/api/destinations', editing ? 'PUT' : 'POST', values);
   };
   cancel.onclick = () => { reset(); name.focus(); };
   retry.onclick = () => refresh().then(() => { message.textContent = 'Destinations refreshed. Your draft is retained.'; }).catch(error => { message.textContent = error.message + ' Try Refresh destinations again.'; });
   refresh().catch(error => { fields.disabled = true; message.textContent = error.message + ' Use Refresh destinations to retry.'; });
-  return {refresh};
+  const updateStage = (stage, online) => { stageSnapshot = online ? stage : null; updateModeHint(); };
+  window.updateDestinationStage = updateStage;
+  return {refresh, updateStage};
 };
 
 document.querySelectorAll("[data-destination-settings]").forEach(window.mountDestinationSettings);

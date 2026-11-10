@@ -332,3 +332,19 @@ func TestCredentialPathsRejectSymlinkAncestorsBeforeCreatingFiles(t *testing.T) 
 		})
 	}
 }
+
+func TestIngestionStatusProvidesConfiguredPublicAddress(t *testing.T) {
+	s := dashboardServer(t)
+	s.cfg.IngestionServerURL = "rtmp://studio.example.com:1935/live"
+	w := dashboardRequest(s, "GET", "/api/ingestion", "")
+	var value map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &value); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || value["server_url"] != s.cfg.IngestionServerURL {
+		t.Fatal("missing public ingestion address")
+	}
+	if _, ok := value["key"]; ok {
+		t.Fatal("status exposed a key")
+	}
+}

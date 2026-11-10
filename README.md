@@ -3,7 +3,7 @@
 A native Go application that accepts one OBS stream over RTMP and forwards it to
 Twitch, YouTube, and other RTMP/RTMPS destinations. Runs as a single executable in
 a Docker container on Linux **amd64** and **arm64**. Live media stays native Go
-passthrough. Optional BRB protection uses FFmpeg to prepare uploaded assets; the
+passthrough. Built-in BRB protection and media authoring use FFmpeg to prepare assets; the
 container includes it. No Node, Python, GPU, or continuous transcoder is required.
 
 ```text
@@ -18,7 +18,7 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - Each output defaults to enabled, but an empty/missing target stream key disables
   it. Set its optional `enabled` switch to `false` to disable it while keeping the key.
 - Standard RTMP **H.264 video and AAC audio**, including 1080p, 1440p, and 4K.
-  Live video is not decoded. BRB-enabled streams must match the selected profile.
+  Live video is not decoded. Broadcast input must match the selected profile.
 - Encoded audio/video payloads and metadata are preserved. RTMP connections are
   independently negotiated; stream IDs and connection timestamps are rewritten.
 - Each output connects independently, waits for the next keyframe, and receives
@@ -65,7 +65,105 @@ videos now continue background motion across scene boundaries. Existing generate
 videos stay unchanged and must be regenerated to receive this fix. Music-driven
 playback continues to loop its visual sequence independently of the music duration.
 
-## Run with Docker Compose
+## Quick install on a fresh server (automatic HTTPS)
+
+The quick installer runs the published Restreamer image with a Caddy proxy. It
+prompts for your domain and obtains and renews a **Let's Encrypt** certificate.
+Point the domain's A record (and AAAA record, if present) at this server first.
+Allow inbound TCP **80/443** for HTTPS and certificate validation, and **1935**
+from your OBS machine for RTMP. These ports must be available; the installer does
+not replace an existing proxy or change firewall rules.
+
+On Ubuntu 24.04 with `curl` and sudo available, run:
+
+```sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash -s -- --domain "$1" --username "$2" --password "$3"' -- stream.example.com studio-admin 'YOUR-STRONG-PASSWORD'
+```
+
+The complete script is parsed before installation begins. You can also download
+and inspect [install.sh](install.sh), then run `sudo bash install.sh`. The command accepts the server domain, dashboard username and password as its
+last three arguments. Omit `--username` and `--password` when invoking the script
+directly to use `admin` and a generated password; omit `--domain` to be prompted. Other Linux systems
+need Docker Engine and the Compose v2 plugin installed beforehand. On Ubuntu
+24.04 the installer installs missing Docker from the distribution's repositories,
+or adds the missing Compose plugin to an existing Ubuntu-packaged Docker Engine.
+It does not replace Docker CE or another existing Docker distribution.
+
+The installer creates `/opt/restreamer`, stores the supplied credentials privately, and creates persistent
+Docker volumes for app data and certificates. It reports **Ready** only after
+checking trusted HTTPS, app health, and unauthenticated dashboard rejection.
+View your login details with `sudo cat /opt/restreamer/.env`; the default username
+is `admin` when omitted. Then open the printed HTTPS URL, add your destinations,
+and create/select your show designs. The OBS server address is already filled
+from the supplied domain; copy that address and the managed ingestion key into OBS. BRB, the video library, four starter content templates and the built-in
+style themes are available immediately. Your own designs, uploads and generated
+videos start empty. The app starts OFF; installing it never starts a broadcast.
+
+If DNS, firewall or certificate issuance fails, fix the reported problem and run
+the command again. Reruns preserve credentials, data and customized proxy files;
+they do not recreate existing containers or upgrade an active broadcast. Repeating
+the same credential flags is supported; different credentials are rejected without
+changing the saved login. Passwords containing spaces, quotes, dollar signs and
+hashes are escaped according to [Compose dotenv and interpolation rules](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/#env-file-syntax). The
+installer refuses to adopt another installation's existing volumes. Use the
+original installation directory to recover an interrupted setup.
+
+To update an existing installation to the latest published app and proxy images,
+stop the broadcast or rehearsal and disconnect OBS, then run:
+
+```sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash -s -- --update --image ghcr.io/kreuzhofer/restreamer:main'
+```
+
+The updater reads the saved domain and login; do not pass new credentials. It
+checks that the studio is idle before and after pulling, then recreates the
+containers and verifies health and HTTPS. It retains all volumes, media, designs,
+destination settings, ingestion keys, certificates, and customized Compose/Caddy
+files. Only an explicitly supplied `--image` changes the saved image reference;
+a private `.env.before-update.*` backup is kept. `--update` without `--image`
+pulls the currently configured references, so a pinned SHA stays pinned. Failed
+pulls do not restart services or change the saved image; later startup failures
+are reported without claiming success. Updates require Python 3 for the local,
+authenticated idle check (included when the installer provisions Ubuntu Docker).
+
+Useful commands on the server (the installation directory is root-private):
+
+```sh
+sudo -i
+cd /opt/restreamer
+docker compose logs -f                  # app and HTTPS proxy logs
+docker compose down                     # stop; retain all data and certificates
+# During a maintenance window, after stopping any broadcast:
+docker compose pull
+docker compose up -d --wait              # explicitly apply updates
+```
+
+Both services restart after host reboot; the broadcast stage returns to OFF.
+Back up the installation directory (including `.env`) and all three named volumes:
+`restreamer-standalone_restreamer-state`, `restreamer-standalone_caddy-data`, and
+`restreamer-standalone_caddy-config`. **Do not use `down --volumes` when retaining
+your media, keys and certificates.** To pin an app release, supply `--image
+ghcr.io/kreuzhofer/restreamer:sha-FULL_COMMIT_SHA` on first install, or edit
+`RESTREAMER_IMAGE` in the saved `.env` before an explicit update.
+
+`--prepare-only` writes configuration without installing or starting services;
+`--directory /path` selects a different location. Run preparation with sudo if you
+will subsequently launch through the installer. `--source-dir /path/to/checkout`
+uses that checkout's deployment files; otherwise `--ref COMMIT_OR_BRANCH` selects
+their GitHub revision (default `main`). The installer uses the local Docker daemon
+and creates one `restreamer-standalone` Compose project per host.
+
+Caddy's [automatic HTTPS requirements](https://caddyserver.com/docs/automatic-https)
+and [certificate storage](https://caddyserver.com/docs/running#docker-compose)
+explain the DNS, networking and persistence requirements. CI tests the full HTTPS
+path with a disposable local CA; actual public issuance requires your real domain.
+
+## Run with Docker Compose (bring your own proxy)
+
+This existing deployment path is independent of the quick installer. The default
+`docker-compose.yml` remains proxy-free and binds HTTP to loopback. Configure your
+own HTTPS reverse proxy to protect the dashboard; the quick installer's
+`deploy/compose.https.yml` is not loaded by this command.
 
 Requires Docker with the Compose plugin. Existing installations using environment-based
 stream keys or destinations should follow the [managed-credential migration](#managing-destinations-in-desktop-settings)
@@ -185,6 +283,56 @@ continue, but no destination receives media. Target states include `idle`,
 `drained`; `streaming` means
 media is being written, not that a platform has made the broadcast public.
 
+## Optional continuous output
+
+In **Settings → Destinations**, choose **Continuous · 1080p25** for a destination
+while the broadcast is OFF and no start is pending. Existing destinations remain
+**Passthrough**. Starting a rehearsal exercises the selected path without opening
+destination connections.
+
+Continuous destinations share one persistent H.264 encoder at 1920 × 1080,
+25 fps, 8 Mbps, with stereo AAC at 48 kHz. Incoming and prepared sources are
+scaled to fit with letterboxing as needed. The existing OBS/prepared-media
+profile continues to govern passthrough; selecting continuous output does not
+change that saved profile or configure OBS.
+
+The continuous path buffers live input before source selection, targeting about
+four seconds of additional relay delay. Ready manual scene changes bypass that
+live buffer. After input runs out, it briefly holds the last picture with silence,
+then uses fallback BRB or an independent silent emergency screen. An encoder
+failure is reported and retried with bounded backoff; affected destinations
+reconnect, while passthrough destinations remain independent. It never silently
+changes back to passthrough.
+
+The existing Live monitor identifies the selected output path, actual source,
+recovery state, and estimated relay delay. When both paths are configured, use
+**Monitor output** to choose which feed to inspect. Unknown delay stays unknown;
+this estimate excludes platform playback and browser buffering. API clients can
+read `stage.continuous` alongside destination `output_mode` and connection state;
+a requested LIVE stage alone does not prove that continuous output is showing OBS.
+
+Continuous output reserves media-preparation capacity, including during rehearsal.
+An active render attempt is cancelled safely and restarts from its captured inputs
+after Stop; queued jobs wait. Previous ready videos remain available. Cancelling a
+job prevents its restart. Request-scoped uploads and previews remain cancellable
+and retain their existing request deadlines; disconnected or timed-out requests
+must be submitted again. Application restart marks unfinished jobs interrupted
+rather than silently retrying them.
+
+**Stop now** discards queued output and cancels recovery. Fixed endings finish
+encoder and destination writes before stopping; music-driven endings keep looping.
+To roll back, stop first and select **Passthrough** for the affected destination.
+No automatic hardware purchase or quality reduction occurs.
+
+For file-based configurations, an individual target can include
+`"output_mode": "continuous"`; an omitted value means `"passthrough"`. Unknown
+values are rejected, including on disabled destinations. Managed destinations
+retain this setting in their existing private destination file.
+
+See [continuous-output validation and rollout](docs/testing/continuous-output.md)
+for evidence, limits, and the separate test-channel trial. This feature does not
+establish the cause of the earlier YouTube green-screen incident.
+
 ## Dashboard and live controls
 
 Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS
@@ -257,7 +405,7 @@ all dashboard clients does not stop a sequence.
 | --- | --- |
 | **OFF** | No destination delivery. OBS may remain connected and its input preview continues. Every process restart returns here. |
 | **Prestream** | Validate the saved exact starting-soon revision and prepared BRB fallback, then loop it until an explicit stage change. OBS cannot interrupt it. |
-| **Go live** | Keep the current source while waiting up to 10 seconds for a fresh compatible OBS keyframe. Show the pending request and allow cancellation. Timeout leaves the previous sequence intact. Ordinary LIVE works with BRB disabled. |
+| **Go live** | Keep the current source while waiting up to 10 seconds for a fresh compatible OBS keyframe. Show the pending request and allow cancellation. Timeout leaves the previous sequence intact. BRB protection and media authoring are always available. |
 | **BRB** | Select a deliberate break. Reconnecting OBS does not leave it. A playing clip is suspended with its position, explicit pause state, and original return stage. |
 | **Play clip** | Play the chosen exact ready revision once, then return to the recorded stage. Replacing clip A with B preserves A's original return destination. A clip interrupting PRESTREAM resumes its original revision near its saved position. |
 | **Return / Stop clip** | Restore the recorded stage; Return from BRB resumes a suspended clip when one exists. An unavailable return source holds fallback BRB with an explanation. |
@@ -456,8 +604,7 @@ configuration requires no mount; manage destinations in Settings.
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
 | `library_directory` | Persistent MP4 library root; Compose uses `/data/videos`, native default is `<brb.directory>/library` |
 | `library_upload_mib` | Maximum original MP4 size in MiB; 0 or omitted means 4096; maximum 32768 |
-| `brb.enabled` | Opt-in for custom/native configurations; Compose defaults `BRB_ENABLED=false` |
-| `brb.directory` | Required writable persistent directory when enabled; Compose uses `/data/brb` |
+| `brb.directory` | Writable persistent media directory; Compose uses `/data/brb`, native default is `data/brb` beside the configuration file |
 | `brb.width`, `brb.height` | Initial profile; bundled config uses 1920×1080. Even dimensions, 320×180 through 3840×2160 |
 | `brb.fps` | Initial rate: 30; supports 24, 25, 30, 50, 60 |
 | `brb.sample_rate` | Initial AAC-LC stereo rate: 48000; also supports 44100 |
@@ -499,7 +646,7 @@ plus protocol overhead. In v1, CPU handles transport/TLS, not video encoding.
 ## Build and test
 
 Requires Go 1.27 or later and Node.js 24 for dashboard tests. Install FFmpeg/FFprobe with `libx264` and AAC support to run
-BRB or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
+the native application or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
 these tests cannot silently skip. The protocol dependency is pinned in `go.mod`/`go.sum`.
 
 ```sh
@@ -547,12 +694,21 @@ They use local endpoints and do not broadcast to real platform accounts.
 
 ## BRB and OBS disconnect protection
 
-Enable BRB by setting `BRB_ENABLED=true` in `.env` and recreating the Compose
-service. It defaults off so existing deployments retain their behavior. Custom
-configurations need `brb.enabled=true`, a writable directory, and an initial
-profile (see `config.example.json`). Enabling BRB prepares fallback media; it does
-not start delivery. Start an explicitly confirmed Prestream or Go live session.
-The broadcast still starts OFF after every application restart.
+BRB protection, the video library and media authoring are always initialized.
+Built-in templates, themes and artwork ship with the application; generated show
+videos and uploaded files belong to your persistent data and are not preloaded.
+Startup prepares the fallback media but never starts delivery. Start an explicitly
+confirmed Prestream or Go live session. The broadcast starts OFF after every restart.
+
+The old `BRB_ENABLED` environment switch has been removed. Existing `.env` files
+may retain it harmlessly; legacy `brb.enabled` JSON fields are accepted but ignored,
+including `false` and old environment references. Rerunning the installer preserves
+saved settings. For older quick installations, apply the new release with the
+normal image update and Compose recreation procedure; no volume reset is needed.
+Native configurations may omit the `brb` object: storage then defaults to `data/brb`
+beside the config file and the initial profile to 1920×1080p30 / 48 kHz stereo.
+Explicit directory/profile values remain validated. FFmpeg and FFprobe must be
+installed for native startup; the container includes them.
 
 - Established LIVE falls back to BRB when OBS disconnects or its video/audio
   stalls for three seconds. Fallback has no automatic timeout.
@@ -699,7 +855,25 @@ Deliberate BRB is selected through the shared stage command API.
 requests. Profile changes require OFF and return 409 during an active session. `GET /api/brb/image`
 returns the saved PNG. Status adds `brb`, `brb_assets`, and `brb_profile`.
 
-## Later: a separate 1080p Twitch output
+## Planned continuous output — not implemented
+
+The [continuous-output design](docs/design/continuous-output.md) records an
+optional shared 1080p25 output alongside passthrough, with per-destination
+selection. Its purpose is to maintain video/audio cadence across source changes
+and input interruptions. The plan targets roughly four seconds of added relay
+delay, bounded at eight seconds during healthy operation, while keeping ready
+manual source changes prompt. Existing destinations would remain on passthrough.
+
+Production implementation is gated on measured capacity and a four-hour
+endurance test on the intended host. The interview decisions are captured in
+[ADR 0009](docs/adr/0009-add-optional-continuous-output.md), and the complete plan
+was confirmed on 2026-10-30. This is not a shipped feature or a verified fix for
+the separately investigated YouTube decoding incident.
+
+### Later: a separate 1080p Twitch output
+
+The earlier proposal below remains a possible multiple-profile follow-up,
+outside the initial single-profile continuous-output scope.
 
 Proposed v2 architecture:
 
@@ -737,7 +911,7 @@ References: [FFmpeg's streamcopy and transcoding model](https://ffmpeg.org/ffmpe
 
 ## Prepared video library
 
-Enable BRB to use its saved output profile and persistent broadcast controller.
+The video library uses the saved output profile and persistent broadcast controller.
 **Studio → Media** accepts MP4 uploads on desktop and discovers regular `.mp4`
 files in `<library_directory>/originals` every five seconds. In Compose this is
 `/data/videos/originals` inside the existing persistent `/data` volume. Mount a
@@ -1457,3 +1631,16 @@ on-air results. Music-only changes reuse the encoded visual.
 BRB has the same preparation choices in its editor. Preview a prepared result and
 assign it through **Show setup → BRB**; automatic fallback remains independently
 configured. See [music presentation behavior and limits](docs/design/music-presentations.md).
+
+The quick installer prefills **Settings → OBS ingestion** with
+`rtmp://YOUR_DOMAIN:1935/live`, using the domain supplied for HTTPS. The RTMP
+listener remains separate from the HTTPS proxy. For a different public ingest
+host or published port, set `INGESTION_SERVER_URL` in `.env` and recreate the
+app container. Standard Compose deployments can set the same optional value;
+when omitted, enter the address manually in Settings. Copy the stream key
+separately. Existing installer reruns preserve saved configuration.
+
+OBS's automatic bandwidth test uses a small probe video that does not match the
+studio's streaming profile and can be rejected. Set OBS's resolution, FPS and
+audio sample rate to match **Settings → Streaming profile**, then use normal
+**Start Streaming** to check ingestion while the studio is OFF.

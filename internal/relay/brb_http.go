@@ -42,7 +42,7 @@ func controlOriginAllowed(r *http.Request) bool {
 }
 
 func (s *Server) initializeBRB() error {
-	if !s.cfg.BRB.IsEnabled() {
+	if s.cfg.BRB == nil {
 		return nil
 	}
 	root := s.cfg.BRB.Directory
@@ -100,12 +100,12 @@ func (s *Server) initializeBRB() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		return errors.New("BRB preparation cancelled or timed out while waiting for other media preparation")
-	}
-	media, err := s.encodeBRBSettings(ctx, settings, dir)
-	release()
+	var media *brbMedia
+	err = s.preparation.run(ctx, 2*time.Minute, nil, func(attempt context.Context) error {
+		var attemptErr error
+		media, attemptErr = s.encodeBRBSettings(attempt, settings, dir)
+		return attemptErr
+	})
 	if err != nil {
 		return err
 	}
@@ -362,13 +362,12 @@ func (s *Server) brbAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		fail(errors.New("BRB preparation cancelled or timed out while waiting for other media preparation; retry when ready"))
-		return
-	}
-	media, err := s.encodeBRBSettings(ctx, settings, dir)
-	release()
+	var media *brbMedia
+	err = s.preparation.run(ctx, 2*time.Minute, nil, func(attempt context.Context) error {
+		var attemptErr error
+		media, attemptErr = s.encodeBRBSettings(attempt, settings, dir)
+		return attemptErr
+	})
 	if err != nil {
 		fail(err)
 		return

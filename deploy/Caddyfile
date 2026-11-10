@@ -1,0 +1,10 @@
+{$RESTREAMER_DOMAIN} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+		}
+	}
+	reverse_proxy restreamer:8080 {
+		flush_interval -1
+	}
+}

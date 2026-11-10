@@ -215,7 +215,7 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 	requireFFmpeg(t)
 	s := dashboardServer(t)
 	s.cfg.QueueBytes = 1 << 20
-	s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 30, SampleRate: 48000}}
+	s.cfg.BRB = &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 30, SampleRate: 48000}}
 	if err := s.initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestBRBUploadsAreAtomicPersistentAndProfileLocked(t *testing.T) {
 func TestBRBLegacySettingsDefaultMessage(t *testing.T) {
 	requireFFmpeg(t)
 	s := dashboardServer(t)
-	s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}
+	s.cfg.BRB = &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}
 	if err := s.initialize(); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +375,7 @@ func TestBRBControlAndUploadAuthentication(t *testing.T) {
 func TestBRBPublisherReconnectKeepsDestinationSession(t *testing.T) {
 	requireFFmpeg(t)
 	dest := newSink(t)
-	cfg := config.Config{Listen: ":1935", HealthListen: ":8080", Application: "live", StreamKey: "input-key-1234567890", QueueBytes: 1 << 20, Targets: []config.Target{dest.target("one")}, BRB: &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}}
+	cfg := config.Config{Listen: ":1935", HealthListen: ":8080", Application: "live", StreamKey: "input-key-1234567890", QueueBytes: 1 << 20, Targets: []config.Target{dest.target("one")}, BRB: &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}}
 	s := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := s.initialize(); err != nil {
 		t.Fatal(err)

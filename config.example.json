@@ -3,6 +3,7 @@
   "health_listen": ":8080",
   "application": "live",
   "ingestion_key_file": "/data/ingestion-key.json",
+  "ingestion_server_url": "${INGESTION_SERVER_URL}",
   "stream_key": "${INGEST_STREAM_KEY}",
   "queue_bytes": 16777216,
   "dashboard_username": "${DASHBOARD_USERNAME}",
@@ -11,7 +12,6 @@
   "library_directory": "${LIBRARY_DIRECTORY}",
   "library_upload_mib": 4096,
   "brb": {
-    "enabled": "${BRB_ENABLED}",
     "directory": "${BRB_DIRECTORY}",
     "width": 1920,
     "height": 1080,

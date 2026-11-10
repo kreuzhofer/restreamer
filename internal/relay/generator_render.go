@@ -194,6 +194,9 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 	if endingFade > 0 {
 		args = append(args, "-vf", fmt.Sprintf("fade=t=out:start_frame=%d:nb_frames=%d", plan.Frames-endingFade, endingFade-1))
 		args = append(args, videoEncodingArgs(p)...)
+		// Encode the black endpoint independently so inter-frame prediction cannot
+		// leave residual pixels from the fading composition.
+		args = append(args, "-force_key_frames", fmt.Sprintf("expr:eq(n,%d)", plan.Frames-1))
 	} else {
 		args = append(args, "-c:v", "copy")
 	}

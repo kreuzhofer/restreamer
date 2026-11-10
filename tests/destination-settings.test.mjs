@@ -135,3 +135,21 @@ test('destination name constraint accepts spaces and matches its visible help',a
  name.value='Twitch Main';ui.input('RTMP or RTMPS server URL').value='rtmp://localhost/app';await ui.submit();
  assert.equal(JSON.parse(ui.calls.find(call=>call.method==='POST').body).name,'Twitch Main');
 });
+
+test('output mode follows live status without clearing the destination draft', async () => {
+ const ui = await settings(); ui.button('Edit').onclick();
+ const mode = ui.input('Output mode'); mode.value = 'continuous'; mode.onchange();
+ ui.input('Unique name').value = 'Local processed';
+ ui.mounted.updateStage({stage:'LIVE',mode:'preview_only'},true);
+ assert.equal(mode.disabled,true);
+ assert.equal(mode.value,'continuous');
+ assert.equal(ui.input('Unique name').value,'Local processed');
+ ui.mounted.updateStage({stage:'OFF',pending:{action:'go_live'}},true);
+ assert.equal(mode.disabled,true);
+ ui.mounted.updateStage({stage:'OFF'},true);
+ assert.equal(mode.disabled,false);
+ await ui.submit();
+ assert.equal(JSON.parse(ui.calls.find(call=>call.method==='PUT').body).output_mode,'continuous');
+ ui.mounted.updateStage({stage:'OFF'},false);
+ assert.equal(mode.disabled,true);
+});

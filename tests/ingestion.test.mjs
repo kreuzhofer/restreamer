@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-async function settings({clipboard = async () => {}, fail = false, pendingKey} = {}) {
+async function settings({clipboard = async () => {}, fail = false, pendingKey, serverURL} = {}) {
   const buttons = ['reveal', 'copy', 'regenerate', 'address'].map(action => ({dataset: {ingestion: action}, disabled: false}));
   const field = {type: 'password', value: '••••••••••••••••'};
   const feedback = {textContent: ''};
@@ -18,7 +18,7 @@ async function settings({clipboard = async () => {}, fail = false, pendingKey} =
   const window = {addEventListener(){}};
   const context = vm.createContext({window, document, location:{origin:'http://127.0.0.1:18849'}, navigator:{clipboard:{writeText:clipboard}}, confirm:()=>true,
     URL, AbortSignal, MutationObserver: class {constructor(fn){observers.push(fn);} observe(){}},
-    fetch:async (path,options)=>{assert.ok(path.startsWith('http://127.0.0.1:18849/')); path=new URL(path).pathname; calls.push([path, options]);return {ok:!fail,text:async()=> 'Service unavailable',json:async()=> path.endsWith('/key') && pendingKey ? pendingKey : path.endsWith('/key') ? {key:'dummy-private-ingestion-key',revision:'v1'} : {managed:true,revision:'v1',application:'live'}};}});
+    fetch:async (path,options)=>{assert.ok(path.startsWith('http://127.0.0.1:18849/')); path=new URL(path).pathname; calls.push([path, options]);return {ok:!fail,text:async()=> 'Service unavailable',json:async()=> path.endsWith('/key') && pendingKey ? pendingKey : path.endsWith('/key') ? {key:'dummy-private-ingestion-key',revision:'v1'} : {managed:true,revision:'v1',application:'live',server_url:serverURL}};}});
   vm.runInContext(readFileSync(new URL('../internal/relay/web/ingestion.js',import.meta.url),'utf8'),context);
   await window.mountIngestionSettings(container);
   return {field,feedback,calls,document,address,async click(action){const button=buttons.find(b=>b.dataset.ingestion===action);await click({target:{closest:()=>button}});},leave(){document.body.dataset.workspace='live';observers.forEach(fn=>fn());}};
@@ -55,4 +55,15 @@ test('server address copying requires an explicit RTMP host, port and applicatio
  assert.equal(ui.calls.length,1); // Copying an address never retrieves the ingestion credential.
  copied='';ui.address.value='rtmp://publisher.example/live/private-key';await ui.click('address');assert.equal(copied,'');
  assert.match(ui.feedback.textContent,/published port/);
+});
+
+test('configured public ingestion address is prefilled and remains editable without retrieving the key', async () => {
+ let copied = '';
+ const ui = await settings({serverURL: 'rtmp://studio.example.com:1935/live', clipboard: async value => {copied = value;}});
+ assert.equal(ui.address.value, 'rtmp://studio.example.com:1935/live');
+ await ui.click('address'); assert.equal(copied, ui.address.value);
+ ui.address.value = 'rtmp://alternate.example.com:1940/live';
+ await ui.click('address'); assert.equal(copied, ui.address.value);
+ assert.equal(ui.calls.length, 1);
+ const manual = await settings(); assert.equal(manual.address.value, '');
 });
