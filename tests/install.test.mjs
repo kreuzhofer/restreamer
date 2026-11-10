@@ -134,3 +134,36 @@ test('invalid domains and unmanaged directories are rejected without overwriting
   assert.notEqual(result.status, 0);
   assert.equal(readFileSync(join(directory, '.env'), 'utf8'), 'existing credentials');
 });
+
+test('HTTPS smoke refuses existing Docker projects and query failures before cleanup can own resources', t => {
+  const {root, env} = fixture(t);
+  const bin = join(root, 'smoke-bin');
+  mkdirSync(bin);
+  const log = join(root, 'smoke-calls.jsonl');
+  writeFileSync(join(bin, 'sudo'), `#!/usr/bin/env node
+const fs = require('fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.SMOKE_LOG, JSON.stringify(args)+'\\n');
+if (args[0] === 'docker' && (args.includes('ps') || args.includes('volume'))) {
+  if (process.env.SMOKE_CASE === 'query-failure') process.exit(1);
+  if ((process.env.SMOKE_CASE === 'container' && args.includes('ps')) ||
+      (process.env.SMOKE_CASE === 'volume' && args.includes('volume'))) console.log('existing-resource');
+  if (process.env.SMOKE_CASE === 'unlabeled-volume' && args.includes('volume') && !args.includes('--filter')) console.log('restreamer-standalone_restreamer-state');
+  process.exit(0);
+}
+if (args[0] === 'test') process.exit(0);
+process.exit(99);
+`, {mode: 0o755});
+  for (const scenario of ['container', 'volume', 'unlabeled-volume', 'query-failure']) {
+    writeFileSync(log, '');
+    const result = spawnSync('bash', [join(repository, 'tests/install-smoke.sh')], {
+      encoding: 'utf8', timeout: 10000,
+      env: {...env, PATH: `${bin}:${env.PATH}`, SMOKE_LOG: log, SMOKE_CASE: scenario},
+    });
+    assert.notEqual(result.status, 0);
+    const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(calls.every(args => args[0] === 'docker' &&
+      (args.includes('ps') || args.includes('volume')) && !args.includes('down')),
+    `must stop before install/cleanup: ${JSON.stringify(calls)}`);
+  }
+});

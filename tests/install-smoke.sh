@@ -2,6 +2,17 @@
 # Real Docker/Caddy/app boundary, using an isolated local CA (no public ACME requests).
 set -euo pipefail
 repository=$(cd "$(dirname "$0")/.." && pwd)
+# This test uses the installer's fixed project name. Refuse occupied hosts before
+# creating an installer marker or installing a teardown trap. Failed queries must
+# also stop: absence of Docker output is not proof that the project is unused.
+containers=$(sudo docker --context default ps -aq --filter label=com.docker.compose.project=restreamer-standalone)
+volumes=$(sudo docker --context default volume ls -q --filter label=com.docker.compose.project=restreamer-standalone)
+all_volumes=$(sudo docker --context default volume ls --format '{{.Name}}')
+reserved_volumes=$(printf '%s\n' "$all_volumes" | grep -Ex 'restreamer-standalone_(restreamer-state|caddy-data|caddy-config)' || true)
+if [ -n "$containers" ] || [ -n "$volumes" ] || [ -n "$reserved_volumes" ]; then
+  echo 'Refusing smoke test: restreamer-standalone already has containers or volumes; use a disposable Docker host.' >&2
+  exit 1
+fi
 test_root=$(mktemp -d)
 install_directory=$test_root/app
 domain=studio.example.test
