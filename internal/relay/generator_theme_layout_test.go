@@ -19,7 +19,7 @@ func TestLatestBuiltinThemesFitUneditedStarters(t *testing.T) {
 	for _, size := range [][2]int{{320, 180}, {640, 360}, {1920, 1080}} {
 		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
 			s := dashboardServer(t)
-			s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: size[0], Height: size[1], FPS: 25, SampleRate: 48000}}
+			s.cfg.BRB = &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: size[0], Height: size[1], FPS: 25, SampleRate: 48000}}
 			if err := s.initialize(); err != nil {
 				t.Fatal(err)
 			}

@@ -25,6 +25,7 @@ test('prepare a private installation with unique credentials and automatic HTTPS
   assert.ok(password, '192-bit generated password');
   assert.match(env, /^DASHBOARD_USERNAME=admin$/m);
   assert.match(env, /^RESTREAMER_DOMAIN=studio.example.com$/m);
+  assert.ok(!/^BRB_ENABLED=/m.test(env), 'media authoring is always available, without an operator switch');
   assert.equal(statSync(join(directory, '.env')).mode & 0o777, 0o600);
   assert.equal(statSync(directory).mode & 0o777, 0o700);
   assert.match(readFileSync(join(directory, 'Caddyfile'), 'utf8'), /acme-v02\.api\.letsencrypt\.org/);

@@ -10,6 +10,7 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/restreamer ./cmd/restreamer
 
 FROM alpine:3.24
+ENV BRB_DIRECTORY=/data/brb
 RUN apk add --no-cache ca-certificates ffmpeg
 LABEL org.opencontainers.image.source="https://github.com/kreuzhofer/restreamer"
 COPY THIRD_PARTY_NOTICES /THIRD_PARTY_NOTICES

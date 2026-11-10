@@ -19,7 +19,7 @@ import (
 func arcadeThemeServer(t *testing.T) *Server {
 	t.Helper()
 	s := dashboardServer(t)
-	s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 640, Height: 360, FPS: 25, SampleRate: 48000}}
+	s.cfg.BRB = &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 640, Height: 360, FPS: 25, SampleRate: 48000}}
 	if err := s.initialize(); err != nil {
 		t.Fatal(err)
 	}

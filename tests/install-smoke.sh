@@ -50,6 +50,20 @@ test "$(curl --silent --noproxy "$domain" --cacert "$test_root/ca.pem" --resolve
 test "$(curl --silent --noproxy "$domain" --resolve "$domain:80:127.0.0.1" -o /dev/null -w '%{http_code}' "http://$domain/")" = 308
 api "https://$domain/live" >/dev/null
 api "https://$domain/api/stage" | jq -e '.stage == "OFF"'
+# A healthy login page alone does not prove the installed studio is usable.
+api "https://$domain/api/generator/templates" | jq -e 'any(.[]; .id == "starter-prestream" and .builtin) and any(.[]; .id == "starter-ending" and .builtin) and any(.[]; .id == "maker-prestream" and .builtin) and any(.[]; .id == "maker-ending" and .builtin)'
+api "https://$domain/api/generator/themes" | jq -e '
+  any(.[]; .id == "arcade-after-hours" and .revision == 2) and
+  any(.[]; .id == "neon-night" and .revision == 2) and
+  any(.[]; .id == "maker-workshop") and any(.[]; .id == "maker-christmas") and
+  any(.[]; .id == "maker-halloween") and any(.[]; .id == "pacman-maze")'
+
+api "https://$domain/api/generator/designs" | jq -e 'length == 0'
+design_id=$(api -X POST "https://$domain/api/generator/templates/starter-prestream/designs" \
+  -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+  --data '{"name":"Fresh studio probe","version":1,"theme":{"id":"arcade-after-hours","revision":2}}' | jq -er '.id')
+api "https://$domain/api/generator/designs/$design_id" | jq -e '.name == "Fresh studio probe" and (.scenes | length) == 3'
+
 api -X POST "https://$domain/api/destinations" -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
   --data '{"version":0,"name":"Installer probe","url":"rtmp://127.0.0.1:1936/live","stream_key":"ci-dummy-key"}' | jq -e '.destinations[0].name == "Installer probe"'
 before_container=$(compose ps -q restreamer)
@@ -62,6 +76,7 @@ before_ca=$(sha256sum "$test_root/ca.pem" | cut -d ' ' -f1)
 compose restart
 sudo env CURL_CA_BUNDLE="$test_root/ca.pem" bash "$repository/install.sh" --directory "$install_directory"
 api "https://$domain/api/destinations" | jq -e '.destinations | any(.name == "Installer probe" and .has_key == true)'
+api "https://$domain/api/generator/designs/$design_id" | jq -e '.name == "Fresh studio probe" and (.scenes | length) == 3'
 sudo docker cp "$(compose ps -q caddy):/data/caddy/pki/authorities/local/root.crt" "$test_root/ca-after.pem"
 test "$(sudo sha256sum "$test_root/ca-after.pem" | cut -d ' ' -f1)" = "$before_ca"
 echo 'Installer HTTPS, authentication, rerun and persistence smoke checks passed.'

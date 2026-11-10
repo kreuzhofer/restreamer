@@ -10,8 +10,8 @@
     window.brbThemes?.update(snapshot, connected, pending, dirty);
     el('brb-badge').textContent = !connected ? 'Unavailable' : active ? deliberate ? 'Deliberate BRB' : 'Fallback BRB' : brb.ready ? 'Protection ready' : 'Not configured';
     el('brb-badge').className = `badge ${active ? 'warn' : brb.ready ? 'live' : ''}`;
-    el('brb-status').textContent = !connected ? 'Status disconnected · last known state' : !brb.enabled ? 'BRB is disabled in server configuration.' : active ? deliberate ? 'Deliberate break · OBS will not replace it' : 'Fallback media is on air' : brb.ready ? 'Fallback BRB is prepared' : 'Fallback BRB is not ready';
-    el('brb-help').textContent = deliberate ? 'Use Return in Live to resume the recorded stage, or choose a different stage.' : 'Prepared fallback is required for Prestream, clips, deliberate BRB and Ending. Ordinary LIVE can run without BRB.';
+    el('brb-status').textContent = !connected ? 'Status disconnected · last known state' : !brb.enabled ? 'BRB media is unavailable.' : active ? deliberate ? 'Deliberate break · OBS will not replace it' : 'Fallback media is on air' : brb.ready ? 'Fallback BRB is prepared' : 'Fallback BRB is not ready';
+    el('brb-help').textContent = deliberate ? 'Use Return in Live to resume the recorded stage, or choose a different stage.' : 'Prepared fallback is required for Prestream, clips, deliberate BRB and Ending. Ordinary LIVE can run while fallback media is unavailable.';
     const profile = snapshot.brb_profile;
     el('brb-active-profile').hidden = !brb.ready || !profile;
     if (profile) el('brb-active-profile').textContent = `Shared profile · managed in Settings: ${profile.width} × ${profile.height} · ${profile.fps} fps · ${profile.sample_rate / 1000} kHz stereo`;

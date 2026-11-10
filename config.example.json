@@ -11,7 +11,6 @@
   "library_directory": "${LIBRARY_DIRECTORY}",
   "library_upload_mib": 4096,
   "brb": {
-    "enabled": "${BRB_ENABLED}",
     "directory": "${BRB_DIRECTORY}",
     "width": 1920,
     "height": 1080,

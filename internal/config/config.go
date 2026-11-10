@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,12 +77,23 @@ func (b BRBProfile) Validate() error {
 }
 
 type BRBConfig struct {
-	Enabled   EnableFlag `json:"enabled"`
-	Directory string     `json:"directory"`
+	Directory string `json:"directory"`
 	BRBProfile
 }
 
-func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
+// UnmarshalJSON accepts the retired enabled field in existing configuration
+// files, but it no longer controls media availability. Keep unknown-field
+// validation inside this decoder as well as the outer configuration decoder.
+func (b *BRBConfig) UnmarshalJSON(data []byte) error {
+	type fields BRBConfig
+	value := struct {
+		*fields
+		Enabled json.RawMessage `json:"enabled"`
+	}{fields: (*fields)(b)}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(&value)
+}
 
 type Config struct {
 	DestinationsFile  string     `json:"destinations_file,omitempty"`
@@ -109,7 +121,8 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("cannot open configuration file")
 	}
 	defer f.Close()
-	c := Config{Listen: ":1935", HealthListen: ":8080", Application: "live", QueueBytes: 16 << 20}
+	defaults := BRBConfig{Directory: filepath.Join(filepath.Dir(path), "data", "brb"), BRBProfile: BRBProfile{Width: 1920, Height: 1080, FPS: 30, SampleRate: 48000}}
+	c := Config{Listen: ":1935", HealthListen: ":8080", Application: "live", QueueBytes: 16 << 20, BRB: &defaults}
 	d := json.NewDecoder(io.LimitReader(f, 1<<20))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&c); err != nil {
@@ -174,10 +187,10 @@ func Load(path string) (Config, error) {
 	c.StateFile = os.ExpandEnv(c.StateFile)
 	c.DestinationsFile = os.ExpandEnv(c.DestinationsFile)
 	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
-	if c.BRB != nil {
-		c.BRB.Enabled = EnableFlag(os.ExpandEnv(string(c.BRB.Enabled)))
-		c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
+	if c.BRB == nil {
+		c.BRB = &defaults
 	}
+	c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
 	return c, c.Validate()
 }
 
@@ -199,16 +212,11 @@ func (c Config) Validate() error {
 	}
 	if c.BRB != nil {
 		b := c.BRB
-		if b.Enabled != "" && b.Enabled != "true" && b.Enabled != "false" {
-			return errors.New("brb.enabled must be true or false")
+		if b.Directory == "" {
+			return errors.New("media authoring needs a persistent BRB directory")
 		}
-		if b.IsEnabled() {
-			if b.Directory == "" {
-				return errors.New("BRB needs a persistent directory")
-			}
-			if err := b.BRBProfile.Validate(); err != nil {
-				return err
-			}
+		if err := b.BRBProfile.Validate(); err != nil {
+			return err
 		}
 	}
 	if (c.DashboardUsername == "") != (c.DashboardPassword == "") {
