@@ -99,7 +99,7 @@ func (s *Server) authorizeIngestion(key string) bool {
 func (s *Server) ingestionStatusHTTP(w http.ResponseWriter, r *http.Request) {
 	s.ingestionMu.Lock()
 	defer s.ingestionMu.Unlock()
-	generatorJSON(w, 200, map[string]any{"managed": s.cfg.IngestionKeyFile != "", "revision": s.ingestion.Revision, "application": s.cfg.Application, "publisher_connected": s.active.Load(), "connected_publisher_behavior": "retained_until_disconnect"})
+	generatorJSON(w, 200, map[string]any{"managed": s.cfg.IngestionKeyFile != "", "revision": s.ingestion.Revision, "application": s.cfg.Application, "server_url": s.cfg.IngestionServerURL, "publisher_connected": s.active.Load(), "connected_publisher_behavior": "retained_until_disconnect"})
 }
 
 func (s *Server) ingestionKeyHTTP(w http.ResponseWriter, r *http.Request) {

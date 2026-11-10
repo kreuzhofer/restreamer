@@ -25,6 +25,7 @@ test('prepare a private installation with unique credentials and automatic HTTPS
   assert.ok(password, '192-bit generated password');
   assert.match(env, /^DASHBOARD_USERNAME=admin$/m);
   assert.match(env, /^RESTREAMER_DOMAIN=studio.example.com$/m);
+  assert.ok(/^INGESTION_SERVER_URL=rtmp:\/\/studio\.example\.com:1935\/live$/m.test(env), 'public RTMP address comes from installation domain');
   assert.ok(!/^BRB_ENABLED=/m.test(env), 'media authoring is always available, without an operator switch');
   assert.equal(statSync(join(directory, '.env')).mode & 0o777, 0o600);
   assert.equal(statSync(directory).mode & 0o777, 0o700);
@@ -80,7 +81,8 @@ if (name === 'curl') {
   result = run('--domain', 'studio.example.com');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Ready at https:\/\/studio.example.com/);
-  const credentials = readFileSync(join(directory, '.env'), 'utf8');
+  const credentials = readFileSync(join(directory, '.env'), 'utf8').replace('INGESTION_SERVER_URL=rtmp://studio.example.com:1935/live', 'INGESTION_SERVER_URL=rtmp://ingest.example.com:1940/live');
+  writeFileSync(join(directory, '.env'), credentials);
   const caddyfile = readFileSync(join(directory, 'Caddyfile'), 'utf8')+'\n# operator customization\n';
   writeFileSync(join(directory, 'Caddyfile'), caddyfile);
   result = run();
