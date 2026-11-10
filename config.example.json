@@ -3,6 +3,7 @@
   "health_listen": ":8080",
   "application": "live",
   "ingestion_key_file": "/data/ingestion-key.json",
+  "ingestion_server_url": "${INGESTION_SERVER_URL}",
   "stream_key": "${INGEST_STREAM_KEY}",
   "queue_bytes": 16777216,
   "dashboard_username": "${DASHBOARD_USERNAME}",

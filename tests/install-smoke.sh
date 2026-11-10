@@ -49,6 +49,7 @@ api() { curl --fail --silent --show-error --noproxy "$domain" --cacert "$test_ro
 test "$(curl --silent --noproxy "$domain" --cacert "$test_root/ca.pem" --resolve "$domain:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$domain/api/dashboard")" = 401
 test "$(curl --silent --noproxy "$domain" --resolve "$domain:80:127.0.0.1" -o /dev/null -w '%{http_code}' "http://$domain/")" = 308
 api "https://$domain/live" >/dev/null
+api "https://$domain/api/ingestion" | jq -e --arg address "rtmp://$domain:1935/live" ' .server_url == $address and (has("key") | not)'
 api "https://$domain/api/stage" | jq -e '.stage == "OFF"'
 # A healthy login page alone does not prove the installed studio is usable.
 api "https://$domain/api/generator/templates" | jq -e 'any(.[]; .id == "starter-prestream" and .builtin) and any(.[]; .id == "starter-ending" and .builtin) and any(.[]; .id == "maker-prestream" and .builtin) and any(.[]; .id == "maker-ending" and .builtin)'

@@ -1605,3 +1605,16 @@ on-air results. Music-only changes reuse the encoded visual.
 BRB has the same preparation choices in its editor. Preview a prepared result and
 assign it through **Show setup → BRB**; automatic fallback remains independently
 configured. See [music presentation behavior and limits](docs/design/music-presentations.md).
+
+The quick installer prefills **Settings → OBS ingestion** with
+`rtmp://YOUR_DOMAIN:1935/live`, using the domain supplied for HTTPS. The RTMP
+listener remains separate from the HTTPS proxy. For a different public ingest
+host or published port, set `INGESTION_SERVER_URL` in `.env` and recreate the
+app container. Standard Compose deployments can set the same optional value;
+when omitted, enter the address manually in Settings. Copy the stream key
+separately. Existing installer reruns preserve saved configuration.
+
+OBS's automatic bandwidth test uses a small probe video that does not match the
+studio's streaming profile and can be rejected. Set OBS's resolution, FPS and
+audio sample rate to match **Settings → Streaming profile**, then use normal
+**Start Streaming** to check ingestion while the studio is OFF.

@@ -31,6 +31,7 @@
       const status = await request('/api/ingestion');
       revision = status.revision;
       application = status.application;
+      if (!address.value) address.value = status.server_url || '';
       address.placeholder = `rtmp://YOUR_SERVER:YOUR_PUBLISHED_PORT/${application}`;
       buttons.forEach(button => { button.disabled = !status.managed; });
       feedback.textContent = status.managed ? 'Key hidden. Keep the server address separate from your stream key.' : 'Managed ingestion is unavailable. Configure ingestion_key_file on the server to migrate.';

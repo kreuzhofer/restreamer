@@ -90,6 +90,7 @@ DASHBOARD_PASSWORD=$password
 STATUS_BIND_ADDRESS=127.0.0.1
 STATUS_PORT=8080
 RTMP_BIND_ADDRESS=0.0.0.0
+INGESTION_SERVER_URL=rtmp://$domain:1935/live
 ENV
     printf '%s\n' "$domain" >"$stage/.domain"
     printf 'v1\n' >"$stage/.restreamer-installer"
@@ -109,7 +110,7 @@ ENV
   flock -n 9 || fail 'Another installer is using this directory.'
   # Never use a remote Docker context or let caller environment override saved credentials.
   unset DASHBOARD_USERNAME DASHBOARD_PASSWORD RESTREAMER_DOMAIN RESTREAMER_IMAGE
-  unset STATUS_BIND_ADDRESS STATUS_PORT RTMP_BIND_ADDRESS BRB_ENABLED INGEST_STREAM_KEY
+  unset STATUS_BIND_ADDRESS STATUS_PORT RTMP_BIND_ADDRESS BRB_ENABLED INGEST_STREAM_KEY INGESTION_SERVER_URL
   unset COMPOSE_FILE COMPOSE_PROJECT_NAME
   docker_cli() { docker --context default "$@"; }
   if ! command -v docker >/dev/null 2>&1; then

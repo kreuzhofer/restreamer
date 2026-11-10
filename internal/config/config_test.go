@@ -217,3 +217,25 @@ func TestTargetNamesAllowSpacesWithoutRelaxingIngestionIdentifiers(t *testing.T)
 		}
 	}
 }
+
+func TestPublicIngestionAddress(t *testing.T) {
+	t.Setenv("TARGET_KEY", "test-target-key")
+	t.Setenv("INGESTION_SERVER_URL", "rtmp://studio.example.com:1935/live")
+	c, err := loadText(t, strings.Replace(validJSON, "{", `{"ingestion_server_url":"${INGESTION_SERVER_URL}",`, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(c)
+	if err != nil || !strings.Contains(string(encoded), `"ingestion_server_url":"rtmp://studio.example.com:1935/live"`) {
+		t.Fatal("public URL not expanded and retained")
+	}
+	for _, address := range []string{"https://studio.example.com:1935/live", "rtmp://studio.example.com/live", "rtmp://studio.example.com:0/live", "rtmp://studio.example.com:65536/live", "rtmp://user:secret@studio.example.com:1935/live", "rtmp://studio.example.com:1935/live/key", "rtmp://studio.example.com:1935/live?key=secret", "rtmp://studio.example.com:1935/live#secret"} {
+		t.Setenv("INGESTION_SERVER_URL", address)
+		_, err := loadText(t, strings.Replace(validJSON, "{", `{"ingestion_server_url":"${INGESTION_SERVER_URL}",`, 1))
+		if err == nil {
+			t.Error("accepted invalid public address")
+		} else if strings.Contains(err.Error(), "secret") {
+			t.Error("validation leaked URL contents")
+		}
+	}
+}

@@ -42,12 +42,12 @@ class Delivery:
             config = {'listen': ingest, 'health_listen': self.http, 'application': 'live',
                       'stream_key': 'benchmark-input-key', 'queue_bytes': 16 * 1024 * 1024,
                       'dashboard_username': 'benchmark', 'dashboard_password': 'benchmark-local-password',
-                      'targets': ready['targets']}
+                      'targets': ready['targets'],
+                      'brb': {'directory': str(output / 'brb'),
+                              'width': 1920, 'height': 1080, 'fps': 25, 'sample_rate': 48000}}
             if continuous:
                 for target in config['targets']:
                     target['output_mode'] = 'continuous'
-                config['brb'] = {'enabled': True, 'directory': str(output / 'brb'),
-                                 'width': 1920, 'height': 1080, 'fps': 25, 'sample_rate': 48000}
             path = output / 'isolated-relay.json'
             path.write_text(json.dumps(config))
             path.chmod(0o600)

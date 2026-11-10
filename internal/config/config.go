@@ -96,20 +96,21 @@ func (b *BRBConfig) UnmarshalJSON(data []byte) error {
 }
 
 type Config struct {
-	DestinationsFile  string     `json:"destinations_file,omitempty"`
-	LibraryDirectory  string     `json:"library_directory,omitempty"`
-	LibraryUploadMiB  int        `json:"library_upload_mib,omitempty"`
-	BRB               *BRBConfig `json:"brb,omitempty"`
-	Listen            string     `json:"listen"`
-	HealthListen      string     `json:"health_listen"`
-	Application       string     `json:"application"`
-	StreamKey         string     `json:"stream_key,omitempty"`
-	IngestionKeyFile  string     `json:"ingestion_key_file,omitempty"`
-	QueueBytes        int        `json:"queue_bytes"`
-	Targets           []Target   `json:"targets"`
-	DashboardUsername string     `json:"dashboard_username"`
-	DashboardPassword string     `json:"dashboard_password"`
-	StateFile         string     `json:"state_file"`
+	IngestionServerURL string     `json:"ingestion_server_url,omitempty"`
+	DestinationsFile   string     `json:"destinations_file,omitempty"`
+	LibraryDirectory   string     `json:"library_directory,omitempty"`
+	LibraryUploadMiB   int        `json:"library_upload_mib,omitempty"`
+	BRB                *BRBConfig `json:"brb,omitempty"`
+	Listen             string     `json:"listen"`
+	HealthListen       string     `json:"health_listen"`
+	Application        string     `json:"application"`
+	StreamKey          string     `json:"stream_key,omitempty"`
+	IngestionKeyFile   string     `json:"ingestion_key_file,omitempty"`
+	QueueBytes         int        `json:"queue_bytes"`
+	Targets            []Target   `json:"targets"`
+	DashboardUsername  string     `json:"dashboard_username"`
+	DashboardPassword  string     `json:"dashboard_password"`
+	StateFile          string     `json:"state_file"`
 }
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -134,6 +135,7 @@ func Load(path string) (Config, error) {
 	// Expand individual decoded strings, so quotes or backslashes in a secret
 	// cannot alter the structure of the configuration.
 	c.IngestionKeyFile = os.ExpandEnv(c.IngestionKeyFile)
+	c.IngestionServerURL = os.ExpandEnv(c.IngestionServerURL)
 	values := []*string{&c.Listen, &c.HealthListen, &c.Application}
 	if c.IngestionKeyFile == "" {
 		values = append(values, &c.StreamKey)
@@ -232,6 +234,16 @@ func (c Config) Validate() error {
 	}
 	if !identifier.MatchString(c.Application) {
 		return errors.New("application must contain only letters, digits, underscores or hyphens")
+	}
+	if c.IngestionServerURL != "" {
+		u, err := url.Parse(c.IngestionServerURL)
+		if err != nil {
+			return errors.New("ingestion_server_url must be a public RTMP address with an explicit port and application, without a key")
+		}
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 || u.Scheme != "rtmp" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.EscapedPath() != "/"+c.Application {
+			return errors.New("ingestion_server_url must be a public RTMP address with an explicit port and application, without a key")
+		}
 	}
 	if !(c.StreamKey == "" && c.IngestionKeyFile != "") && (len(c.StreamKey) < 16 || len(c.StreamKey) > 256 || !identifier.MatchString(c.StreamKey)) {
 		return errors.New("input stream_key must contain 16–256 letters, digits, underscores or hyphens")
