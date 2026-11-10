@@ -18,7 +18,7 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - Each output defaults to enabled, but an empty/missing target stream key disables
   it. Set its optional `enabled` switch to `false` to disable it while keeping the key.
 - Standard RTMP **H.264 video and AAC audio**, including 1080p, 1440p, and 4K.
-  Live video is not decoded. BRB-enabled streams must match the selected profile.
+  Live video is not decoded. Broadcast input must match the selected profile.
 - Encoded audio/video payloads and metadata are preserved. RTMP connections are
   independently negotiated; stream IDs and connection timestamps are rewritten.
 - Each output connects independently, waits for the next keyframe, and receives
@@ -885,7 +885,7 @@ References: [FFmpeg's streamcopy and transcoding model](https://ffmpeg.org/ffmpe
 
 ## Prepared video library
 
-Enable BRB to use its saved output profile and persistent broadcast controller.
+The video library uses the saved output profile and persistent broadcast controller.
 **Studio → Media** accepts MP4 uploads on desktop and discovers regular `.mp4`
 files in `<library_directory>/originals` every five seconds. In Compose this is
 `/data/videos/originals` inside the existing persistent `/data` volume. Mount a
