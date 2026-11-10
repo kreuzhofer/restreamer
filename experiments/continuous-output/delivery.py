@@ -92,7 +92,7 @@ class Delivery:
         if result.get('state') not in ('completed', 'pending'):
             raise benchmark.ScreenError('isolated relay rejected the benchmark command')
 
-    def finish(self):
+    def finish(self, measured_probe=False):
         # Allow the final local writes to arrive, then stop via the public API.
         # Counts/markers must still prove that no frame was lost during cleanup.
         time.sleep(1)
@@ -109,7 +109,14 @@ class Delivery:
         expected = [2, 1] if self.target_fault else [1, 1]
         if len(summary) != 2 or any(item['connections'] != count or item['rejected'] or item['write_failures'] for item, count in zip(summary, expected)):
             raise benchmark.ScreenError('unexpected destination reconnect or capture failure')
-        capture = self.output / 'sinks' / ('sink-2' if self.target_fault else 'sink-1') / 'connection-001.flv'
+        capture_root = self.output / 'sinks'
+        if measured_probe:
+            capture_root = self.output / 'measured-sinks'
+            for raw in sorted((self.output / 'sinks').glob('sink-*/connection-*.flv')):
+                measured = capture_root / raw.parent.name / raw.name
+                measured.parent.mkdir(parents=True, exist_ok=True)
+                copy_probe_capture(raw, measured)
+        capture = capture_root / ('sink-2' if self.target_fault else 'sink-1') / 'connection-001.flv'
         os.link(capture, self.output / 'capture.flv')
         return summary
 
@@ -123,12 +130,52 @@ class Delivery:
             log.close()
 
 
-def timings(output, anchor, expected_frames, sync_markers=False, target_fault=False):
+def copy_probe_capture(raw, measured):
+    """Keep the probe's codec epoch; retain raw automatic-fallback evidence.
+
+    The finite probe disconnects at EOF. The studio then legitimately appends
+    BRB media. A new AVC configuration marks that boundary; frame-count and
+    marker checks still reject any early boundary or missing probe frame.
+    """
+    frames = 0
+    configured = False
+    with raw.open('rb') as source, measured.open('xb') as target:
+        header = source.read(13)
+        if header != b'FLV\x01\x05\x00\x00\x00\x09\x00\x00\x00\x00':
+            raise benchmark.ScreenError('unexpected local capture header')
+        target.write(header)
+        while True:
+            tag = source.read(11)
+            if not tag:
+                break
+            if len(tag) != 11:
+                raise benchmark.ScreenError('truncated local capture tag')
+            size = int.from_bytes(tag[1:4], 'big')
+            body = source.read(size)
+            tail = source.read(4)
+            if len(body) != size or len(tail) != 4 or int.from_bytes(tail, 'big') != size + 11:
+                raise benchmark.ScreenError('truncated local capture payload')
+            if tag[0] == 9 and len(body) >= 2 and body[1] == 0:
+                if configured and frames:
+                    break
+                configured = True
+            if tag[0] == 9 and len(body) >= 5 and body[1] == 1:
+                frames += 1
+            target.write(tag + body + tail)
+    with raw.with_suffix('.jsonl').open() as source, measured.with_suffix('.jsonl').open('x') as target:
+        for _ in range(frames):
+            line = source.readline()
+            if not line:
+                raise benchmark.ScreenError('probe arrival evidence ended early')
+            target.write(line)
+
+
+def timings(output, anchor, expected_frames, sync_markers=False, target_fault=False, capture_directory="sinks"):
     counts, warmups, delivery_max, live_max = [], [], 0, 0
     av_errors = []
     command_latencies = []
     for number in ((2,) if target_fault else (1, 2)):
-        capture = output / 'sinks' / ('sink-' + str(number)) / 'connection-001.flv'
+        capture = output / capture_directory / ('sink-' + str(number)) / 'connection-001.flv'
         events_path = capture.with_suffix('.jsonl')
         count = warmup = 0
         previous_pts = None
@@ -217,7 +264,7 @@ def timings(output, anchor, expected_frames, sync_markers=False, target_fault=Fa
         result['maximum_av_sync_error_seconds'] = max(av_errors)
         result['av_sync_events_checked'] = len(av_errors)
     if target_fault:
-        result['recovery'] = recovered_destination(output, expected_frames)
+        result['recovery'] = recovered_destination(output, expected_frames, capture_directory)
     return result
 
 
@@ -246,8 +293,8 @@ def audio_sync(capture, expected, log_path, seconds):
     return errors
 
 
-def recovered_destination(output, expected_frames):
-    directory = output / 'sinks' / 'sink-1'
+def recovered_destination(output, expected_frames, capture_directory):
+    directory = output / capture_directory / 'sink-1'
     captures = sorted(directory.glob('connection-*.flv'))
     if len(captures) != 2:
         raise benchmark.ScreenError('injected destination failure did not recover exactly once')

@@ -16,6 +16,9 @@ fi
 test_root=$(mktemp -d)
 install_directory=$test_root/app
 domain=studio.example.test
+username=installer-admin
+# Dummy password deliberately exercises Compose interpolation and quoting.
+password="installer \$literal # space \"double\" 'single' \\slash"
 compose() { sudo docker --context default compose --project-directory "$install_directory" --env-file "$install_directory/.env" -p restreamer-standalone -f "$install_directory/docker-compose.yml" -f "$install_directory/compose.https.yml" "$@"; }
 cleanup() {
   if sudo test -f "$install_directory/.restreamer-installer"; then
@@ -26,7 +29,7 @@ cleanup() {
 }
 trap cleanup EXIT
 sudo bash "$repository/install.sh" --prepare-only --domain "$domain" --directory "$install_directory" \
-  --source-dir "$repository" --image restreamer:test
+  --source-dir "$repository" --image restreamer:test --username "$username" --password "$password"
 sudo docker run --rm --network none -e RESTREAMER_DOMAIN="$domain" \
   -v "$install_directory/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 \
   caddy adapt --config /etc/caddy/Caddyfile --validate >/dev/null
@@ -44,8 +47,7 @@ for attempt in {1..60}; do
 done
 if ! wait "$installer_pid"; then cat "$test_root/installer.log"; exit 1; fi
 grep -q "Ready at https://$domain" "$test_root/installer.log"
-password=$(sudo sed -n 's/^DASHBOARD_PASSWORD=//p' "$install_directory/.env")
-api() { curl --fail --silent --show-error --noproxy "$domain" --cacert "$test_root/ca.pem" --resolve "$domain:443:127.0.0.1" --user "admin:$password" "$@"; }
+api() { curl --fail --silent --show-error --noproxy "$domain" --cacert "$test_root/ca.pem" --resolve "$domain:443:127.0.0.1" --user "$username:$password" "$@"; }
 test "$(curl --silent --noproxy "$domain" --cacert "$test_root/ca.pem" --resolve "$domain:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$domain/api/dashboard")" = 401
 test "$(curl --silent --noproxy "$domain" --resolve "$domain:80:127.0.0.1" -o /dev/null -w '%{http_code}' "http://$domain/")" = 308
 api "https://$domain/live" >/dev/null

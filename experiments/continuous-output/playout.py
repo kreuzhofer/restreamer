@@ -330,8 +330,8 @@ def run(args):
         brb.close()
         brb = None
         if delivered:
-            report['rtmp_sinks'] = delivered.finish()
-            report.update(delivery.timings(args.output, clock_anchor, args.seconds * FPS, args.sync_markers, args.target_fault))
+            report['rtmp_sinks'] = delivered.finish(measured_probe=True)
+            report.update(delivery.timings(args.output, clock_anchor, args.seconds * FPS, args.sync_markers, args.target_fault, capture_directory="measured-sinks"))
             report['unmeasured_gates'].remove('local_rtmp_delivery')
             report['unmeasured_gates'].remove('output_arrival_latency')
             if args.sync_markers:

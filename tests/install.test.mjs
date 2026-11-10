@@ -21,9 +21,9 @@ test('prepare a private installation with unique credentials and automatic HTTPS
   const result = run('--domain', 'studio.example.com', '--prepare-only');
   assert.equal(result.status, 0, result.stderr);
   const env = readFileSync(join(directory, '.env'), 'utf8');
-  const password = env.match(/^DASHBOARD_PASSWORD=([a-f0-9]{48})$/m)?.[1];
+  const password = env.match(/^DASHBOARD_PASSWORD="([a-f0-9]{48})"$/m)?.[1];
   assert.ok(password, '192-bit generated password');
-  assert.match(env, /^DASHBOARD_USERNAME=admin$/m);
+  assert.match(env, /^DASHBOARD_USERNAME="admin"$/m);
   assert.match(env, /^RESTREAMER_DOMAIN=studio.example.com$/m);
   assert.ok(/^INGESTION_SERVER_URL=rtmp:\/\/studio\.example\.com:1935\/live$/m.test(env), 'public RTMP address comes from installation domain');
   assert.ok(!/^BRB_ENABLED=/m.test(env), 'media authoring is always available, without an operator switch');
@@ -168,5 +168,44 @@ process.exit(99);
     assert.ok(calls.every(args => args[0] === 'docker' &&
       (args.includes('ps') || args.includes('volume')) && !args.includes('down')),
     `must stop before install/cleanup: ${JSON.stringify(calls)}`);
+  }
+});
+
+test('explicit initial dashboard credentials are private and reruns cannot replace them', t => {
+  const {directory, run} = fixture(t);
+  const password = `installer $literal # spaces "double" and 'single'`;
+  const args = ['--domain', 'studio.example.com', '--username', 'studio-admin', '--password', password, '--prepare-only'];
+  let result = run(...args);
+  assert.equal(result.status, 0, result.stderr);
+  const saved = readFileSync(join(directory, '.env'), 'utf8');
+  assert.ok(saved.includes('DASHBOARD_USERNAME="studio-admin"'));
+  assert.ok(!result.stdout.includes(password) && !result.stderr.includes(password), 'never print supplied password');
+  result = run(...args); assert.equal(result.status, 0, result.stderr);
+  assert.ok(readFileSync(join(directory, '.env'), 'utf8') === saved, 'identical rerun preserves saved credentials');
+  result = run('--domain', 'studio.example.com', '--password', 'different-password', '--prepare-only');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Credentials differ/);
+  assert.ok(readFileSync(join(directory, '.env'), 'utf8') === saved, 'changed flags never rotate credentials');
+});
+
+test('initial credential validation rejects empty values and line injection before writing files', t => {
+  for (const args of [['--username', ''], ['--username', 'name:other'], ['--password', ''], ['--password', 'line\nINJECTED=yes'], ['--password', 'line\rnext']]) {
+    const {directory, run} = fixture(t);
+    const result = run('--domain', 'studio.example.com', '--prepare-only', ...args);
+    assert.notEqual(result.status, 0);
+    assert.ok(!existsSync(directory));
+  }
+});
+
+test('provided passwords survive real Compose interpolation', {skip: spawnSync('docker', ['compose', 'version']).status !== 0}, t => {
+  const passwords = [`literal $value # spaces "double" and 'single'`, 'slash\\inside', 'trailing\\', "slash\\'quote", '\\n\\t', '$$double${HOME}'];
+  for (const password of passwords) {
+    const {directory, run} = fixture(t);
+    const result = run('--domain', 'studio.example.com', '--username', 'studio-admin', '--password', password, '--prepare-only');
+    assert.equal(result.status, 0, 'prepare succeeds');
+    const compose = spawnSync('docker', ['compose', '--project-directory', directory, '--env-file', join(directory, '.env'), '-f', join(directory, 'docker-compose.yml'), 'config', '--environment'], {encoding: 'utf8'});
+    assert.equal(compose.status, 0, 'Compose accepts the saved dotenv file');
+    const values = Object.fromEntries(compose.stdout.split('\n').filter(line => line.includes('=')).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+    assert.ok(values.DASHBOARD_PASSWORD === password, 'password reaches Compose unchanged');
   }
 });
