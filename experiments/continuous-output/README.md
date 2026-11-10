@@ -283,7 +283,20 @@ records faults and setup/cleanup outcomes; `report.json` is written only after
 media analysis succeeds. Analysis takes additional time after the four-hour
 capture and can be repeated with `endurance.py analyze --output /data/endurance
 --seconds 14400`. Failed captures cannot be promoted into passing evidence.
-Counters, decoded cadence, matched delay, A/V events, CPU windows and ready-command
-response have explicit gates. Anonymous-memory trends still require review, as do
+Counters, decoded cadence, matched delay, A/V events, CPU windows and command
+response have explicit gates. Ready BRB has a one-second submission-to-output
+limit; Go Live has a two-second total limit with the expected two-second GOP,
+including fresh-keyframe readiness. These captures do not separately timestamp
+readiness, so they cannot measure post-readiness processing. The one-second
+post-readiness contract is additionally covered by the integration regression.
+The in-memory CPU safety window retains only 122 samples; complete telemetry
+continues to be written to disk. Whole-container memory includes test processes,
+so compare relay RSS and source queue occupancy separately. Anonymous-memory trends still require review, as do
 final UI acceptance and the separate encoder-failure/ending-drain regression
 results. `rollout_qualified` remains false until those broader gates are reconciled.
+
+
+The [November 9 integrated run reassessment](evidence/integrated-20261109-reassessment.json)
+preserves the raw report hash and original failed timing gate alongside the
+operator-approved November 10 interpretation. It is a review of existing captured
+measurements, not a rerun or a claim that all rollout gates have passed.

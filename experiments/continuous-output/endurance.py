@@ -182,6 +182,10 @@ def analyze(args):
     quartile = max(1,len(memories)//4)
     growth = statistics.median(memories[-quartile:])-statistics.median(memories[:quartile]) if memories else None
     maximum = lambda name: max((s.get('continuous',{}).get(name,0) for s in samples), default=0)
+    def command_gate(action, limit):
+        measured = [c for c in command_checks if c['action'] == action]
+        requested = [a for a in report.get('actions', []) if a['action'] == action]
+        return len(measured) == len(requested) and all(0 <= c['output_latency_seconds'] <= limit for c in measured)
     gates = {'four_hours': report.get('elapsed_seconds',0) >= 14400,
              'decoding_and_cadence': bool(captures) and all(c['cadence_gaps']==0 for c in captures),
              'healthy_capture_duration': any(c['file'].startswith('sinks/sink-2/') and c['media_seconds'] >= args.seconds for c in captures),
@@ -190,7 +194,8 @@ def analyze(args):
              'cpu_headroom': bool(windows) and max(w['host_cpu_percent'] for w in windows) < 75,
              'bounded_queues': maximum('live_buffer_frames') <= 130 and maximum('prepared_buffer_frames') <= 50,
              'no_encoder_restart': maximum('restarts') == 0,
-             'ready_command_response': len(command_checks)==len([a for a in report.get('actions',[]) if a['action'] in ('brb','go_live')]) and all(c['output_latency_seconds']<=1 for c in command_checks),
+             'ready_brb_response': command_gate('brb', 1),
+             'go_live_total_response': command_gate('go_live', 2),
              'no_source_overflow': maximum('source_queue_overflows') == 0,
              'deferred_render_resumed': report.get('deferred_render',{}).get('resumed_state') == 'ready',
              'destination_isolation': len(report.get('sink_summary',[])) == 2 and all(item['connections']==count and item['rejected']==0 and item['write_failures']==0 for item,count in zip(report.get('sink_summary',[]),[2,1])) and sum(c['file'].startswith('sinks/sink-1/') for c in captures)==2 and sum(c['file'].startswith('sinks/sink-2/') for c in captures)==1}
@@ -202,7 +207,8 @@ def analyze(args):
                    'maximum_ingress_to_sink_seconds': max(all_delays),
                    'median_ingress_to_sink_seconds': statistics.median(all_delays),
                    'maximum_av_error_seconds': max(all_errors),
-                   'av_events': len(all_errors), 'ready_commands':command_checks,
+                   'av_events': len(all_errors), 'commands':command_checks,
+                   'command_measurement': 'command submission to first changed-source frame at sink; Go Live includes fresh-keyframe readiness wait; post-readiness latency is not measured separately',
                    'rollout_qualified': False,
                    'remaining_review': ['memory trend', 'final UI acceptance',
                                         'combine with isolated encoder-fault and ending-drain regression evidence'],
@@ -230,7 +236,7 @@ def run_endurance(args):
               'environment': benchmark.host_info(), 'actions': [], 'rollout_qualified': False}
     delivery = proxy = publisher = None
     logs = []
-    samples = []
+    samples = collections.deque(maxlen=122)
     def save(name, value):
         tmp = args.output / (name+'.tmp')
         tmp.write_text(json.dumps(value, indent=2)+'\n')
@@ -329,7 +335,7 @@ def run_endurance(args):
                     save('progress.json', {'elapsed_seconds':elapsed,'expected_finish_utc':report['expected_finish_utc'],
                          'latest':sample,'actions_completed':next_action})
                 if len(samples)>120:
-                    recent=benchmark.cpu_windows(samples[-122:])
+                    recent=benchmark.cpu_windows(list(samples))
                     if recent and all(w['host_cpu_percent'] > 85 for w in recent):
                         raise ValueError('endurance stopped after sustained host CPU above 85 percent')
                 time.sleep(1)

@@ -1,6 +1,6 @@
 # Continuous output integration evidence
 
-Status: implementation under validation on 2026-11-09. Passthrough remains the default. This document does not authorize production opt-in or claim that the YouTube green-screen incident is fixed.
+Status: implementation reviewed for merge on 2026-11-10; platform opt-in remains a separate step. Passthrough remains the default. This document does not authorize production opt-in or claim that the YouTube green-screen incident is fixed.
 
 ## Implementation and verification boundary
 
@@ -82,8 +82,8 @@ one session, 40 ms timestamp cadence, catch-up, decoded flash/chirp sync within
 The recovery test additionally covers a worker that stays paused, actual process
 termination, passthrough isolation and cancellation of pending restart.
 
-A new intended-host endurance run is required before rollout. See draft PR #76 for the latest qualification and CI evidence;
-passing a short regression alone does not qualify production use.
+The replacement-host endurance run below tests the same corrected engine; the
+short regression alone is not its qualification evidence.
 
 ## Browser verification
 
@@ -93,7 +93,11 @@ Native Chrome access recovered on November 9. The isolated authenticated fixture
 
 ## Remaining qualification and platform trial
 
-Before production opt-in, run the final production binary on the intended host for at least four hours with representative media. Verify the accepted design gates: zero outgoing decode errors and ordinary-source reconnects, stable 25 fps, matched compressed-ingress-to-sink delay no greater than eight seconds, A/V alignment within 80 ms without drift, every one-minute total-host CPU window below 75%, and bounded memory/backlog after warm-up. Include input/audio outages, decoder/encoder failure, individual destination faults, pending readiness, Stop, final-ending drain and deferred render restart. Concurrency with heavy rendering has not been qualified and is therefore not admitted.
+The November 9 run below completes the sustained media checks on the replacement
+host. The remaining aggregate-memory uncertainty should be checked with the
+bounded observer during an extended test-channel trial. Heavy rendering remains
+deferred; concurrent heavy rendering is not qualified. Physical iPhone playback
+of this candidate and real-platform ingest/quality assessment are not claimed.
 
 Then agree a test-channel session with the operator: YouTube continuous, Twitch passthrough, with controlled source changes and platform ingest-health/video/audio review. Keep platform latency separate from relay delay. A subsequent comparison may use both destinations on the shared continuous encoder. Rollback is explicit: stop the broadcast and pending start, change the destination to Passthrough, save, then start again. Never change production selections automatically.
 
@@ -106,3 +110,59 @@ Delivery additionally requires successful GitHub CI for the exact pushed SHA. Br
 The complete local suite exposed an ending-frame defect at 30 fps: predictive encoding left eight RGB samples at value 1 instead of exact black. Encoding the final faded frame as a keyframe preserves the exact-black endpoint and the original duration. The unchanged strict frame-boundary regression passes at 24, 25 and 30 fps with FFmpeg 7 and 9.
 
 The playlist integration test also assumed that four seconds of wall-clock capture guaranteed four seconds of received audio. A late keyframe join could leave a shorter capture and let tone analysis read past its buffer. Capture now waits for the required received AAC timestamp span with a hard wall-clock deadline, and validates the complete decoded analysis window. Both continuous and passthrough music tests passed three consecutive runs.
+
+
+## Replacement-host endurance and timing reassessment — November 10
+
+The operator supplied a fresh eight-logical-CPU AMD EPYC host with 32 GB RAM.
+The clean `55555897ec190bb5c697bdd8b4062129fa207e6f` binary ran for
+14,400.610 seconds on November 9, with the same representative recording, runtime
+layers and three-CPU/two-GiB container limits. There were no external destinations,
+published ports or platform credentials. The engine is unchanged by the subsequent
+benchmark/documentation corrections.
+
+- Zero encoder restarts, source overflows, outgoing decode errors or cadence gaps.
+  The healthy sink kept one connection and received 360,170 frames; the deliberately
+  disconnected sink made exactly two connections.
+- Matched ingress-to-sink delay: median 4.655 s, maximum 5.794 s. Maximum A/V marker
+  error: 0.521 ms over 26,692 events. The deferred render completed after Stop.
+- Peak rolling-minute CPU: 17.287% of the eight-logical-CPU host, equivalent to
+  34.574% of four logical CPUs in CPU-time units; the container quota was three
+  CPUs. This does not qualify the original contended Hostinger host.
+- All 24 ready BRB commands reached changed-source sink frames in 43–162 ms.
+  All 24 Go Live commands did so in 0.840–1.995 s, including the fresh-keyframe wait.
+
+The original report is preserved as rejected: its `ready_command_response` gate
+incorrectly applied a one-second limit from command submission to both actions.
+The operator accepted two seconds total for Go Live with the expected two-second
+GOP on November 10. The committed
+[reassessment](../../experiments/continuous-output/evidence/integrated-20261109-reassessment.json)
+records the original report SHA-256, original gates and revised gates. It does not
+invent a readiness timestamp: post-readiness Go Live delay was not measured
+separately in the endurance capture. The existing authenticated integration
+regression asserts emitted-source status within one second after committed LIVE
+readiness; ready BRB retains its one-second limit.
+
+After ten minutes of warm-up, eight successive half-hour (last: twenty-minute)
+relay RSS medians were 712.06, 712.36, 712.79, 711.72, 714.13, 716.07, 713.45 and
+712.45 MiB. Median live queue occupancy stayed at 110 frames. There is no sustained
+relay RSS/backlog growth in these samples. Whole-container anonymous memory
+first/last-quartile medians rose by 25.69 MiB, with a 1,039.25 MiB peak. That metric
+includes the Python observer, which retained all 14,356 samples in memory. Future
+captures retain only the last 122 samples for the CPU safety check while writing
+all samples to disk. The aggregate rise is confounded; these measurements do not
+prove a whole-container memory plateau or attribute every byte to the observer.
+Keep that limitation visible during the extended platform trial.
+
+The separate race-tested regressions cover encoder termination/prolonged stalls,
+Stop cancellation, passthrough isolation and final-ending drain. Native Chrome
+verification covers full desktop, narrow desktop and emulated phone layouts as
+described above. Independent standards/spec review found one unsafe installer
+smoke-test cleanup path; it was corrected before merge with occupied-host and
+failed-query regression coverage. Final main CI and image publication remain the
+release gate; see the merged PR checks for the delivered SHA.
+
+Private raw capture and telemetry are retained under
+`/var/tmp/restreamer-qualification-20261109/data/endurance-5555589/` on the test
+host and `output/continuous-new-host-20261109/` locally. No public certificate
+issuance, deployment or platform broadcast is part of this verification.

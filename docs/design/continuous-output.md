@@ -1,8 +1,9 @@
 # Continuous broadcast output — design interview
 
-Status: shared understanding confirmed on 2026-10-30, including the one-second
-ready-source response target. This is a design plan, not an implemented or
-benchmarked feature.
+Status: design confirmed on 2026-10-30; keyframe-inclusive Go Live timing
+clarified on 2026-11-10. The original baseline and decisions below are retained;
+current implementation and measured results are in
+[the integration evidence](../testing/continuous-output.md).
 
 ## Problem and confirmed context
 
@@ -213,7 +214,7 @@ compatibility tests so buffered or recovering output cannot appear falsely activ
 | Audio synchronization | Audio/video alignment within 80 ms, without accumulating drift over the run |
 | CPU headroom | Average total host CPU below 75% of the four-vCPU capacity over each one-minute window under the admitted workload |
 | Memory and queues | Bounded configured queues and no continuing memory/backlog growth after warm-up |
-| Controls | Ready-source changes appear at relay output within 1 s once readiness and command acceptance are established; verify pending readiness, immediate Stop now, final-ending drain, and cancelled recovery |
+| Controls | Ready-source changes appear at relay output within 1 s once readiness and command acceptance are established. With the expected 2 s OBS GOP, Go Live command submission to changed-source output may take up to 2 s total, including keyframe readiness. Verify pending readiness, immediate Stop now, final-ending drain, and cancelled recovery |
 | Isolation and capacity | Exercise individual destination failure and both admitted/rejected rendering contention |
 
 The decode-error gate applies to outgoing media. Intentionally damaged input can
@@ -224,6 +225,21 @@ events to check actual media, not just connection status. Thresholds are accepte
 engineering targets, not claims of current performance. The one-second response
 target makes “prompt” measurable and was accepted in final confirmation;
 it excludes time spent awaiting source readiness and external platform playback.
+
+On 2026-11-10 the operator accepted a separate two-second total Go Live response
+budget for the expected two-second input GOP. The stage controller waits for a
+fresh valid OBS keyframe before committing LIVE. Command submission is therefore
+not a valid timestamp for measuring post-readiness processing alone. Keep the
+one-second ready-source contract and measure the two intervals separately; older
+captures without a readiness timestamp cannot establish post-readiness latency.
+The authenticated integration test checks emitted-source status after committed
+LIVE readiness; the endurance capture checks actual changed-source sink frames.
+
+The replacement qualification host supplied by the operator has eight logical
+CPUs and 32 GB RAM. Report its CPU percentages with that denominator and the
+three-CPU container quota explicitly. A comparison to the original four-vCPU
+budget normalizes CPU-time units; it does not claim equal performance between
+processors or qualify the overloaded original host.
 
 Build a runnable media proof before production integration. Use the existing
 authenticated stage/status and local RTMP/captured-media seams where practical.
@@ -255,13 +271,16 @@ scope. Continuous output is not a guarantee of platform-side public playback.
 
 The operator confirmed the complete plan and the one-second ready-source
 response target on 2026-10-30. The next step is the runnable media benchmark;
-production implementation remains gated on its results. A standalone
+production implementation was initially gated on its results. The operator later
+authorized integration and supplied a replacement host for qualification; see
+the dated integration evidence for that progression. A standalone
 [experimental harness](../../experiments/continuous-output/README.md) provides
 a capacity screen and an independently clocked switching proof with two local
 RTMP sinks. Its reports distinguish measured gates from remaining qualification
 work; it does not qualify production rollout. Representative-media endurance,
 full ingress-delay measurement and the remaining failure/contention/control
-gates are still required before production implementation.
+gates remain recorded separately from the experimental proof; see the current
+integration evidence rather than treating this original plan as a release report.
 
 ## Evidence to collect
 

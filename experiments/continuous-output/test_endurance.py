@@ -135,6 +135,24 @@ class EnduranceAnalysis(unittest.TestCase):
             report=json.loads((root/'report.json').read_text())
             self.assertAlmostEqual(report['maximum_ingress_to_sink_seconds'],5,places=3)
             self.assertFalse(report['rollout_qualified'])
+            # Go Live includes waiting for a fresh keyframe; it is not a
+            # measurement of the separate one-second post-readiness contract.
+            first_output_ns = int((100 + min(pts)/1000 + 5)*1e9)
+            for action, latency, gate, expected in (
+                ('go_live', 2, 'go_live_total_response', True),
+                ('go_live', 2.001, 'go_live_total_response', False),
+                ('brb', .5, 'ready_brb_response', False),  # no BRB frame arrived
+            ):
+                run['actions'] = [{'action':action, 'at_seconds':0,
+                                   'at_unix_ns':first_output_ns-int(latency*1e9)}]
+                (root/'run.json').write_text(json.dumps(run))
+                result=analyze(5)
+                measured=json.loads((root/'report.json').read_text())
+                self.assertEqual(measured['gates'][gate],expected,result.stdout+result.stderr)
+                self.assertEqual(result.returncode,0 if expected else 1,result.stderr)
+                self.assertIn('command submission',measured['command_measurement'])
+            run.pop('actions')
+            (root/'run.json').write_text(json.dumps(run))
             bad=analyze(9)
             self.assertEqual(bad.returncode,1,bad.stdout+bad.stderr)
             report=json.loads((root/'report.json').read_text())
