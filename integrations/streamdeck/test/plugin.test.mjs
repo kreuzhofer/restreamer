@@ -291,7 +291,7 @@ test('target toggle selects its destination and requires a two-second hold then 
  const r=await rig(t);r.state.control_destinations=true;
  r.state.outputs=[{name:'My Twitch',platform:'twitch',enabled:false,can_enable:true,state:'disabled'}];
  r.appear('target-toggle','target',{target:'My Twitch'});
- await eventually(()=>r.image('target').includes('My Twitch'));
+ await eventually(()=>r.image('target').includes('My Twitch')&&r.image('target').includes('>OFF<'));
  assert.match(r.image('target'),/OFF/);
  r.key('target-toggle','target');await wait(100);r.key('target-toggle','target','keyUp');
  await wait(200);assert.equal(r.commands.length,0);
