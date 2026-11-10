@@ -21,22 +21,24 @@ type destinationState struct {
 }
 
 type destinationView struct {
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	HasKey  bool   `json:"has_key"`
-	Enabled bool   `json:"enabled"`
-	Ready   bool   `json:"ready"`
-	Reason  string `json:"reason,omitempty"`
+	Name       string `json:"name"`
+	OutputMode string `json:"output_mode"`
+	URL        string `json:"url"`
+	HasKey     bool   `json:"has_key"`
+	Enabled    bool   `json:"enabled"`
+	Ready      bool   `json:"ready"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 type destinationChange struct {
-	Version   uint64  `json:"version"`
-	Name      string  `json:"name"`
-	URL       string  `json:"url"`
-	StreamKey *string `json:"stream_key,omitempty"`
-	Confirmed bool    `json:"confirmed"`
-	Context   string  `json:"context"`
-	ServerID  string  `json:"server_id"`
+	Version    uint64  `json:"version"`
+	Name       string  `json:"name"`
+	URL        string  `json:"url"`
+	StreamKey  *string `json:"stream_key,omitempty"`
+	OutputMode *string `json:"output_mode,omitempty"`
+	Confirmed  bool    `json:"confirmed"`
+	Context    string  `json:"context"`
+	ServerID   string  `json:"server_id"`
 }
 
 func (s *Server) outputSnapshot() []*output {
@@ -45,8 +47,18 @@ func (s *Server) outputSnapshot() []*output {
 	return append([]*output{}, s.outputs...)
 }
 
+func (s *Server) pathOutputs(mode string) []*output {
+	var outputs []*output
+	for _, o := range s.outputSnapshot() {
+		if o.config.Mode() == mode {
+			outputs = append(outputs, o)
+		}
+	}
+	return outputs
+}
+
 func (s *Server) newOutput(target config.Target) *output {
-	status := OutputStatus{Name: target.Name, Enabled: target.IsEnabled(), State: "paused", CanEnable: target.ReadyError() == nil}
+	status := OutputStatus{Name: target.Name, OutputMode: target.Mode(), Enabled: target.IsEnabled(), State: "paused", CanEnable: target.ReadyError() == nil}
 	if !status.Enabled {
 		status.State = "disabled"
 	}
@@ -71,7 +83,11 @@ func (s *Server) startOutputLocked(o *output) {
 	done := make(chan struct{})
 	s.outputDone[o] = done
 	s.outputWorkers.Add(1)
-	go func() { defer s.outputWorkers.Done(); defer close(done); o.manage(ctx, s.broadcast.hub) }()
+	h := s.broadcast.hub
+	if o.config.Mode() == "continuous" {
+		h = s.broadcast.continuous.hub
+	}
+	go func() { defer s.outputWorkers.Done(); defer close(done); o.manage(ctx, h) }()
 }
 
 func (s *Server) destinationsPath() string {
@@ -129,6 +145,9 @@ func (s *Server) initializeDestinations() error {
 var destinationName = regexp.MustCompile(`^[a-zA-Z0-9_ -]{1,64}$`)
 
 func validateDestination(target config.Target, allowUnavailable bool) error {
+	if err := target.ValidateOutputMode(); err != nil {
+		return err
+	}
 	if !destinationName.MatchString(target.Name) || strings.TrimSpace(target.Name) != target.Name {
 		return errors.New("Use a unique destination name with 1–64 letters A–Z, digits, spaces, underscores or hyphens; no leading or trailing spaces")
 	}
@@ -150,7 +169,7 @@ func (s *Server) destinationResponse(w http.ResponseWriter) {
 	views := []destinationView{}
 	for _, o := range s.outputSnapshot() {
 		status := o.snapshot()
-		views = append(views, destinationView{Name: o.config.Name, URL: o.config.URL, HasKey: strings.TrimSpace(o.config.StreamKey) != "", Enabled: status.Enabled, Ready: status.CanEnable, Reason: status.UnavailableReason})
+		views = append(views, destinationView{Name: o.config.Name, OutputMode: o.config.Mode(), URL: o.config.URL, HasKey: strings.TrimSpace(o.config.StreamKey) != "", Enabled: status.Enabled, Ready: status.CanEnable, Reason: status.UnavailableReason})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
@@ -245,6 +264,18 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			if index >= 0 {
 				target.StreamKey = next.Targets[index].StreamKey
 				target.Enabled = next.Targets[index].Enabled
+				target.OutputMode = next.Targets[index].OutputMode
+			}
+			if change.OutputMode != nil {
+				target.OutputMode = *change.OutputMode
+			}
+			previousMode := "passthrough"
+			if index >= 0 {
+				previousMode = next.Targets[index].Mode()
+			}
+			if target.Mode() != previousMode && (b.control.stage != "OFF" || b.control.pending != nil) {
+				http.Error(w, "Stop the broadcast or rehearsal and cancel pending starts before changing output mode", 409)
+				return
 			}
 			if change.StreamKey != nil {
 				target.StreamKey = *change.StreamKey
@@ -286,7 +317,7 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, target := range next.Targets {
 		var found *output
 		for _, o := range old {
-			if o.config.Name == target.Name && o.config.URL == target.URL && o.config.StreamKey == target.StreamKey {
+			if o.config.Name == target.Name && o.config.URL == target.URL && o.config.StreamKey == target.StreamKey && o.config.Mode() == target.Mode() {
 				found = o
 				break
 			}
@@ -323,8 +354,11 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.outputs = outputs
 	s.outputsMu.Unlock()
 	b.hub.mu.Lock()
-	b.hub.outputs = append([]*output{}, outputs...)
+	b.hub.outputs = s.pathOutputs("passthrough")
 	b.hub.mu.Unlock()
+	b.continuous.hub.mu.Lock()
+	b.continuous.hub.outputs = s.pathOutputs("continuous")
+	b.continuous.hub.mu.Unlock()
 	s.destinations, s.destinationsManaged = next, true
 	b.control.version++
 	// Completed ending evidence remains historical and is intentionally unchanged.

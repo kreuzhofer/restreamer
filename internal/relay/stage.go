@@ -11,6 +11,7 @@ import (
 
 // StageStatus separates operator intent from the media actually selected.
 type StageStatus struct {
+	Continuous          ContinuousStatus   `json:"continuous"`
 	ReturnFallback      *StageMediaStatus  `json:"return_fallback_media,omitempty"`
 	ReturnEmergency     bool               `json:"return_emergency,omitempty"`
 	ReturnFallbackError string             `json:"return_fallback_error,omitempty"`
@@ -93,6 +94,7 @@ func (b *broadcast) stageStatusLocked(now time.Time) StageStatus {
 		}
 	}
 	s := StageStatus{Stage: c.stage, Source: source, Mode: c.mode, ServerID: c.serverID, Context: b.stageContext(), Error: b.playbackError, Outcomes: []CommandResult{}}
+	s.Continuous = b.continuous.snapshot()
 	s.Emergency = b.fallbackFailed && b.active
 	s.FallbackError = b.fallbackError
 	if b.fallback != nil {

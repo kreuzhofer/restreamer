@@ -89,23 +89,23 @@ func (s *Server) loadScenePreview(ctx context.Context, scene mediaauthor.Scene) 
 	defer f.Close()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	release, err := s.preparation.acquire(ctx)
-	if err != nil {
-		return nil, errors.New("Video preview is waiting for media preparation. Retry after current work finishes.")
-	}
-	defer release()
-	args := []string{"-v", "error", "-nostdin", "-max_alloc", "268435456", "-ss", decimal(scene.Video.TrimStartSeconds)}
-	args = append(args, videoInputArgs(f.Name())...)
-	args = append(args, "-frames:v", "1", "-an", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "-")
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
-	var data bytes.Buffer
-	cmd.Stdout = &assetLimitWriter{Writer: &data, remaining: maxAssetImageBytes}
-	if cmd.Run() != nil {
-		return nil, errors.New("Cannot decode video preview; check the selected range and FFmpeg.")
-	}
-	img, err := png.Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("Cannot read video preview.")
-	}
-	return img, nil
+	var img image.Image
+	err = s.preparation.run(ctx, 30*time.Second, nil, func(ctx context.Context) error {
+		args := []string{"-v", "error", "-nostdin", "-max_alloc", "268435456", "-ss", decimal(scene.Video.TrimStartSeconds)}
+		args = append(args, videoInputArgs(f.Name())...)
+		args = append(args, "-frames:v", "1", "-an", "-threads", "2", "-f", "image2pipe", "-c:v", "png", "-")
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		var data bytes.Buffer
+		cmd.Stdout = &assetLimitWriter{Writer: &data, remaining: maxAssetImageBytes}
+		if cmd.Run() != nil {
+			return errors.New("Cannot decode video preview; check the selected range and FFmpeg.")
+		}
+		var err error
+		img, err = png.Decode(&data)
+		if err != nil {
+			return fmt.Errorf("Cannot read video preview.")
+		}
+		return nil
+	})
+	return img, err
 }

@@ -311,10 +311,17 @@ func TestMusicPresentationMissingAudioAndEncoderFailuresAreExplicit(t *testing.T
 }
 
 func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
+	testMusicPresentationLocalRTMPAndRehearsal(t, "passthrough")
+}
+func TestContinuousMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
+	testMusicPresentationLocalRTMPAndRehearsal(t, "continuous")
+}
+func testMusicPresentationLocalRTMPAndRehearsal(t *testing.T, mode string) {
 	prepared := libraryServer(t)
 	destination := newSink(t)
 	cfg := prepared.cfg
 	cfg.Targets = []config.Target{destination.target("local")}
+	cfg.Targets[0].OutputMode = mode
 	s := New(cfg, prepared.log)
 	serveEndingActivation(t, s)
 	a := uploadedAsset(t, assetUpload(t, s, "/api/generator/assets?kind=audio", "first.wav", musicFixture(t, "sine=frequency=440:sample_rate=48000", .4)))
@@ -357,13 +364,29 @@ func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
 	if w := dashboardRequest(s, "PUT", "/api/music/playlists/"+p.ID, string(body)); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	start := time.Now()
 	packets := []*rtmp.Message{}
-	for time.Since(start) < 2400*time.Millisecond {
+	captureDuration := 2400 * time.Millisecond
+	if mode == "continuous" {
+		captureDuration = 4 * time.Second
+	}
+	// A destination can join at a later keyframe. Measure received media,
+	// rather than counting encoder startup as captured playlist audio.
+	deadline := time.NewTimer(12 * time.Second)
+	defer deadline.Stop()
+	var firstAudio, lastAudio time.Duration
+	haveAudio := false
+	for !haveAudio || lastAudio-firstAudio < captureDuration {
 		select {
 		case msg := <-destination.packets:
 			packets = append(packets, msg)
-		case <-time.After(5 * time.Millisecond):
+			if msg.Type == rtmp.Audio && len(msg.Body) > 1 && msg.Body[1] == 1 {
+				if !haveAudio {
+					firstAudio, haveAudio = msg.Timestamp, true
+				}
+				lastAudio = msg.Timestamp
+			}
+		case <-deadline.C:
+			t.Fatalf("playlist output stalled: captured %v of %v audio", lastAudio-firstAudio, captureDuration)
 		}
 	}
 	st := readStage(t, s)
@@ -373,13 +396,17 @@ func TestMusicPresentationLocalRTMPAndRehearsal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "live.flv")
 	writeTestFLV(t, path, packets)
 	pcm := decodePCM(t, path)
-	if len(pcm) < int(1.8*48000) {
-		t.Fatal("music ended prematurely", len(pcm))
-	}
 	// Local sink joins at the next visual keyframe; inspect periodic tone content
 	// across several cycles rather than assuming network startup has zero latency.
 	var first, second int
-	for at := .2; at < 1.8; at += .1 {
+	firstSample, lastSample := .2, 1.8
+	if mode == "continuous" {
+		firstSample, lastSample = 1, 3.5
+	}
+	if required := int((lastSample + .1) * 48000); len(pcm) < required {
+		t.Fatalf("music ended before the complete tone-analysis window: got %d samples, need %d", len(pcm), required)
+	}
+	for at := firstSample; at < lastSample; at += .1 {
 		if tonePower(pcm, at, 440) > 1e10 {
 			first++
 		}

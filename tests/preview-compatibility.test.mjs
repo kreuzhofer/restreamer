@@ -57,3 +57,11 @@ test('unsupported media APIs or codecs remain explicit',async()=>{
   const absent=fixture({managed:false});absent.window.broadcastPreview.update(true);assert.equal(absent.node('#broadcast-toggle').disabled,true);assert.match(absent.node('#broadcast-status').textContent,/Media Source/);
   const unsupported=fixture({supported:false});unsupported.window.broadcastPreview.update(true);await unsupported.flush();assert.match(unsupported.node('#broadcast-status').textContent,/codec\/profile/);await unsupported.stop();
 });
+
+test('changing monitor paths does not display cancellation as a playback failure',async()=>{
+  const ui=fixture({standard:true});ui.window.broadcastPreview.update(true,1);await ui.flush();
+  ui.window.broadcastPreview.setPath('/api/broadcast-preview?output_mode=continuous','Continuous output preview');
+  ui.window.broadcastPreview.update(true,2);await ui.flush();
+  assert.doesNotMatch(ui.node('#broadcast-status').textContent,/Stopped|abort/i);
+  await ui.stop();
+});

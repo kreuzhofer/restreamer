@@ -57,8 +57,8 @@
       const previous = preparation;
       preparation = await (await request('/api/brb/theme/preparation')).json();
       preparing = preparation?.state === 'running' || preparation?.state === 'cancelling';
-      if (preparation && (previous?.id !== preparation.id || previous?.state !== preparation.state)) {
-        status(preparing ? (preparation.state === 'cancelling' ? 'Cancelling this preparation…' : 'Preparing captured BRB settings. You can close this page; work continues on the server.') : preparation.state === 'ready' ? 'Prepared, not active. Preview the exact result, then activate explicitly.' : preparation.error || `Preparation ${preparation.state}. Current BRB is unchanged.`);
+      if (preparation && (previous?.id !== preparation.id || previous?.state !== preparation.state || previous?.message !== preparation.message)) {
+        status(preparing ? (preparation.state === 'cancelling' ? 'Cancelling this preparation…' : preparation.message || 'Preparing captured BRB settings. You can close this page; work continues on the server.') : preparation.state === 'ready' ? 'Prepared, not active. Preview the exact result, then activate explicitly.' : preparation.error || `Preparation ${preparation.state}. Current BRB is unchanged.`);
       }
       const next = await (await request('/api/brb/theme/candidate')).json();
       if (loadFailed) { fail(''); loadFailed = false; }

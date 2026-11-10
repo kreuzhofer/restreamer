@@ -4,12 +4,13 @@
   const equal = (a, b) => a && b && ['width', 'height', 'fps', 'sample_rate'].every(key => Number(a[key]) === Number(b[key]));
   let snapshot, saved, draft, connected = false, assetsBusy = false, pending = false;
   const dirty = () => !!draft && !equal(draft, saved);
-  const canSave = () => connected && snapshot?.brb?.ready && snapshot.stage?.stage === 'OFF' && !assetsBusy && !pending && dirty();
+  const canSave = () => connected && snapshot?.brb?.ready && snapshot.stage?.stage === 'OFF' && !snapshot.stage?.pending && !assetsBusy && !pending && dirty();
 
   function renderProfile() {
     el('input-profile').hidden = !snapshot?.brb?.ready || !saved;
     el('profile-unavailable').hidden = !el('input-profile').hidden;
     el('profile-unavailable').textContent = !connected ? 'Streaming profile unavailable while disconnected. Retrying automatically.' : 'Enable and prepare BRB on the server to configure the shared streaming profile.';
+    el('profile-continuous').hidden = !(snapshot?.outputs || []).some(output => output.output_mode === 'continuous');
     if (!saved) return;
     el('profile-active').textContent = `Active saved profile: ${saved.width} × ${saved.height} · ${saved.fps} fps · ${saved.sample_rate / 1000} kHz stereo`;
     const resolution = `${draft.width}x${draft.height}`;
@@ -18,8 +19,8 @@
     select.value = resolution;
     el('profile-fps').value = String(draft.fps);
     el('profile-sample-rate').value = String(draft.sample_rate);
-    el('profile-fields').disabled = !connected || pending || assetsBusy || snapshot.stage?.stage !== 'OFF';
-    el('profile-locked').hidden = snapshot.stage?.stage === 'OFF';
+    el('profile-fields').disabled = !connected || pending || assetsBusy || snapshot.stage?.stage !== 'OFF' || !!snapshot.stage?.pending;
+    el('profile-locked').hidden = snapshot.stage?.stage === 'OFF' && !snapshot.stage?.pending;
     el('profile-unsaved').hidden = !dirty() || pending;
     el('profile-save').disabled = !canSave();
     el('profile-save').textContent = pending ? 'Rebuilding BRB…' : 'Save & rebuild';

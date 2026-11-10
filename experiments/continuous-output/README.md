@@ -1,9 +1,9 @@
 # Continuous-output experiments
 
 These isolated measurement tools support the [confirmed design](../../docs/design/continuous-output.md).
-They include a capacity screen and a clocked source-switching proof. Neither
-qualifies production rollout or selects the production implementation library.
-The normal Restreamer executable and saved configuration are unchanged.
+They include an experimental capacity screen, a clocked source-switching proof,
+and a production-engine endurance harness. These tools use isolated configuration
+and loopback receivers. Their measurements do not authorize production opt-in.
 
 ## Capacity screen
 
@@ -217,3 +217,86 @@ docker run --rm --network none --read-only --cap-drop ALL \
 
 The original recording must remain untouched. Mount it read-only when supplied
 separately; place any instrumented copies and results in benchmark storage.
+
+
+## Production-engine endurance
+
+`endurance.py` measures the production Go engine, using the exact supplied relay
+binary. It is distinct from the Python-clock prototype. Use a clean, identified
+build and first complete a short preflight with the same setup.
+
+Prepare representative excerpts from a local recording. By default these are
+five two-minute excerpts beginning at 0, 1800, 3600, 5400 and 7200 seconds; use
+`--offsets` and `--seconds-per-sample` for a shorter recording. The original is
+read-only. The derived picture has a small binary frame counter and flash marker;
+original audio is downmixed to the left channel, with calibration chirps on the
+right. Verify that derivative independently before using it as a timing oracle.
+
+```sh
+python3 experiments/continuous-output/endurance.py prepare \
+  --input /input/recording.mp4 --output /data/fixture
+python3 experiments/continuous-output/endurance.py verify \
+  --input /data/fixture/marked.mp4 --output /data/calibration
+python3 experiments/continuous-output/endurance.py run \
+  --input /data/fixture/marked.mp4 --output /data/preflight \
+  --relay /code/restreamer --sinks /code/endurance-sinks --seconds 120
+python3 experiments/continuous-output/endurance.py run \
+  --input /data/fixture/marked.mp4 --output /data/endurance \
+  --relay /code/restreamer --sinks /code/endurance-sinks --seconds 14400
+```
+
+Build `endurance-sinks` from `./experiments/continuous-output/sinks`. The
+experimental Dockerfile includes this helper as `/opt/continuous-benchmark/rtmp-sinks`
+and the scripts under `/opt/continuous-benchmark/`. Override its entrypoint to
+Python when invoking the endurance script. Supply the intended production image
+through `RESTREAMER_IMAGE` when building that experimental image.
+
+Run in a container with networking disabled, no published ports, a read-only root
+and source mount, dropped capabilities, no-new-privileges, bounded CPU/memory/PIDs,
+a writable scratch directory and bounded `/tmp`. The authorized intended-host
+runs use CPU3/memory2GiB/PIDs128/tmpfs512MiB. Reports read the whole host's `/proc`
+CPU counters and cgroup anonymous memory. Leave room for approximately 50 GiB of
+input/output captures; the run stops if free space falls below 10 GiB. A sustained
+host CPU reading above 85% also stops the run; the acceptance ceiling remains
+75% in every complete minute window, not 85%.
+
+The timer starts after processed OBS becomes ready. Every ten minutes the run
+requests BRB/OBS, removes audio for twelve seconds, and disconnects/reconnects
+input separately. The existing three-second audio-stall policy evicts a publisher;
+the harness records that eviction and reconnects it after the injected outage.
+One destination is deliberately disconnected once; the healthy destination must
+keep one connection. A captured render stays visibly deferred while broadcasting
+and must finish from the same revision after Stop.
+
+The ingress proxy records complete encoded packets before forwarding them to the
+relay. Analysis decodes frame IDs from both input and output and matches their
+arrival timestamps, including B-frame presentation order. This measures across
+compressed input and encoded output, including the extra loopback forwarding
+hop; it does not use the relay's estimated-delay field as its oracle. Sync checks
+compare visible flashes with right-channel chirps throughout each captured segment.
+The first 250ms of a receiver segment is excluded from flash matching because AAC
+startup may not provide a detectable preceding silence interval. Do not substitute
+short-run success for the four-hour duration gate.
+
+`progress.json` and line-oriented `samples.jsonl` persist during capture. `run.json`
+records faults and setup/cleanup outcomes; `report.json` is written only after
+media analysis succeeds. Analysis takes additional time after the four-hour
+capture and can be repeated with `endurance.py analyze --output /data/endurance
+--seconds 14400`. Failed captures cannot be promoted into passing evidence.
+Counters, decoded cadence, matched delay, A/V events, CPU windows and command
+response have explicit gates. Ready BRB has a one-second submission-to-output
+limit; Go Live has a two-second total limit with the expected two-second GOP,
+including fresh-keyframe readiness. These captures do not separately timestamp
+readiness, so they cannot measure post-readiness processing. The one-second
+post-readiness contract is additionally covered by the integration regression.
+The in-memory CPU safety window retains only 122 samples; complete telemetry
+continues to be written to disk. Whole-container memory includes test processes,
+so compare relay RSS and source queue occupancy separately. Anonymous-memory trends still require review, as do
+final UI acceptance and the separate encoder-failure/ending-drain regression
+results. `rollout_qualified` remains false until those broader gates are reconciled.
+
+
+The [November 9 integrated run reassessment](evidence/integrated-20261109-reassessment.json)
+preserves the raw report hash and original failed timing gate alongside the
+operator-approved November 10 interpretation. It is a review of existing captured
+measurements, not a rerun or a claim that all rollout gates have passed.

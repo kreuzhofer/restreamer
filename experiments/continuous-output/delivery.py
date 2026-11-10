@@ -23,7 +23,7 @@ def free_address():
 
 
 class Delivery:
-    def __init__(self, output, relay, sinks, seconds, target_fault=False):
+    def __init__(self, output, relay, sinks, seconds, target_fault=False, continuous=False):
         self.output = output
         self.target_fault = target_fault
         self.relay = self.sinks = None
@@ -43,13 +43,18 @@ class Delivery:
                       'stream_key': 'benchmark-input-key', 'queue_bytes': 16 * 1024 * 1024,
                       'dashboard_username': 'benchmark', 'dashboard_password': 'benchmark-local-password',
                       'targets': ready['targets']}
+            if continuous:
+                for target in config['targets']:
+                    target['output_mode'] = 'continuous'
+                config['brb'] = {'enabled': True, 'directory': str(output / 'brb'),
+                                 'width': 1920, 'height': 1080, 'fps': 25, 'sample_rate': 48000}
             path = output / 'isolated-relay.json'
             path.write_text(json.dumps(config))
             path.chmod(0o600)
             log = (output / 'relay.log').open('wb')
             self.logs.append(log)
             self.relay = subprocess.Popen([str(relay), '-config', str(path)], stdout=log, stderr=log)
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + (60 if continuous else 10)
             while True:
                 try:
                     self.request('/api/stage')
@@ -71,8 +76,13 @@ class Delivery:
         request = urllib.request.Request('http://' + self.http + path,
                                          data=json.dumps(data).encode() if data is not None else None,
                                          headers=headers)
-        with urllib.request.urlopen(request, timeout=3) as response:
-            return json.load(response)
+        try:
+            with urllib.request.urlopen(request, timeout=3) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            # This adapter owns an isolated relay with dummy credentials only.
+            detail = error.read(2048).decode('utf-8', errors='replace')
+            raise benchmark.ScreenError('isolated {} rejected ({}): {}'.format(path, error.code, detail)) from None
 
     def command(self, action):
         state = self.request('/api/stage')

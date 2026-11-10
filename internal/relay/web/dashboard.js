@@ -62,6 +62,7 @@ function badge(element, state) {
 function render() {
  if (!snapshot) return;
  window.broadcastStages?.update(snapshot, connected);
+ window.updateDestinationStage?.(snapshot.stage, connected);
  window.streamProfile?.update(snapshot, connected, false);
  window.updatePreview?.(connected && snapshot.publishing);
  window.updateLibrary?.(snapshot, connected);
@@ -110,8 +111,18 @@ function render() {
   const graphPoints = graphMetric === 'fps' ? samples.map(p => ({time: p.time, value: p.output_fps?.[output.name]})).filter(p => Number.isFinite(p.value)) : points;
   chart($('.target-chart', card), graphPoints, now, `${output.name} ${graphName} over 15 minutes`);
   let message = !output.can_enable ? output.unavailable_reason : output.state === 'disabled' ? 'Output is stopped. Input continues.' : output.state === 'paused' ? snapshot.stage?.mode === 'preview_only' ? 'Rehearsal blocks destination delivery. Preference is kept.' : 'Broadcast is off. Target preference is kept.' : output.state === 'idle' ? 'Waiting for an input stream.' : output.state === 'waiting_for_keyframe' ? 'Connected. Waiting for the next video keyframe.' : output.state === 'retrying' ? `Next attempt in ${Math.max(0, Math.ceil((output.retry_at - now) / 1000))}s` : output.state === 'streaming' ? `Sending ${snapshot.stage?.source === 'obs' ? 'OBS' : snapshot.stage?.source === 'brb' ? 'BRB' : 'prepared video'} video and audio.` : output.state === 'stopping' ? 'Closing destination connection…' : 'Opening destination connection…';
-  $('.target-message', card).textContent = message;
+  const modeName = output.output_mode === 'continuous' ? 'Continuous' : 'Passthrough';
+  const program = snapshot.stage?.continuous;
+  if (output.output_mode === 'continuous' && output.state === 'streaming') {
+    message = program?.state === 'running' ? `Sending continuous output · ${program.source === 'held' ? 'last picture with silence' : program.source}.` : `Continuous encoder ${program?.state || 'status unknown'}; delivery is not healthy.`;
+    if (program?.state !== 'running') badge($('.panel-heading .badge', card), 'waiting_for_keyframe');
+  }
+  $('.target-message', card).textContent = `${modeName} · ${message}`;
   $('.target-brief', card).textContent = !connected ? 'Status stale · controls unavailable' : !output.can_enable ? output.unavailable_reason : output.state === 'streaming' ? `Relay sending · ${current ? rate(last.outputs[output.name] || 0) : '—'} Mbps · ${Number.isFinite(output.dropped_frames) ? output.dropped_frames.toLocaleString() : '—'} drops` : output.state === 'retrying' ? `Connection failed · ${message.toLowerCase()}` : snapshot.stage?.mode === 'preview_only' ? 'Rehearsal · delivery blocked' : snapshot.stage?.stage === 'OFF' ? 'OFF · delivery stopped' : message;
+  if (connected && output.enabled && output.output_mode === 'continuous' && snapshot.stage?.stage !== 'OFF' && program?.state !== 'running') {
+    $('.target-brief', card).textContent = `Encoder ${program?.state || 'status unknown'} · waiting for output`;
+  }
+  $('.target-brief', card).textContent = `${modeName} · ${$('.target-brief', card).textContent}`;
   card.classList.toggle('destination-failing', connected && output.enabled && output.state === 'retrying');
   $('.attempts', card).textContent = `${output.attempts} connection ${output.attempts === 1 ? 'attempt' : 'attempts'}`;
   const issue = $('.issue', card);
