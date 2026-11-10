@@ -15,6 +15,7 @@ if [ -n "$containers" ] || [ -n "$volumes" ] || [ -n "$reserved_volumes" ]; then
 fi
 test_root=$(mktemp -d)
 install_directory=$test_root/app
+registry_container=
 domain=studio.example.test
 username=installer-admin
 # Dummy password deliberately exercises Compose interpolation and quoting.
@@ -25,6 +26,7 @@ cleanup() {
     compose logs --tail 30 caddy || true
     compose down --volumes || true
   fi
+  if [ -n "$registry_container" ]; then sudo docker rm -fv "$registry_container" || true; fi
   sudo rm -rf -- "$test_root"
 }
 trap cleanup EXIT
@@ -82,4 +84,37 @@ api "https://$domain/api/destinations" | jq -e '.destinations | any(.name == "In
 api "https://$domain/api/generator/designs/$design_id" | jq -e '.name == "Fresh studio probe" and (.scenes | length) == 3'
 sudo docker cp "$(compose ps -q caddy):/data/caddy/pki/authorities/local/root.crt" "$test_root/ca-after.pem"
 test "$(sudo sha256sum "$test_root/ca-after.pem" | cut -d ' ' -f1)" = "$before_ca"
-echo 'Installer HTTPS, authentication, rerun and persistence smoke checks passed.'
+# Exercise a real pull/recreate against an isolated loopback registry; never
+# replace the freshly built test image with an older public release.
+registry_container=$(sudo docker run -d -p 127.0.0.1::5000 registry:2)
+registry_address=$(sudo docker port "$registry_container" 5000/tcp)
+for attempt in {1..30}; do
+  if curl --fail --silent --noproxy '*' "http://$registry_address/v2/" >/dev/null; then break; fi
+  sleep 1
+done
+update_image="$registry_address/restreamer:installer-update"
+sudo docker build -t restreamer:installer-update-test - <<'UPDATE_IMAGE'
+FROM restreamer:test
+LABEL io.restreamer.installer-update-test=true
+UPDATE_IMAGE
+expected_update_image=$(sudo docker image inspect --format '{{.Id}}' restreamer:installer-update-test)
+sudo docker tag restreamer:installer-update-test "$update_image"
+sudo docker push "$update_image"
+# Leave the OLD image cached under the SAME tag. The updater must consult the
+# registry despite the saved Compose override's pull_policy: missing.
+sudo docker tag restreamer:test "$update_image"
+before_container=$(compose ps -q restreamer)
+before_settings=$(sudo sed '/^RESTREAMER_IMAGE=/d' "$install_directory/.env" | sha256sum | cut -d ' ' -f1)
+before_proxy=$(sudo sha256sum "$install_directory/Caddyfile" | cut -d ' ' -f1)
+before_ingestion=$(api "https://$domain/api/ingestion" | jq -r .revision)
+sudo env CURL_CA_BUNDLE="$test_root/ca.pem" bash "$repository/install.sh" --directory "$install_directory" --update --image "$update_image"
+test "$(compose ps -q restreamer)" != "$before_container"
+test "$(sudo docker inspect --format '{{.Image}}' "$(compose ps -q restreamer)")" = "$expected_update_image"
+test "$(sudo sed '/^RESTREAMER_IMAGE=/d' "$install_directory/.env" | sha256sum | cut -d ' ' -f1)" = "$before_settings"
+test "$(sudo sha256sum "$install_directory/Caddyfile" | cut -d ' ' -f1)" = "$before_proxy"
+test "$(api "https://$domain/api/ingestion" | jq -r .revision)" = "$before_ingestion"
+api "https://$domain/api/generator/designs/$design_id" | jq -e '.name == "Fresh studio probe" and (.scenes | length) == 3'
+api "https://$domain/api/destinations" | jq -e '.destinations | any(.name == "Installer probe" and .has_key == true)'
+sudo docker cp "$(compose ps -q caddy):/data/caddy/pki/authorities/local/root.crt" "$test_root/ca-updated.pem"
+test "$(sudo sha256sum "$test_root/ca-updated.pem" | cut -d ' ' -f1)" = "$before_ca"
+echo 'Installer HTTPS, authentication, rerun, update and persistence smoke checks passed.'

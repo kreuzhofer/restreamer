@@ -106,15 +106,34 @@ hashes are escaped according to [Compose dotenv and interpolation rules](https:/
 installer refuses to adopt another installation's existing volumes. Use the
 original installation directory to recover an interrupted setup.
 
-Useful commands on the server:
+To update an existing installation to the latest published app and proxy images,
+stop the broadcast or rehearsal and disconnect OBS, then run:
 
 ```sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash -s -- --update --image ghcr.io/kreuzhofer/restreamer:main'
+```
+
+The updater reads the saved domain and login; do not pass new credentials. It
+checks that the studio is idle before and after pulling, then recreates the
+containers and verifies health and HTTPS. It retains all volumes, media, designs,
+destination settings, ingestion keys, certificates, and customized Compose/Caddy
+files. Only an explicitly supplied `--image` changes the saved image reference;
+a private `.env.before-update.*` backup is kept. `--update` without `--image`
+pulls the currently configured references, so a pinned SHA stays pinned. Failed
+pulls do not restart services or change the saved image; later startup failures
+are reported without claiming success. Updates require Python 3 for the local,
+authenticated idle check (included when the installer provisions Ubuntu Docker).
+
+Useful commands on the server (the installation directory is root-private):
+
+```sh
+sudo -i
 cd /opt/restreamer
-sudo docker compose logs -f                  # app and HTTPS proxy logs
-sudo docker compose down                     # stop; retain all data and certificates
+docker compose logs -f                  # app and HTTPS proxy logs
+docker compose down                     # stop; retain all data and certificates
 # During a maintenance window, after stopping any broadcast:
-sudo docker compose pull
-sudo docker compose up -d --wait              # explicitly apply updates
+docker compose pull
+docker compose up -d --wait              # explicitly apply updates
 ```
 
 Both services restart after host reboot; the broadcast stage returns to OFF.
