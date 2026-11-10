@@ -2,9 +2,9 @@ export type Stage = {
   stage:string; server_id:string; context:string; source:string; mode:string;
   pending?:{id:string}; error?:string; fallback_error?:string; return_stage?:string;
   media?:{revision?:string}; outcomes?:{id:string;state:string;reason?:string}[];
-  playback?:{state:string};
+  playback?:{state:string}; continuous?:{state:string;error?:string};
 };
-export type Snapshot = {stage:Stage; outputs:{enabled:boolean;can_enable:boolean;state:string;last_error?:string}[]};
+export type Snapshot = {stage:Stage; outputs:{enabled:boolean;can_enable:boolean;state:string;last_error?:string;output_mode?:string}[]};
 export type Face = {label:string; detail:string; tone:'gray'|'green'|'amber'|'red'|'blue'; symbol:string; description:string};
 export const labels:Record<string,string> = {prestream:'PRE', 'go-live':'LIVE', 'brb-return':'BRB', 'end-stream':'END', 'play-clip':'CLIP', status:'UNKNOWN', 'stop-now':'STOP'};
 
@@ -15,8 +15,10 @@ export function health(snapshot:Snapshot | undefined):Face {
   // Same eligible set and reconnect semantics as the Live overview: saved
   // failures do not make OFF/rehearsal red; reconnecting after failure does.
   const intended=snapshot.outputs.filter(o=>o.enabled&&o.can_enable);
-  const sending=intended.filter(o=>o.state==='streaming').length;
-  const failed=intended.some(o=>o.state==='retrying'||(o.last_error&&['connecting','waiting_for_keyframe'].includes(o.state)));
+  const encoderUnavailable=intended.some(o=>o.output_mode==='continuous')&&stage.continuous?.state!=='running';
+  const sending=intended.filter(o=>o.state==='streaming'&&(o.output_mode!=='continuous'||!encoderUnavailable)).length;
+  const encoderFailed=encoderUnavailable&&(stage.continuous?.state!=='starting'||Boolean(stage.continuous?.error));
+  const failed=encoderFailed||intended.some(o=>o.state==='retrying'||(o.last_error&&['connecting','waiting_for_keyframe'].includes(o.state)));
   const detail=`${sending}/${intended.length}`;
   if(stage.stage==='OFF')return {label,detail:'OFF',tone:'gray',symbol:'—',description:'OFF'};
   if(stage.mode==='preview_only')return {label,detail:'REHEARSE',tone:'blue',symbol:'○',description:'REHEARSAL'};

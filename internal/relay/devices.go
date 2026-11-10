@@ -164,6 +164,15 @@ func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 503, map[string]string{"error": "Pairing requires dashboard authentication and persistent TARGET_STATE_FILE storage."})
 		return
 	}
+	// Read untrusted request bodies before acquiring shared device state. A
+	// stalled peer must never hold up another device's status or revocation.
+	var input struct {
+		Name       string `json:"name,omitempty"`
+		DeviceCode string `json:"device_code,omitempty"`
+	}
+	if !generatorDecodeLimit(w, r, &input, 1024) {
+		return
+	}
 	// No expensive media initialization is triggered by anonymous requests.
 	d := s.devices
 	d.mu.Lock()
@@ -175,12 +184,6 @@ func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.URL.Path == "/api/devices/pair" {
-		var input struct {
-			Name string `json:"name"`
-		}
-		if !generatorDecodeLimit(w, r, &input, 1024) {
-			return
-		}
 		input.Name = strings.TrimSpace(input.Name)
 		if input.Name == "" || len(input.Name) > 80 || strings.ContainsAny(input.Name, "\r\n\x00") {
 			generatorJSON(w, 400, map[string]string{"error": "Enter a device name of 1–80 bytes."})
@@ -197,12 +200,6 @@ func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 		code = code[:4] + "-" + code[4:]
 		d.pending[deviceHash(secret)] = &devicePairing{Code: code, Name: input.Name, Expires: now.Add(pairingLifetime)}
 		generatorJSON(w, 201, map[string]any{"device_code": secret, "user_code": code, "expires_in": 300, "interval": 3})
-		return
-	}
-	var input struct {
-		DeviceCode string `json:"device_code"`
-	}
-	if !generatorDecodeLimit(w, r, &input, 1024) {
 		return
 	}
 	pair := d.pending[deviceHash(input.DeviceCode)]
@@ -265,9 +262,6 @@ func (s *Server) approveDeviceHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) devicesHTTP(w http.ResponseWriter, r *http.Request) {
-	d := s.devices
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if r.Method == "DELETE" {
 		var input struct {
 			Confirm bool `json:"confirm"`
@@ -279,6 +273,11 @@ func (s *Server) devicesHTTP(w http.ResponseWriter, r *http.Request) {
 			generatorJSON(w, 400, map[string]string{"error": "Confirm device revocation."})
 			return
 		}
+	}
+	d := s.devices
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if r.Method == "DELETE" {
 		records := make([]deviceCredential, 0, len(d.records))
 		for _, record := range d.records {
 			if record.ID != r.PathValue("id") {

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -241,5 +242,44 @@ func TestDevicePairingDeclineAndCrossOriginProtection(t *testing.T) {
 	w = deviceRequest(s, "POST", "/api/devices/token", `{"device_code":"`+pair.DeviceCode+`"}`, "")
 	if w.Code != 400 {
 		t.Fatal("declined device can still pair")
+	}
+}
+
+// A peer can pause halfway through JSON. That peer must not own the shared
+// credential lock while unrelated controls and revocation need it.
+func TestDeviceSlowRequestDoesNotBlockOtherDevices(t *testing.T) {
+	for _, path := range []string{"/api/devices/pair", "/api/devices/token", "/api/devices/test-id"} {
+		t.Run(path, func(t *testing.T) {
+			s := dashboardServer(t)
+			token, _ := pairedDevice(t, s)
+			reader, writer := io.Pipe()
+			defer writer.Close()
+			method := "POST"
+			if path == "/api/devices/test-id" {
+				method = "DELETE"
+			}
+			r := httptest.NewRequest(method, path, reader)
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("X-Restreamer-Control", "1")
+			r.SetBasicAuth(s.cfg.DashboardUsername, s.cfg.DashboardPassword)
+			done := make(chan struct{})
+			go func() { defer close(done); s.Handler().ServeHTTP(httptest.NewRecorder(), r) }()
+			// Pipe.Write returns only once the handler has started consuming the body.
+			if _, err := writer.Write([]byte(`{"`)); err != nil {
+				t.Fatal(err)
+			}
+			status := make(chan int, 1)
+			go func() { status <- deviceRequest(s, "GET", "/api/dashboard", "", token).Code }()
+			select {
+			case code := <-status:
+				if code != 200 {
+					t.Errorf("unrelated status: %d", code)
+				}
+			case <-time.After(time.Second):
+				t.Error("slow request blocked another device's status")
+			}
+			writer.Close()
+			<-done
+		})
 	}
 }

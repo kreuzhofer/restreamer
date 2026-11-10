@@ -251,3 +251,29 @@ test('active keys distinguish intended stage from fallback, paused, and failed p
   r.state.stage.playback={state:'failed'};r.state.stage.error='Prepared video cannot play';
   await eventually(()=>r.image('clip').includes('FAILED'));assert.doesNotMatch(r.image('clip'),/ACTIVE/);
 });
+
+test('continuous encoder failure excludes its destinations from healthy delivery',async t=>{
+  const r=await rig(t);r.appear('status');
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.state.outputs[0].output_mode='continuous';
+  r.state.stage.continuous={state:'starting'};
+  await eventually(()=>r.image('status').includes('STARTING'));
+  assert.match(r.image('status'),/0\/1/);
+  r.state.stage.continuous.state='running';
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.state.stage.continuous.state='failed';
+  await eventually(()=>r.image('status').includes('FAILED'));
+  assert.match(r.image('status'),/0\/1/);
+  r.state.outputs[0].state='waiting_for_keyframe';
+  await wait(1200);
+  assert.match(r.image('status'),/FAILED/);
+  r.state.outputs.push({name:'direct',enabled:true,can_enable:true,state:'streaming',output_mode:'passthrough'});
+  await eventually(()=>r.image('status').includes('1/2'));
+  assert.match(r.image('status'),/DEGRADED/);
+  r.state.stage.continuous.state='running';r.state.outputs[0].state='streaming';
+  await eventually(()=>r.image('status').includes('2/2'));
+  assert.match(r.image('status'),/HEALTHY/);
+  r.state.stage.continuous.state='failed';r.state.outputs[0].enabled=false;
+  await eventually(()=>r.image('status').includes('1/1'));
+  assert.match(r.image('status'),/HEALTHY/,'unused encoder failure must not taint passthrough');
+});
