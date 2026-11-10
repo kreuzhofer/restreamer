@@ -53,7 +53,7 @@ func (s *Server) initialize() error {
 		defer s.controlMu.Unlock()
 		// Reject overlapping stores before any initialization can create secrets.
 		paths := make(map[string]bool)
-		for _, path := range []string{s.cfg.StateFile, s.cfg.IngestionKeyFile, s.destinationsPath()} {
+		for _, path := range []string{s.cfg.StateFile, s.cfg.IngestionKeyFile, s.destinationsPath(), s.deviceAccessPath()} {
 			if path == "" {
 				continue
 			}
@@ -67,6 +67,10 @@ func (s *Server) initialize() error {
 				return
 			}
 			paths[abs] = true
+		}
+		if err := s.initializeDeviceAccess(); err != nil {
+			s.initErr = err
+			return
 		}
 		if err := s.initializeDestinations(); err != nil {
 			s.initErr = err

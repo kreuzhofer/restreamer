@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,12 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	mux.HandleFunc("POST /api/devices/pair", s.pairingHTTP)
+	mux.HandleFunc("POST /api/devices/token", s.pairingHTTP)
+	private.HandleFunc("POST /api/devices/approve", s.approveDeviceHTTP)
+	private.HandleFunc("POST /api/devices/deny", s.approveDeviceHTTP)
+	private.HandleFunc("GET /api/devices", s.devicesHTTP)
+	private.HandleFunc("DELETE /api/devices/{id}", s.devicesHTTP)
 	private.HandleFunc("GET /api/destination-presets/twitch", s.twitchIngestsHTTP)
 	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
@@ -122,6 +129,22 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		if s.cfg.DashboardUsername == "" || s.cfg.DashboardPassword == "" {
 			http.Error(w, "Dashboard disabled: configure DASHBOARD_USERNAME and DASHBOARD_PASSWORD.", http.StatusServiceUnavailable)
+			return
+		}
+		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			if !s.deviceAuthorized(token) {
+				http.Error(w, "Device disconnected. Pair again in Stream Deck.", 401)
+				return
+			}
+			if !deviceRouteAllowed(r) {
+				http.Error(w, "Device permission does not allow this operation", 403)
+				return
+			}
+			if err := s.initialize(); err != nil {
+				http.Error(w, "Studio unavailable", 503)
+				return
+			}
+			next.ServeHTTP(w, withDevicePrincipal(r))
 			return
 		}
 		user, password, ok := r.BasicAuth()

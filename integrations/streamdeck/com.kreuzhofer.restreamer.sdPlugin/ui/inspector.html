@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src ws://127.0.0.1:*; style-src 'self'; script-src 'self'; img-src 'self' data:"><title>Restreamer settings</title><link rel="stylesheet" href="inspector.css"></head>
+<body><main>
+<h1>Restreamer</h1><p id="action-help">Broadcast controls use the selections saved in Show setup.</p>
+<section id="clip-section" hidden><h2>Clip for this key</h2><label for="clip">Prepared video</label><select id="clip"><option value="">Choose a ready video…</option></select><p id="clip-help">This key keeps the exact saved render. A new render does not replace it.</p><button type="button" id="refresh" class="secondary">Refresh videos</button><p id="library-message" role="status"></p></section>
+<details id="connection"><summary>Server connection <span>Shared by all keys</span></summary>
+<form id="connection-form">
+<label for="endpoint">Server address</label><input id="endpoint" name="endpoint" type="url" placeholder="https://restreamer.example" required autocomplete="url"><p class="hint">Use the server address, without a page path.</p>
+<label for="device-name">Device name</label><input id="device-name" name="device-name" value="Stream Deck" maxlength="80" required><p class="hint">Recognize this device in Restreamer’s connected-devices list.</p>
+<label class="check"><input id="insecure" type="checkbox">Allow HTTP on my trusted network</label><p class="hint">HTTP sends credentials without encryption. Prefer HTTPS.</p>
+<button type="submit" id="save">Connect in browser</button>
+</form>
+<section id="pairing" hidden aria-label="Approve connection"><h2>Compare this code</h2><p id="pairing-code"></p><p>Sign in to Restreamer in your browser. Approve only if both codes match.</p><p class="hint">Existing keys keep their current connection until you approve this one.</p><button type="button" id="open-pairing" class="secondary">Open browser again</button> <button type="button" id="cancel-pairing" class="secondary">Cancel</button></section>
+<p class="hint">Your dashboard password stays in the browser. Revoke this device in Settings → Connected devices.</p>
+</details>
+<p id="message" role="status" aria-live="polite">Connecting to Stream Deck…</p>
+<p class="footnote">Status reports relay delivery, not platform-side public broadcast status.</p>
+</main><script src="inspector.js"></script></body></html>

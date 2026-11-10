@@ -47,6 +47,10 @@ func (s *Server) stageCommandHTTP(w http.ResponseWriter, r *http.Request) {
 		writeCommandResult(w, 400, CommandResult{State: "rejected", Reason: "Expected one identified stage command"})
 		return
 	}
+	if !deviceCommandAllowed(r, cmd) {
+		writeCommandResult(w, 403, CommandResult{ID: cmd.ID, State: "rejected", Reason: "Device permission does not allow this command"})
+		return
+	}
 	b := s.broadcast
 	var candidate *clipPlayback
 	var profile config.BRBProfile

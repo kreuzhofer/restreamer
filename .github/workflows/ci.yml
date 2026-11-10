@@ -18,6 +18,12 @@ jobs:
           node-version: '24'
       - run: make check-brb-artwork check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
       - run: make check-web
+      - run: make check-streamdeck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restreamer-streamdeck-${{ github.sha }}
+          path: integrations/streamdeck/dist/*.streamDeckPlugin
+          if-no-files-found: error
       - name: Check fresh Ubuntu installer bootstrap
         run: docker run --rm --network none --read-only --tmpfs /tmp:rw,exec,size=32m -v "$PWD:/repo:ro" ubuntu:24.04 bash /repo/tests/install-bootstrap-smoke.sh
       - uses: actions/setup-go@v5
