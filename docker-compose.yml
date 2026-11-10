@@ -12,7 +12,6 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       TARGET_STATE_FILE: /data/targets.json
-      BRB_ENABLED: "${BRB_ENABLED:-false}"
       BRB_DIRECTORY: /data/brb
       LIBRARY_DIRECTORY: /data/videos
     volumes:

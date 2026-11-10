@@ -52,7 +52,7 @@ jobs:
           start_container() {
             docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
-              -e TARGET_STATE_FILE=/data/targets.json -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              -e TARGET_STATE_FILE=/data/targets.json -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               "${env_args[@]}" restreamer:test
             # Startup prepares BRB media before opening HTTP, including after a
             # restart. Docker can reset connections while the port is not ready.
@@ -220,7 +220,7 @@ jobs:
             docker run -d --name restreamer-arm64-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-arm64-state:/data \
               -e INGEST_STREAM_KEY=ci-test-key-123456 -e TARGET_STATE_FILE=/data/targets.json \
-              -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb \
+              -e BRB_DIRECTORY=/data/brb \
               -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               restreamer:arm64-test
             for attempt in {1..60}; do

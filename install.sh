@@ -90,7 +90,6 @@ DASHBOARD_PASSWORD=$password
 STATUS_BIND_ADDRESS=127.0.0.1
 STATUS_PORT=8080
 RTMP_BIND_ADDRESS=0.0.0.0
-BRB_ENABLED=false
 ENV
     printf '%s\n' "$domain" >"$stage/.domain"
     printf 'v1\n' >"$stage/.restreamer-installer"

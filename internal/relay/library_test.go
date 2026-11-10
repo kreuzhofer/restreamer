@@ -21,7 +21,7 @@ import (
 func libraryServer(t *testing.T) *Server {
 	t.Helper()
 	s := dashboardServer(t)
-	s.cfg.BRB = &config.BRBConfig{Enabled: "true", Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}
+	s.cfg.BRB = &config.BRBConfig{Directory: t.TempDir(), BRBProfile: config.BRBProfile{Width: 320, Height: 180, FPS: 25, SampleRate: 48000}}
 	s.cfg.QueueBytes = 1 << 20
 	if err := s.initialize(); err != nil {
 		t.Fatal(err)

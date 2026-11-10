@@ -3,7 +3,7 @@
 A native Go application that accepts one OBS stream over RTMP and forwards it to
 Twitch, YouTube, and other RTMP/RTMPS destinations. Runs as a single executable in
 a Docker container on Linux **amd64** and **arm64**. Live media stays native Go
-passthrough. Optional BRB protection uses FFmpeg to prepare uploaded assets; the
+passthrough. Built-in BRB protection and media authoring use FFmpeg to prepare assets; the
 container includes it. No Node, Python, GPU, or continuous transcoder is required.
 
 ```text
@@ -91,7 +91,9 @@ Docker volumes for app data and certificates. It reports **Ready** only after
 checking trusted HTTPS, app health, and unauthenticated dashboard rejection.
 View your login details with `sudo cat /opt/restreamer/.env`; the default username
 is `admin`. Then open the printed HTTPS URL and configure ingestion and destinations
-in Settings. The app starts OFF; installing it never starts a broadcast.
+in Settings. BRB, the video library, four starter content templates and the built-in
+style themes are available immediately. Your own designs, uploads and generated
+videos start empty. The app starts OFF; installing it never starts a broadcast.
 
 If DNS, firewall or certificate issuance fails, fix the reported problem and run
 the command again. Reruns preserve credentials, data and customized proxy files;
@@ -377,7 +379,7 @@ all dashboard clients does not stop a sequence.
 | --- | --- |
 | **OFF** | No destination delivery. OBS may remain connected and its input preview continues. Every process restart returns here. |
 | **Prestream** | Validate the saved exact starting-soon revision and prepared BRB fallback, then loop it until an explicit stage change. OBS cannot interrupt it. |
-| **Go live** | Keep the current source while waiting up to 10 seconds for a fresh compatible OBS keyframe. Show the pending request and allow cancellation. Timeout leaves the previous sequence intact. Ordinary LIVE works with BRB disabled. |
+| **Go live** | Keep the current source while waiting up to 10 seconds for a fresh compatible OBS keyframe. Show the pending request and allow cancellation. Timeout leaves the previous sequence intact. BRB protection and media authoring are always available. |
 | **BRB** | Select a deliberate break. Reconnecting OBS does not leave it. A playing clip is suspended with its position, explicit pause state, and original return stage. |
 | **Play clip** | Play the chosen exact ready revision once, then return to the recorded stage. Replacing clip A with B preserves A's original return destination. A clip interrupting PRESTREAM resumes its original revision near its saved position. |
 | **Return / Stop clip** | Restore the recorded stage; Return from BRB resumes a suspended clip when one exists. An unavailable return source holds fallback BRB with an explanation. |
@@ -576,8 +578,7 @@ configuration requires no mount; manage destinations in Settings.
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
 | `library_directory` | Persistent MP4 library root; Compose uses `/data/videos`, native default is `<brb.directory>/library` |
 | `library_upload_mib` | Maximum original MP4 size in MiB; 0 or omitted means 4096; maximum 32768 |
-| `brb.enabled` | Opt-in for custom/native configurations; Compose defaults `BRB_ENABLED=false` |
-| `brb.directory` | Required writable persistent directory when enabled; Compose uses `/data/brb` |
+| `brb.directory` | Writable persistent media directory; Compose uses `/data/brb`, native default is `data/brb` beside the configuration file |
 | `brb.width`, `brb.height` | Initial profile; bundled config uses 1920×1080. Even dimensions, 320×180 through 3840×2160 |
 | `brb.fps` | Initial rate: 30; supports 24, 25, 30, 50, 60 |
 | `brb.sample_rate` | Initial AAC-LC stereo rate: 48000; also supports 44100 |
@@ -619,7 +620,7 @@ plus protocol overhead. In v1, CPU handles transport/TLS, not video encoding.
 ## Build and test
 
 Requires Go 1.27 or later and Node.js 24 for dashboard tests. Install FFmpeg/FFprobe with `libx264` and AAC support to run
-BRB or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
+the native application or its media integration tests. CI sets `REQUIRE_FFMPEG_TESTS=1` to ensure
 these tests cannot silently skip. The protocol dependency is pinned in `go.mod`/`go.sum`.
 
 ```sh
@@ -667,12 +668,21 @@ They use local endpoints and do not broadcast to real platform accounts.
 
 ## BRB and OBS disconnect protection
 
-Enable BRB by setting `BRB_ENABLED=true` in `.env` and recreating the Compose
-service. It defaults off so existing deployments retain their behavior. Custom
-configurations need `brb.enabled=true`, a writable directory, and an initial
-profile (see `config.example.json`). Enabling BRB prepares fallback media; it does
-not start delivery. Start an explicitly confirmed Prestream or Go live session.
-The broadcast still starts OFF after every application restart.
+BRB protection, the video library and media authoring are always initialized.
+Built-in templates, themes and artwork ship with the application; generated show
+videos and uploaded files belong to your persistent data and are not preloaded.
+Startup prepares the fallback media but never starts delivery. Start an explicitly
+confirmed Prestream or Go live session. The broadcast starts OFF after every restart.
+
+The old `BRB_ENABLED` environment switch has been removed. Existing `.env` files
+may retain it harmlessly; legacy `brb.enabled` JSON fields are accepted but ignored,
+including `false` and old environment references. Rerunning the installer preserves
+saved settings. For older quick installations, apply the new release with the
+normal image update and Compose recreation procedure; no volume reset is needed.
+Native configurations may omit the `brb` object: storage then defaults to `data/brb`
+beside the config file and the initial profile to 1920×1080p30 / 48 kHz stereo.
+Explicit directory/profile values remain validated. FFmpeg and FFprobe must be
+installed for native startup; the container includes them.
 
 - Established LIVE falls back to BRB when OBS disconnects or its video/audio
   stalls for three seconds. Fallback has no automatic timeout.

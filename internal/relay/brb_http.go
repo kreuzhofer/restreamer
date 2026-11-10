@@ -42,7 +42,7 @@ func controlOriginAllowed(r *http.Request) bool {
 }
 
 func (s *Server) initializeBRB() error {
-	if !s.cfg.BRB.IsEnabled() {
+	if s.cfg.BRB == nil {
 		return nil
 	}
 	root := s.cfg.BRB.Directory
