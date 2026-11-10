@@ -4,12 +4,30 @@ set -euo pipefail
 
 main() {
   local directory=/opt/restreamer domain= image= source_dir= ref=main prepare=false stage=
-  local file password existing=false label attempt code volumes containers cleanup
+  local username=admin password= username_set=false password_set=false
+  local file existing=false label attempt code volumes containers cleanup
   fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+  # Escape dotenv syntax and Compose interpolation, including trailing slashes.
+  dotenv_value() {
+    local value=$1
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//\$/\$\$}
+    printf '"%s"' "$value"
+  }
+  saved_credential_matches() {
+    local name=$1 value=$2 saved
+    saved=$(sed -n "/^$name=/p" "$directory/.env")
+    [ "$saved" = "$name=$(dotenv_value "$value")" ] && return 0
+    # Compatibility with the original installer’s unquoted generated values.
+    [[ "$value" =~ ^[a-zA-Z0-9_.@-]+$ ]] && [ "$saved" = "$name=$value" ]
+  }
   usage() {
     cat <<'USAGE'
 Usage: sudo bash install.sh [options]
   --domain NAME        Public DNS name; prompted on first installation if omitted
+  --username NAME      Initial dashboard username (default admin)
+  --password VALUE     Initial dashboard password (default securely generated)
   --directory PATH     Installation directory (default /opt/restreamer)
   --image IMAGE        Published Restreamer image (default ghcr.io/kreuzhofer/restreamer:main)
   --ref REF            Repository ref for deployment files (default main)
@@ -20,11 +38,13 @@ USAGE
   }
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --domain|--directory|--image|--source-dir|--ref)
+      --domain|--username|--password|--directory|--image|--source-dir|--ref)
         [ "$#" -ge 2 ] || fail "Missing value for $1"
         case "$1" in
           --domain) domain=$2 ;; --directory) directory=$2 ;; --image) image=$2 ;;
           --source-dir) source_dir=$2 ;; --ref) ref=$2 ;;
+          --username) username=$2; username_set=true ;;
+          --password) password=$2; password_set=true ;;
         esac
         shift 2 ;;
       --prepare-only) prepare=true; shift ;;
@@ -32,6 +52,10 @@ USAGE
       *) fail "Unknown option: $1" ;;
     esac
   done
+  [[ "$username" =~ [^[:space:]] && "$username" != *:* && "$username" != *$'\n'* && "$username" != *$'\r'* ]] || fail 'Username must be nonempty and contain no colon or line break.'
+  if $password_set; then
+    [[ "$password" =~ [^[:space:]] && "$password" != *$'\n'* && "$password" != *$'\r'* ]] || fail 'Password must be nonempty and contain no line break.'
+  fi
   domain=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]')
   if ! $prepare; then
     [ "$(uname -s)" = Linux ] || fail 'Service installation requires Linux.'
@@ -50,6 +74,12 @@ USAGE
     [ -z "$domain" ] || [ "$domain" = "$(cat "$directory/.domain")" ] || fail 'Domain differs from the saved installation; refusing to overwrite it.'
     [ -z "$image" ] || [ "RESTREAMER_IMAGE=$image" = "$(sed -n '/^RESTREAMER_IMAGE=/p' "$directory/.env")" ] || fail 'Image differs from the saved installation; use the documented update procedure.'
     domain=$(cat "$directory/.domain")
+    if $username_set && ! saved_credential_matches DASHBOARD_USERNAME "$username"; then
+      fail 'Credentials differ from the saved installation; rerun without credential flags. Nothing was changed.'
+    fi
+    if $password_set && ! saved_credential_matches DASHBOARD_PASSWORD "$password"; then
+      fail 'Credentials differ from the saved installation; rerun without credential flags. Nothing was changed.'
+    fi
     existing=true
   fi
   if [ -z "$domain" ]; then
@@ -78,15 +108,17 @@ USAGE
           "https://raw.githubusercontent.com/kreuzhofer/restreamer/$ref/$file" --output "$stage/$(basename "$file")"
       fi
     done
-    password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
-    [ "${#password}" -eq 48 ] || fail 'Could not generate dashboard credentials.'
+    if ! $password_set; then
+      password=$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')
+      [ "${#password}" -eq 48 ] || fail 'Could not generate dashboard credentials.'
+    fi
     cat >"$stage/.env" <<ENV
 COMPOSE_PROJECT_NAME=restreamer-standalone
 COMPOSE_FILE=docker-compose.yml:compose.https.yml
 RESTREAMER_DOMAIN=$domain
 RESTREAMER_IMAGE=$image
-DASHBOARD_USERNAME=admin
-DASHBOARD_PASSWORD=$password
+DASHBOARD_USERNAME=$(dotenv_value "$username")
+DASHBOARD_PASSWORD=$(dotenv_value "$password")
 STATUS_BIND_ADDRESS=127.0.0.1
 STATUS_PORT=8080
 RTMP_BIND_ADDRESS=0.0.0.0

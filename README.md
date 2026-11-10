@@ -75,29 +75,34 @@ not replace an existing proxy or change firewall rules.
 On Ubuntu 24.04 with `curl` and sudo available, run:
 
 ```sh
-bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash'
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash -s -- --domain "$1" --username "$2" --password "$3"' -- stream.example.com studio-admin 'YOUR-STRONG-PASSWORD'
 ```
 
 The complete script is parsed before installation begins. You can also download
-and inspect [install.sh](install.sh), then run `sudo bash install.sh`. For an
-unattended invocation, pass `--domain studio.example.com`. Other Linux systems
+and inspect [install.sh](install.sh), then run `sudo bash install.sh`. The command accepts the server domain, dashboard username and password as its
+last three arguments. Omit `--username` and `--password` when invoking the script
+directly to use `admin` and a generated password; omit `--domain` to be prompted. Other Linux systems
 need Docker Engine and the Compose v2 plugin installed beforehand. On Ubuntu
 24.04 the installer installs missing Docker from the distribution's repositories,
 or adds the missing Compose plugin to an existing Ubuntu-packaged Docker Engine.
 It does not replace Docker CE or another existing Docker distribution.
 
-The installer creates `/opt/restreamer`, a random dashboard password, and persistent
+The installer creates `/opt/restreamer`, stores the supplied credentials privately, and creates persistent
 Docker volumes for app data and certificates. It reports **Ready** only after
 checking trusted HTTPS, app health, and unauthenticated dashboard rejection.
 View your login details with `sudo cat /opt/restreamer/.env`; the default username
-is `admin`. Then open the printed HTTPS URL and configure ingestion and destinations
-in Settings. BRB, the video library, four starter content templates and the built-in
+is `admin` when omitted. Then open the printed HTTPS URL, add your destinations,
+and create/select your show designs. The OBS server address is already filled
+from the supplied domain; copy that address and the managed ingestion key into OBS. BRB, the video library, four starter content templates and the built-in
 style themes are available immediately. Your own designs, uploads and generated
 videos start empty. The app starts OFF; installing it never starts a broadcast.
 
 If DNS, firewall or certificate issuance fails, fix the reported problem and run
 the command again. Reruns preserve credentials, data and customized proxy files;
-they do not recreate existing containers or upgrade an active broadcast. The
+they do not recreate existing containers or upgrade an active broadcast. Repeating
+the same credential flags is supported; different credentials are rejected without
+changing the saved login. Passwords containing spaces, quotes, dollar signs and
+hashes are escaped according to [Compose dotenv and interpolation rules](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/#env-file-syntax). The
 installer refuses to adopt another installation's existing volumes. Use the
 original installation directory to recover an interrupted setup.
 
