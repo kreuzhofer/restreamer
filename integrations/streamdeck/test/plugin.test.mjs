@@ -277,3 +277,12 @@ test('continuous encoder failure excludes its destinations from healthy delivery
   await eventually(()=>r.image('status').includes('1/1'));
   assert.match(r.image('status'),/HEALTHY/,'unused encoder failure must not taint passthrough');
 });
+
+test('key updates send a renderable SVG data URL to Stream Deck',async t=>{
+  const r=await rig(t);r.appear('prestream');
+  await eventually(()=>r.image('prestream').includes('READY'));
+  const update=r.messages.findLast(m=>m.event==='setImage'&&m.context==='prestream');
+  assert.match(update.payload.image,/^data:image\/svg\+xml[;,]/,'Stream Deck needs an image URL, not raw SVG markup');
+  assert.match(r.image('prestream'),/<svg/);
+  assert.match(r.image('prestream'),/>PRE</);
+});
