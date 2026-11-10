@@ -63,7 +63,79 @@ videos now continue background motion across scene boundaries. Existing generate
 videos stay unchanged and must be regenerated to receive this fix. Music-driven
 playback continues to loop its visual sequence independently of the music duration.
 
-## Run with Docker Compose
+## Quick install on a fresh server (automatic HTTPS)
+
+The quick installer runs the published Restreamer image with a Caddy proxy. It
+prompts for your domain and obtains and renews a **Let's Encrypt** certificate.
+Point the domain's A record (and AAAA record, if present) at this server first.
+Allow inbound TCP **80/443** for HTTPS and certificate validation, and **1935**
+from your OBS machine for RTMP. These ports must be available; the installer does
+not replace an existing proxy or change firewall rules.
+
+On Ubuntu 24.04 with `curl` and sudo available, run:
+
+```sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash'
+```
+
+The complete script is parsed before installation begins. You can also download
+and inspect [install.sh](install.sh), then run `sudo bash install.sh`. For an
+unattended invocation, pass `--domain studio.example.com`. Other Linux systems
+need Docker Engine and the Compose v2 plugin installed beforehand. On Ubuntu
+24.04 the installer installs missing Docker from the distribution's repositories,
+or adds the missing Compose plugin to an existing Ubuntu-packaged Docker Engine.
+It does not replace Docker CE or another existing Docker distribution.
+
+The installer creates `/opt/restreamer`, a random dashboard password, and persistent
+Docker volumes for app data and certificates. It reports **Ready** only after
+checking trusted HTTPS, app health, and unauthenticated dashboard rejection.
+View your login details with `sudo cat /opt/restreamer/.env`; the default username
+is `admin`. Then open the printed HTTPS URL and configure ingestion and destinations
+in Settings. The app starts OFF; installing it never starts a broadcast.
+
+If DNS, firewall or certificate issuance fails, fix the reported problem and run
+the command again. Reruns preserve credentials, data and customized proxy files;
+they do not recreate existing containers or upgrade an active broadcast. The
+installer refuses to adopt another installation's existing volumes. Use the
+original installation directory to recover an interrupted setup.
+
+Useful commands on the server:
+
+```sh
+cd /opt/restreamer
+sudo docker compose logs -f                  # app and HTTPS proxy logs
+sudo docker compose down                     # stop; retain all data and certificates
+# During a maintenance window, after stopping any broadcast:
+sudo docker compose pull
+sudo docker compose up -d --wait              # explicitly apply updates
+```
+
+Both services restart after host reboot; the broadcast stage returns to OFF.
+Back up the installation directory (including `.env`) and all three named volumes:
+`restreamer-standalone_restreamer-state`, `restreamer-standalone_caddy-data`, and
+`restreamer-standalone_caddy-config`. **Do not use `down --volumes` when retaining
+your media, keys and certificates.** To pin an app release, supply `--image
+ghcr.io/kreuzhofer/restreamer:sha-FULL_COMMIT_SHA` on first install, or edit
+`RESTREAMER_IMAGE` in the saved `.env` before an explicit update.
+
+`--prepare-only` writes configuration without installing or starting services;
+`--directory /path` selects a different location. Run preparation with sudo if you
+will subsequently launch through the installer. `--source-dir /path/to/checkout`
+uses that checkout's deployment files; otherwise `--ref COMMIT_OR_BRANCH` selects
+their GitHub revision (default `main`). The installer uses the local Docker daemon
+and creates one `restreamer-standalone` Compose project per host.
+
+Caddy's [automatic HTTPS requirements](https://caddyserver.com/docs/automatic-https)
+and [certificate storage](https://caddyserver.com/docs/running#docker-compose)
+explain the DNS, networking and persistence requirements. CI tests the full HTTPS
+path with a disposable local CA; actual public issuance requires your real domain.
+
+## Run with Docker Compose (bring your own proxy)
+
+This existing deployment path is independent of the quick installer. The default
+`docker-compose.yml` remains proxy-free and binds HTTP to loopback. Configure your
+own HTTPS reverse proxy to protect the dashboard; the quick installer's
+`deploy/compose.https.yml` is not loaded by this command.
 
 Requires Docker with the Compose plugin. Existing installations using environment-based
 stream keys or destinations should follow the [managed-credential migration](#managing-destinations-in-desktop-settings)

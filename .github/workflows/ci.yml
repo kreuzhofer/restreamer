@@ -18,6 +18,8 @@ jobs:
           node-version: '24'
       - run: make check-brb-artwork check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
       - run: make check-web
+      - name: Check fresh Ubuntu installer bootstrap
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,exec,size=32m -v "$PWD:/repo:ro" ubuntu:24.04 bash /repo/tests/install-bootstrap-smoke.sh
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -37,6 +39,8 @@ jobs:
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
+      - name: Smoke test the standalone HTTPS installer
+        run: bash tests/install-smoke.sh
       - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
