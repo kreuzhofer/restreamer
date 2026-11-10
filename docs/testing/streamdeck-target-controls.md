@@ -27,3 +27,8 @@ An independent finish reviewer returned “ship” with no material fixes for th
 ## Delivery limits
 
 At this documentation checkpoint, full `make check` and GitHub CI were still pending. Plugin 1.2.0 had not been installed or deployed. The installed 1.1.1 icon fix had previously been visually verified in the actual macOS application; that does not verify these new controls. Physical Stream Deck presses and Windows behavior remain unverified. Exact-final-SHA CI and any required image-publication evidence remain the delivery owner's responsibility under [delivery requirements](../agents/delivery.md).
+
+
+## Sidebar correction and local installation
+
+After the initial review, the user identified that all action-list entries still used the generic Restreamer logo. Plugin 1.2.1 assigns a distinct authored SVG to each action and its initial key image: clock, broadcast waves, break cup, finish flag, clip player, status bars, stop square and destination switch. Official packaging validated all 19 files. The implementing agent installed the update through Finder and visually verified all eight distinct sidebar icons in the actual macOS Stream Deck app; existing keys continued showing current status. No broadcast command or destination toggle was invoked. This supplementary native check does not extend the independent review verdict above, and production server deployment remains pending.
