@@ -30,6 +30,8 @@
  <script src="/mobile-remote.js" defer></script>
  <link rel="stylesheet" href="/studio-system.css">
  <script src="/studio-system.js" defer></script>
+ <script src="/devices.js" defer></script>
+ <link rel="stylesheet" href="/devices.css">
 </head>
 <body>
  <main>
@@ -128,6 +130,19 @@
    <h1 id="settings-title" tabindex="-1">Settings</h1>
    <p class="desktop-only-note">Ingestion keys, destination setup and profile changes require desktop. Use Live on your phone to switch destination delivery and operate prepared media.</p>
    <div class="settings-desktop">
+   <section id="devices" class="panel settings-devices" aria-labelledby="devices-title" hidden>
+    <h2 id="devices-title">Connected devices</h2>
+    <p>Connect Stream Deck without sharing your dashboard password. Start in the plugin, then approve the matching code here.</p>
+    <section id="device-approval" class="device-approval" aria-labelledby="device-approval-title" hidden>
+     <h3 id="device-approval-title">Allow this Stream Deck to control your broadcast?</h3>
+     <p id="device-pair-name"></p><p id="device-pair-code" class="device-code"></p>
+     <p>It can read status, choose prepared clips and start, switch or stop your broadcast. It cannot edit destinations, ingestion keys or settings.</p>
+     <label class="device-match"><input id="device-code-matches" type="checkbox">This code matches the one shown in my Stream Deck plugin.</label>
+     <div class="device-actions"><button id="device-approve" class="preview-button" disabled>Approve connection</button><button id="device-decline" class="preview-button">Decline</button></div>
+    </section>
+    <p id="devices-message" role="status" aria-live="polite">Loading connected devices…</p>
+    <div id="devices-list"></div><button id="devices-refresh" class="preview-button" type="button">Refresh devices</button>
+   </section>
    <section id="ingestion-settings" class="panel settings-ingestion" data-ingestion-settings aria-label="OBS ingestion"></section>
    <section class="panel settings-destinations" data-destination-settings aria-label="Destination configuration"></section>
    <section class="panel settings-profile" aria-label="Streaming profile">

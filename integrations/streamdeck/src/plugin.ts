@@ -1,11 +1,17 @@
 import streamDeck, {action, SingletonAction, type WillAppearEvent, type WillDisappearEvent, type KeyDownEvent, type KeyUpEvent, type KeyAction, type DidReceiveSettingsEvent} from '@elgato/streamdeck';
 import {health, keySVG, labels, type Face} from './keys.js';
 import {Restreamer, connectionSettings, type ConnectionSettings} from './client.js';
+import {Pairing} from './pairing.js';
 
 type ClipSettings={revision?:string;name?:string};
 type Button={key:KeyAction<ClipSettings>;kind:string;settings:ClipSettings;invalid:boolean;image?:string;down?:number;context?:string;message?:string;until?:number};
 const buttons=new Map<string,Button>();
 const client=new Restreamer(render);
+const pairing=new Pairing(
+  async (pairing,message)=>{await streamDeck.ui.sendToPropertyInspector({pairing,message});},
+  async settings=>{await streamDeck.settings.setGlobalSettings(settings);client.configure(settings);await client.refresh();},
+  async url=>{await streamDeck.system.openUrl(url);}
+);
 // Trace logging includes settings payloads. Never enable it, and never log
 // server responses, URLs, headers or errors containing user-controlled data.
 streamDeck.logger.setLevel('error');
@@ -23,6 +29,7 @@ function feedback(button:Button,text:string){button.message=text;button.until=Da
 function render(){
   const snapshot=client.current();
   for(const b of buttons.values()){
+    if(!snapshot&&b.kind==='stop-now'){b.down=undefined;b.context=undefined;}
     let face:Face=health(snapshot);
     if(b.kind!=='status'){
       const stage=snapshot?.stage;
@@ -91,6 +98,14 @@ streamDeck.ui.onSendToPlugin(async ev=>{
   const payload=ev.payload;
   if(!payload||typeof payload!=='object'||Array.isArray(payload))return;
   try{
+    if(payload.command==='pair'){
+      const input=payload.settings;
+      if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Enter the server address.');
+      await pairing.start({endpoint:typeof input.endpoint==='string'?input.endpoint:'',name:typeof input.name==='string'?input.name:'Stream Deck',allowInsecureHttp:input.allowInsecureHttp===true});
+      return;
+    }
+    if(payload.command==='cancelPairing'){pairing.cancel();await streamDeck.ui.sendToPropertyInspector({pairing:null,message:'Connection cancelled. Any existing connection is unchanged.'});return;}
+    if(payload.command==='openPairing'){await pairing.openBrowser();return;}
     if(payload.command==='save'){
       const input=payload.settings;
       if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Invalid connection settings.');
@@ -100,11 +115,11 @@ streamDeck.ui.onSendToPlugin(async ev=>{
     if(payload.command==='load'||payload.command==='save'){
       // Keep credentials exclusively in global settings; the inspector only
       // learns whether a password is saved, never its value.
-      const config={endpoint:client.settings.endpoint||'',username:client.settings.username||'',hasPassword:!!client.settings.password,allowInsecureHttp:!!client.settings.allowInsecureHttp};
+      const config={endpoint:client.settings.endpoint||'',username:client.settings.username||'',hasPassword:!!client.settings.password,paired:!!client.settings.token,allowInsecureHttp:!!client.settings.allowInsecureHttp};
       let libraryError='';
       let choices:{id:string;name:string;state:string;duration:number}[]=[];
       try{choices=await client.library();}catch{libraryError='Library unavailable. Prepare BRB and videos in Restreamer, then refresh.';}
-      await streamDeck.ui.sendToPropertyInspector({config,clips:choices,message:client.current()?'Connected. Relay status is current.':client.problem==='AUTH'?'Authentication failed. Check dashboard credentials.':'Status unavailable. Check the server address and connection.',libraryError});
+      await streamDeck.ui.sendToPropertyInspector({config,clips:choices,pairing:pairing.view,message:client.current()?'Connected. Relay status is current.':client.problem==='AUTH'?'Access denied. Connect again in your browser.':'Status unavailable. Check the server address and connection.',libraryError});
     }
   }catch(error){await streamDeck.ui.sendToPropertyInspector({error:error instanceof Error?error.message:'Could not save settings.'});}
 });

@@ -2,7 +2,7 @@
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "UUID": "com.kreuzhofer.restreamer",
   "Name": "Restreamer",
-  "Version": "1.0.0.0",
+  "Version": "1.1.0.0",
   "Author": "Restreamer contributors",
   "Description": "Operate Restreamer broadcast stages and monitor relay delivery.",
   "Category": "Restreamer",
@@ -32,7 +32,7 @@
       "UUID": "com.kreuzhofer.restreamer.prestream",
       "Name": "Prestream",
       "Icon": "images/action",
-      "Tooltip": "Prestream — Restreamer",
+      "Tooltip": "Prestream \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -49,7 +49,7 @@
       "UUID": "com.kreuzhofer.restreamer.go-live",
       "Name": "Go live",
       "Icon": "images/action",
-      "Tooltip": "Go live — Restreamer",
+      "Tooltip": "Go live \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -66,7 +66,7 @@
       "UUID": "com.kreuzhofer.restreamer.brb-return",
       "Name": "BRB / Return",
       "Icon": "images/action",
-      "Tooltip": "BRB / Return — Restreamer",
+      "Tooltip": "BRB / Return \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -83,7 +83,7 @@
       "UUID": "com.kreuzhofer.restreamer.end-stream",
       "Name": "End stream",
       "Icon": "images/action",
-      "Tooltip": "End stream — Restreamer",
+      "Tooltip": "End stream \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -100,7 +100,7 @@
       "UUID": "com.kreuzhofer.restreamer.play-clip",
       "Name": "Play clip",
       "Icon": "images/action",
-      "Tooltip": "Play clip — Restreamer",
+      "Tooltip": "Play clip \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -117,7 +117,7 @@
       "UUID": "com.kreuzhofer.restreamer.status",
       "Name": "Status",
       "Icon": "images/action",
-      "Tooltip": "Status — Restreamer",
+      "Tooltip": "Status \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],
@@ -134,7 +134,7 @@
       "UUID": "com.kreuzhofer.restreamer.stop-now",
       "Name": "Stop now",
       "Icon": "images/action",
-      "Tooltip": "Stop now — Restreamer",
+      "Tooltip": "Stop now \u2014 Restreamer",
       "Controllers": [
         "Keypad"
       ],

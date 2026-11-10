@@ -76,18 +76,19 @@
   const settings = document.querySelector('.settings-desktop');
   if (settings) {
     const tabs = document.createElement('nav'); tabs.className = 'settings-tabs'; tabs.setAttribute('aria-label','Settings sections');
-    const sections = [['ingestion','Ingestion','.settings-ingestion'],['destinations','Destinations','.settings-destinations'],['profile','Streaming profile','.settings-profile']];
+    const sections = [['ingestion','Ingestion','.settings-ingestion'],['destinations','Destinations','.settings-destinations'],['profile','Streaming profile','.settings-profile'],['devices','Connected devices','.settings-devices']];
     function select(name) {
+      document.body.toggleAttribute('data-device-pairing',name==='devices');
       for (const [key,,selector] of sections) settings.querySelector(selector).hidden = key !== name;
       for (const link of tabs.children) {if (link.dataset.section === name) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current');}
     }
     for (const [key,label] of sections) {
       const link = document.createElement('a'); link.href = `/settings#${key}`; link.textContent = label; link.dataset.section = key;
-      link.addEventListener('click', event => {event.preventDefault(); history.pushState(null,'',link.href); select(key);}); tabs.append(link);
+      link.addEventListener('click', event => {event.preventDefault(); history.pushState(null,'',link.href); select(key);window.dispatchEvent(new Event('settings-section-changed'));}); tabs.append(link);
     }
     settings.before(tabs);
-    const restore = () => select(sections.some(([key]) => location.hash === '#'+key) ? location.hash.slice(1) : location.hash === '#ingestion-settings' ? 'ingestion' : 'destinations');
-    restore(); window.addEventListener('popstate', restore);
+    const restore = () => {const hash=location.hash.split('?')[0];select(sections.some(([key]) => hash === '#'+key) ? hash.slice(1) : hash === '#ingestion-settings' ? 'ingestion' : 'destinations');};
+    restore(); window.addEventListener('popstate', restore);window.addEventListener('hashchange',restore);
   }
   // Arrow navigation is shared by local tab strips, never by command groups.
   document.querySelectorAll('.studio-tabs,.studio-collections,.settings-tabs').forEach(tabs => tabs.addEventListener('keydown',event => {

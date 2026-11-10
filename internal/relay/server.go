@@ -52,10 +52,11 @@ type Server struct {
 	brbCandidateMu        sync.Mutex
 	brbCandidate          *brbThemeCandidate
 	preparation           *preparationGate
+	devices               *deviceAccess
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{}}
+	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{}, devices: newDeviceAccess()}
 	for _, target := range cfg.Targets {
 		s.outputs = append(s.outputs, s.newOutput(target))
 	}

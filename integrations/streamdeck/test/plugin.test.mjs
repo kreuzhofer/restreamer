@@ -28,7 +28,9 @@ async function rig(t) {
     requests.push({path:req.url, auth:req.headers.authorization, headers:req.headers});
     if (api.delay) await wait(api.delay);
     res.setHeader('Content-Type','application/json');
-    if (req.headers.authorization !== 'Basic ' + Buffer.from('test:dummy-password').toString('base64')) {res.writeHead(401).end('{}');return;}
+    if(req.url==='/api/devices/pair') {res.writeHead(201).end(JSON.stringify({device_code:'pairing-secret',user_code:'ABCD-EFGH',expires_in:300,interval:1}));return;}
+    if(req.url==='/api/devices/token') {res.writeHead(api.approved?200:202).end(JSON.stringify(api.approved?{access_token:'c'.repeat(64),device_id:'device-id'}:{state:'pending'}));return;}
+    if (req.headers.authorization !== 'Basic ' + Buffer.from('test:dummy-password').toString('base64') && req.headers.authorization!=='Bearer '+'c'.repeat(64)) {res.writeHead(401).end('{}');return;}
     if (api.status !== 200) {res.writeHead(api.status).end('{}');return;}
     if (req.url === '/api/stage/commands') {
       const cmd = JSON.parse(body); commands.push(cmd);
@@ -70,6 +72,24 @@ test('a configured Prestream key sends an authenticated, identified server comma
   assert.deepEqual({...r.commands[0],id:'ID'},{id:'ID',server_id:'server-1',context:'server-1:1',action:'prestream',confirmed:true});
   assert.ok(r.commands[0].id.length>=16);
   assert.equal(r.requests.find(r=>r.path==='/api/stage/commands').headers['x-restreamer-control'],'1');
+});
+
+test('browser pairing stores a scoped token globally and never sends it to the inspector',async t=>{
+  const r=await rig(t);r.appear('status');await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.send('propertyInspectorDidAppear','status','status');
+  r.send('sendToPlugin','status','status',{command:'pair',settings:{endpoint:r.settings.endpoint,name:'Desk controls',allowInsecureHttp:true}});
+  await eventually(()=>r.messages.some(m=>m.event==='sendToPropertyInspector'&&m.payload.pairing?.code==='ABCD-EFGH'));
+  await eventually(()=>r.messages.some(m=>m.event==='openUrl'));
+  const url=r.messages.find(m=>m.event==='openUrl').payload.url;
+  assert.equal(url,r.settings.endpoint+'/settings#devices?code=ABCD-EFGH');
+  assert.equal(r.messages.filter(m=>m.event==='setGlobalSettings').length,0,'approval is required before saving access');
+  r.api.approved=true;
+  await eventually(()=>r.messages.some(m=>m.event==='setGlobalSettings'&&m.payload.token),6000);
+  const saved=r.messages.find(m=>m.event==='setGlobalSettings').payload;
+  assert.equal(saved.token,'c'.repeat(64));assert.equal(saved.password,undefined);assert.equal(saved.username,undefined);
+  await eventually(()=>r.requests.some(req=>req.path==='/api/dashboard'&&req.auth==='Bearer '+'c'.repeat(64)));
+  assert.doesNotMatch(JSON.stringify(r.messages.filter(m=>m.event==='sendToPropertyInspector')),/pairing-secret|cccccccccccccccc/);
+  assert.equal(r.commands.length,0,'pairing never starts a broadcast');
 });
 
 test('status key reports stage, eligible delivery counts, startup and loss without stale green',async t=>{
@@ -183,6 +203,20 @@ test('connection form rejects unsafe endpoints and stores secrets only in global
   assert.equal(r.messages.find(m=>m.event==='setGlobalSettings').payload.password,'dummy-password');
   assert.equal(r.messages.filter(m=>m.event==='setSettings').length,0);
   assert.doesNotMatch(JSON.stringify(r.messages.filter(m=>m.event==='sendToPropertyInspector')),/dummy-password/);
+});
+
+test('losing status cancels a held Stop even if the same server state reconnects before release',async t=>{
+  const r=await rig(t);r.appear('status');r.appear('stop-now');
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.key('stop-now');
+  r.api.status=503;
+  await eventually(()=>r.image('status').includes('UNKNOWN'));
+  r.api.status=200;
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  await wait(2100);
+  r.key('stop-now','stop-now','keyUp');
+  await wait(300);
+  assert.equal(r.commands.length,0,'reconnection must require a new confirmation gesture');
 });
 
 test('invalid imported key settings are isolated and a corrected selection recovers',async t=>{

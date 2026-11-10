@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Snapshot} from './keys.js';
 
-export type ConnectionSettings={endpoint?:string;username?:string;password?:string;allowInsecureHttp?:boolean};
+export type ConnectionSettings={endpoint?:string;username?:string;password?:string;token?:string;allowInsecureHttp?:boolean};
 export type Clip={id:string;name:string;state:string;duration:number};
 export type Outcome={id:string;state:string;reason?:string};
 export function shortError(reason:string){
@@ -13,12 +13,20 @@ export function shortError(reason:string){
   if(/start.*first/i.test(reason))return 'START FIRST';
   return 'NOT READY';
 }
-export function connectionSettings(value:ConnectionSettings):ConnectionSettings{
+export function serverSettings(value:ConnectionSettings):ConnectionSettings{
   const endpoint=new URL(value.endpoint||'');
   if(!['http:','https:'].includes(endpoint.protocol)||endpoint.username||endpoint.password||endpoint.search||endpoint.hash||endpoint.pathname!=='/')throw new Error('Use the server origin without a path or embedded credentials.');
   if(endpoint.protocol==='http:'&&!value.allowInsecureHttp)throw new Error('Use HTTPS, or explicitly allow HTTP on a trusted network.');
+  return {endpoint:endpoint.origin,allowInsecureHttp:value.allowInsecureHttp===true};
+}
+export function connectionSettings(value:ConnectionSettings):ConnectionSettings{
+  const server=serverSettings(value);
+  if(value.token!==undefined){
+    if(typeof value.token!=='string'||!/^[a-f0-9]{64}$/.test(value.token))throw new Error('Pair this device again.');
+    return {...server,token:value.token};
+  }
   if(typeof value.username!=='string'||!value.username||/[:\r\n]/.test(value.username)||typeof value.password!=='string'||!value.password)throw new Error('Enter the dashboard username and password.');
-  return {endpoint:endpoint.origin,username:value.username,password:value.password,allowInsecureHttp:value.allowInsecureHttp===true};
+  return {...server,username:value.username,password:value.password};
 }
 export class Restreamer {
   settings:ConnectionSettings={};
@@ -43,7 +51,7 @@ export class Restreamer {
   private async request(path:string,body?:object):Promise<{ok:boolean;status:number;data:any}>{
     const response=await fetch(new URL(path,this.settings.endpoint),{
       method:body?'POST':'GET',redirect:'error',cache:'no-store',signal:AbortSignal.any([this.abort.signal,AbortSignal.timeout(2500)]),
-      headers:{Authorization:`Basic ${Buffer.from(`${this.settings.username}:${this.settings.password}`).toString('base64')}`,'Content-Type':'application/json','X-Restreamer-Control':'1'},
+      headers:{Authorization:this.settings.token?`Bearer ${this.settings.token}`:`Basic ${Buffer.from(`${this.settings.username}:${this.settings.password}`).toString('base64')}`,'Content-Type':'application/json','X-Restreamer-Control':'1'},
       body:body?JSON.stringify(body):undefined
     });
     if(response.status===401||response.status===403)throw new Error('AUTH');

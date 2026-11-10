@@ -35,10 +35,14 @@ window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, action
     if (received.event !== 'sendToPropertyInspector') return;
     const data = received.payload; $('save').disabled = false; $('refresh').disabled = false;
     if (data.error) {message(data.error, true);return;}
+    if (Object.hasOwn(data, 'pairing')) {
+      $('pairing').hidden = !data.pairing;
+      $('pairing-code').textContent = data.pairing?.code || '';
+      $('save').disabled = !!data.pairing;
+      if (data.pairing) $('connection').open = true;
+    }
     if (data.config) {
-      $('endpoint').value = data.config.endpoint; $('username').value = data.config.username; $('insecure').checked = data.config.allowInsecureHttp;
-      $('password').placeholder = data.config.hasPassword ? 'Saved — leave blank to keep' : 'Dashboard password';
-      $('password').required = !data.config.hasPassword;
+      $('endpoint').value = data.config.endpoint; $('insecure').checked = data.config.allowInsecureHttp;
       if (!data.config.endpoint) $('connection').open = true;
     }
     if (data.clips) {clips = data.clips;renderClips();}
@@ -47,10 +51,11 @@ window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, action
   };
 };
 $('connection-form').addEventListener('submit', event => {
-  event.preventDefault(); $('save').disabled = true; message('Saving connection…');
-  send({command:'save',settings:{endpoint:$('endpoint').value.trim(),username:$('username').value,password:$('password').value,allowInsecureHttp:$('insecure').checked}});
-  $('password').value = '';
+  event.preventDefault(); $('save').disabled = true; message('Opening a secure browser connection…');
+  send({command:'pair',settings:{endpoint:$('endpoint').value.trim(),name:$('device-name').value.trim(),allowInsecureHttp:$('insecure').checked}});
 });
+$('open-pairing').addEventListener('click', () => send({command:'openPairing'}));
+$('cancel-pairing').addEventListener('click', () => send({command:'cancelPairing'}));
 $('refresh').addEventListener('click', () => {$('refresh').disabled = true;send({command:'load'});});
 $('clip').addEventListener('change', () => {
   const selected = clips.find(c => c.id === $('clip').value && c.state === 'ready');
