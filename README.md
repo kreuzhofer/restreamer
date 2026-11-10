@@ -697,7 +697,25 @@ Deliberate BRB is selected through the shared stage command API.
 requests. Profile changes require OFF and return 409 during an active session. `GET /api/brb/image`
 returns the saved PNG. Status adds `brb`, `brb_assets`, and `brb_profile`.
 
-## Later: a separate 1080p Twitch output
+## Planned continuous output — not implemented
+
+The [continuous-output design](docs/design/continuous-output.md) records an
+optional shared 1080p25 output alongside passthrough, with per-destination
+selection. Its purpose is to maintain video/audio cadence across source changes
+and input interruptions. The plan targets roughly four seconds of added relay
+delay, bounded at eight seconds during healthy operation, while keeping ready
+manual source changes prompt. Existing destinations would remain on passthrough.
+
+Production implementation is gated on measured capacity and a four-hour
+endurance test on the intended host. The interview decisions are captured in
+[ADR 0009](docs/adr/0009-add-optional-continuous-output.md), and the complete plan
+was confirmed on 2026-10-30. This is not a shipped feature or a verified fix for
+the separately investigated YouTube decoding incident.
+
+### Later: a separate 1080p Twitch output
+
+The earlier proposal below remains a possible multiple-profile follow-up,
+outside the initial single-profile continuous-output scope.
 
 Proposed v2 architecture:
 
