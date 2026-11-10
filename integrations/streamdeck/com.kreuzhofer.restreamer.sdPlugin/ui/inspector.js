@@ -1,5 +1,5 @@
 'use strict';
-let socket, context, action, settings = {}, clips = [];
+let socket, context, action, settings = {}, clips = [], targets = [];
 const $ = id => document.getElementById(id);
 const message = (text, error = false) => { $('message').textContent = text; $('message').classList.toggle('error', error); };
 function send(payload) {
@@ -20,18 +20,24 @@ function renderClips() {
   }
   select.value = settings.revision || '';
 }
+function renderTargets() {
+ const select=$('target');select.replaceChildren(new Option('Choose a destination…',''));
+ for(const target of targets)select.add(new Option(target.name+(target.can_enable?'':' — configure in Restreamer'),target.name));
+ if(settings.target&&!targets.some(t=>t.name===settings.target))select.add(new Option(settings.target+' — unavailable; select again',settings.target));
+ select.value=settings.target||'';$('platform').value=settings.platform||'auto';
+}
 // Entry point called by the Stream Deck property-inspector host.
 window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, actionInfo) => {
   const info = JSON.parse(actionInfo); context = uuid; action = info.action; settings = info.payload.settings || {};
   const clip = action.endsWith('.play-clip'); $('clip-section').hidden = !clip;
-  const kind = action.split('.').at(-1);
-  $('action-help').textContent = ({'stop-now':'Hold for two seconds, then release to stop forwarding immediately. A short press does nothing.','status':'Shows the broadcast stage and relay delivery. Press to open Live in your browser.','brb-return':'Enter a deliberate break. Press again to return to the stage remembered by the server.','end-stream':'Play the ending selected in Show setup. Fixed-length endings stop delivery when finished; music-driven endings loop until you stop.'})[kind] || 'Uses server-owned broadcast controls. Prepare stage media in Show setup before the show.';
+  const kind = action.split('.').at(-1);$('target-section').hidden=kind!=='target-toggle';
+  $('action-help').textContent = ({'target-toggle':'Hold for two seconds, then release to switch this destination on or off. A short press does nothing. Green means relay delivery, not confirmed platform playback.','stop-now':'Hold for two seconds, then release to stop forwarding immediately. A short press does nothing.','status':'Shows the broadcast stage and relay delivery. Press to open Live in your browser.','brb-return':'Enter a deliberate break. Press again to return to the stage remembered by the server.','end-stream':'Play the ending selected in Show setup. Fixed-length endings stop delivery when finished; music-driven endings loop until you stop.'})[kind] || 'Uses server-owned broadcast controls. Prepare stage media in Show setup before the show.';
   socket = new WebSocket(`ws://127.0.0.1:${port}`);
   socket.onopen = () => {socket.send(JSON.stringify({event:registerEvent,uuid}));send({command:'load'});};
   socket.onclose = () => message('Stream Deck is disconnected. Reopen this action’s settings.', true);
   socket.onmessage = event => {
     const received = JSON.parse(event.data);
-    if (received.event === 'didReceiveSettings') {settings = received.payload.settings || {};renderClips();return;}
+    if (received.event === 'didReceiveSettings') {settings = received.payload.settings || {};renderClips();renderTargets();return;}
     if (received.event !== 'sendToPropertyInspector') return;
     const data = received.payload; $('save').disabled = false; $('refresh').disabled = false;
     if (data.error) {message(data.error, true);return;}
@@ -45,6 +51,7 @@ window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, action
       $('endpoint').value = data.config.endpoint; $('insecure').checked = data.config.allowInsecureHttp;
       if (!data.config.endpoint) $('connection').open = true;
     }
+    if(data.targets){targets=data.targets;renderTargets();$('target-message').textContent=!data.controlDestinations?'Reconnect in Server connection and approve Control destinations in your browser.':targets.length?'': 'No destinations. Add one in Restreamer Settings, then refresh.';}
     if (data.clips) {clips = data.clips;renderClips();}
     $('library-message').textContent = data.libraryError || (clips.some(c => c.state === 'ready') ? '' : 'No ready videos. Prepare a video in Restreamer, then refresh.');
     message(data.message || '');
@@ -62,3 +69,7 @@ $('clip').addEventListener('change', () => {
   settings = selected ? {revision:selected.id,name:selected.name} : {};
   socket?.send(JSON.stringify({event:'setSettings',context,payload:settings}));
 });
+
+$('refresh-targets').addEventListener('click',()=>send({command:'load'}));
+function saveTarget(){settings={target:$('target').value||undefined,platform:$('platform').value};socket?.send(JSON.stringify({event:'setSettings',context,payload:settings}));}
+$('target').addEventListener('change',saveTarget);$('platform').addEventListener('change',saveTarget);

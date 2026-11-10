@@ -83,9 +83,10 @@ export class Restreamer {
     this.clips=data.revisions.filter((c:any)=>typeof c.id==='string'&&typeof c.name==='string'&&typeof c.state==='string');
     return this.clips;
   }
-  async execute(action:string,revision:string|undefined,name:string|undefined,report:(text:string)=>void){
+  async execute(action:string,revision:string|undefined,name:string|undefined,report:(text:string)=>void,target?:{name:string;enabled:boolean}){
     const stage=this.current()?.stage;
     if(!stage){report(this.problem||'OFFLINE');return;}
+    if(action==='set_target'&&(this.current()?.control_destinations!==true||!target)){report('PAIR AGAIN');return;}
     if(action==='go_live'&&stage.pending){report('WAIT OBS');return;}
     if(this.busy||Date.now()<this.cooldown){report('BUSY');return;}
     this.busy=true;this.changed();
@@ -102,7 +103,7 @@ export class Restreamer {
       const id=randomUUID();
       // Keep identity only to reconcile outcomes. Never retry the POST.
       this.pending={id,server:stage.server_id,report};
-      const {data,ok}=await this.request('/api/stage/commands',{id,server_id:stage.server_id,context:stage.context,action,confirmed:true,...(revision?{revision}:{})});
+      const {data,ok}=await this.request('/api/stage/commands',{id,server_id:stage.server_id,context:stage.context,action,confirmed:true,...(revision?{revision}:{}),...(target?{target:target.name,enabled:target.enabled}:{})});
       if(generation!==this.generation)return;
       if(!ok||!['completed','pending'].includes(data.state)){report(shortError(data.reason||'Not ready'));this.pending=undefined;}
       else if(data.state==='completed'){report('');this.pending=undefined;}

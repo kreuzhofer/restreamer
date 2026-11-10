@@ -3,6 +3,7 @@
 <body><main>
 <h1>Restreamer</h1><p id="action-help">Broadcast controls use the selections saved in Show setup.</p>
 <section id="clip-section" hidden><h2>Clip for this key</h2><label for="clip">Prepared video</label><select id="clip"><option value="">Choose a ready video…</option></select><p id="clip-help">This key keeps the exact saved render. A new render does not replace it.</p><button type="button" id="refresh" class="secondary">Refresh videos</button><p id="library-message" role="status"></p></section>
+<section id="target-section" hidden><h2>Destination for this key</h2><label for="target">Destination</label><select id="target"><option value="">Choose a destination…</option></select><label for="platform">Platform logo</label><select id="platform"><option value="auto">Automatic</option><option value="twitch">Twitch</option><option value="youtube">YouTube</option><option value="kick">Kick</option><option value="custom">Custom RTMP</option></select><p class="hint">Choose a logo if your custom ingest address does not identify the platform.</p><button type="button" id="refresh-targets" class="secondary">Refresh destinations</button><p id="target-message" role="status"></p></section>
 <details id="connection"><summary>Server connection <span>Shared by all keys</span></summary>
 <form id="connection-form">
 <label for="endpoint">Server address</label><input id="endpoint" name="endpoint" type="url" placeholder="https://restreamer.example" required autocomplete="url"><p class="hint">Use the server address, without a page path.</p>

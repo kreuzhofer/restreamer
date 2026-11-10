@@ -22,7 +22,7 @@ func deviceRequest(s *Server, method, path, body, token string) *httptest.Respon
 	return w
 }
 
-func pairedDevice(t *testing.T, s *Server) (string, string) {
+func pairedDevice(t *testing.T, s *Server, targets ...bool) (string, string) {
 	t.Helper()
 	w := deviceRequest(s, "POST", "/api/devices/pair", `{"name":"Desk controls"}`, "")
 	if w.Code != 201 {
@@ -36,7 +36,11 @@ func pairedDevice(t *testing.T, s *Server) (string, string) {
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	w = dashboardRequest(s, "POST", "/api/devices/approve", `{"user_code":"`+response.UserCode+`","confirm":true}`)
+	approval := `{"user_code":"` + response.UserCode + `","confirm":true`
+	if len(targets) > 0 && targets[0] {
+		approval += `,"control_destinations":true`
+	}
+	w = dashboardRequest(s, "POST", "/api/devices/approve", approval+`}`)
 	if w.Code != 200 {
 		t.Fatalf("approve: %d %s", w.Code, w.Body.String())
 	}
@@ -281,5 +285,66 @@ func TestDeviceSlowRequestDoesNotBlockOtherDevices(t *testing.T) {
 			writer.Close()
 			<-done
 		})
+	}
+}
+
+func TestDeviceDestinationControlRequiresExplicitPairingApproval(t *testing.T) {
+	s := dashboardServer(t)
+	old, _ := pairedDevice(t, s)
+	token, id := pairedDevice(t, s, true)
+	s = New(s.cfg, s.log) // Approval survives restart; old tokens still have no destination permission.
+	for _, tc := range []struct {
+		token   string
+		allowed bool
+	}{{old, false}, {token, true}} {
+		stage := readStage(t, s)
+		enabled := false
+		body, _ := json.Marshal(StageCommand{ID: "target-" + tc.token[:8], ServerID: stage.ServerID, Context: stage.Context, Action: "set_target", Target: "one", Enabled: &enabled, Confirmed: true})
+		w := deviceRequest(s, "POST", "/api/stage/commands", string(body), tc.token)
+		if tc.allowed && w.Code != 200 || !tc.allowed && w.Code != 403 {
+			t.Fatalf("allowed=%v: %d %s", tc.allowed, w.Code, w.Body.String())
+		}
+		w = deviceRequest(s, "GET", "/api/dashboard", "", tc.token)
+		var status struct {
+			ControlDestinations bool `json:"control_destinations"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+			t.Fatal(err)
+		}
+		if status.ControlDestinations != tc.allowed {
+			t.Fatal("incorrect advertised permission")
+		}
+		if w := deviceRequest(s, "GET", "/api/destinations", "", tc.token); w.Code != 403 {
+			t.Fatal("destination secrets exposed")
+		}
+	}
+	if w := dashboardRequest(s, "DELETE", "/api/devices/"+id, `{"confirm":true}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := deviceRequest(s, "GET", "/api/dashboard", "", token); w.Code != 401 {
+		t.Fatal("revoked destination controller still authorized")
+	}
+
+}
+
+func TestDeviceDashboardReportsPlatformWithoutDestinationSecrets(t *testing.T) {
+	s := dashboardServer(t)
+	s.cfg.Targets[0].URL = "rtmps://fra05.contribute.live-video.net/app"
+	s = New(s.cfg, s.log)
+	token, _ := pairedDevice(t, s)
+	w := deviceRequest(s, "GET", "/api/dashboard", "", token)
+	var status struct {
+		Outputs []struct {
+			Platform string `json:"platform"`
+		} `json:"outputs"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Outputs[0].Platform != "twitch" {
+		t.Fatalf("platform missing: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "contribute.live-video") || strings.Contains(w.Body.String(), "target-secret") {
+		t.Fatal("destination secrets exposed")
 	}
 }
