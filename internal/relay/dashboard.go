@@ -1,10 +1,10 @@
 package relay
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
+	"errors"
+	"github.com/kreuzhofer/restreamer/internal/accounts"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -45,6 +45,8 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	private.HandleFunc("GET /api/account", s.accountHTTP)
+	private.HandleFunc("POST /api/account/password", s.accountPasswordHTTP)
 	private.HandleFunc("GET /api/events", s.eventsHTTP)
 	private.HandleFunc("PATCH /api/events/{id}", s.eventsHTTP)
 	private.HandleFunc("DELETE /api/events/{id}", s.eventDeleteHTTP)
@@ -162,8 +164,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
-		if s.cfg.DashboardUsername == "" || s.cfg.DashboardPassword == "" {
-			http.Error(w, "Dashboard disabled: configure DASHBOARD_USERNAME and DASHBOARD_PASSWORD.", http.StatusServiceUnavailable)
+		if err := s.initializeAccount(); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
@@ -184,13 +186,19 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		user, password, ok := r.BasicAuth()
-		expectedUser, expectedPassword := sha256.Sum256([]byte(s.cfg.DashboardUsername)), sha256.Sum256([]byte(s.cfg.DashboardPassword))
-		actualUser, actualPassword := sha256.Sum256([]byte(user)), sha256.Sum256([]byte(password))
-		validUser := subtle.ConstantTimeCompare(expectedUser[:], actualUser[:])
-		validPassword := subtle.ConstantTimeCompare(expectedPassword[:], actualPassword[:])
-		if !ok || validUser&validPassword != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restreamer", charset="UTF-8"`)
-			http.Error(w, "Authentication required", http.StatusUnauthorized)
+		if !ok {
+			s.accountUnauthorized(w)
+			return
+		}
+		if !s.accountRate(r, false) {
+			s.accountAuthError(w, accounts.ErrBusy)
+			return
+		}
+		if err := s.verifyAccount(user, password); err != nil {
+			if errors.Is(err, accounts.ErrCredentials) {
+				s.accountRate(r, true)
+			}
+			s.accountAuthError(w, err)
 			return
 		}
 		if err := s.initialize(); err != nil {

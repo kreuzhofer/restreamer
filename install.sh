@@ -201,6 +201,19 @@ try:
         ['docker', '--context', 'default', 'inspect', sys.argv[1]], stderr=subprocess.DEVNULL))[0]
     if not data['State']['Running']:
         sys.exit(0)
+    # New servers expose a read-only, OS-private status socket. A password
+    # change must not force the updater to recover plaintext credentials.
+    command = ['docker', '--context', 'default', 'exec', sys.argv[1], '/restreamer', 'admin', 'status']
+    probe = subprocess.run(command + ['-check-support'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    if probe.returncode == 0:
+        status = json.loads(subprocess.check_output(command + ['-config', '/etc/restreamer/config.json'], stderr=subprocess.DEVNULL, timeout=10))
+        if status.get('stage') != 'OFF' or status.get('pending') is not False or status.get('publisher_connected') is not False:
+            sys.exit('Error: Stop the broadcast/rehearsal and disconnect OBS before --update. Nothing was restarted.')
+        sys.exit(0)
+    if probe.returncode != 2:
+        raise ValueError('administration support check failed')
+    # Exit 2 is the old CLI's unsupported-command result. Only old releases
+    # use environment credentials; a new socket failure never falls back.
     values = dict(item.split('=', 1) for item in data['Config']['Env'] if '=' in item)
     user, password = values.get('DASHBOARD_USERNAME', ''), values.get('DASHBOARD_PASSWORD', '')
     if not user or not password:

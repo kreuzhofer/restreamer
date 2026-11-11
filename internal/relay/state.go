@@ -51,22 +51,9 @@ func (s *Server) initialize() error {
 	s.initOnce.Do(func() {
 		s.controlMu.Lock()
 		defer s.controlMu.Unlock()
-		// Reject overlapping stores before any initialization can create secrets.
-		paths := make(map[string]bool)
-		for _, path := range []string{s.cfg.StateFile, s.cfg.IngestionKeyFile, s.destinationsPath(), s.deviceAccessPath()} {
-			if path == "" {
-				continue
-			}
-			abs, err := persistentStoragePath(path)
-			if err != nil {
-				s.initErr = errors.New("cannot resolve persistent storage path")
-				return
-			}
-			if paths[abs] {
-				s.initErr = errors.New("destination credentials, ingestion keys, and switch state require separate files")
-				return
-			}
-			paths[abs] = true
+		if err := s.validateStoragePaths(); err != nil {
+			s.initErr = err
+			return
 		}
 		if err := s.initializeEvents(); err != nil {
 			s.eventStorageError = err.Error()
@@ -204,4 +191,28 @@ func writeState(path string, state any) error {
 		return err
 	}
 	return os.Rename(f.Name(), path)
+}
+
+func (s *Server) validateStoragePaths() error {
+	// Reject overlapping stores before any initialization can create secrets.
+	paths := make(map[string]bool)
+	stores := []string{s.cfg.StateFile, s.cfg.IngestionKeyFile, s.destinationsPath(), s.deviceAccessPath()}
+	if database := s.cfg.UsersDatabasePath(); database != "" {
+		stores = append(stores, database, database+"-journal", database+"-wal", database+"-shm", database+".control", database+".control/status.sock")
+	}
+	for _, path := range stores {
+		if path == "" {
+			continue
+		}
+		abs, err := persistentStoragePath(path)
+		if err != nil {
+			return errors.New("cannot resolve persistent storage path")
+		}
+		if paths[abs] {
+			return errors.New("persistent stores and SQLite sidecar files require separate paths")
+		}
+		paths[abs] = true
+	}
+
+	return nil
 }

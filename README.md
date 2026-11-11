@@ -255,12 +255,13 @@ before replacing their configuration.
 cp .env.example .env
 ```
 
-Edit `.env` to set dashboard credentials. The ingestion key is generated
+Set initial dashboard credentials in `.env`; after first startup, change the password in **Settings → Account**. The ingestion key is generated
 and persisted automatically; copy it from desktop **Settings → OBS ingestion**.
 Configure platform server URLs and keys in desktop **Settings → Destinations**;
 enable delivery in Live. Server URLs contain the application path without the key.
-Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to enable the dashboard.
-Both credentials are needed to operate broadcast stages. Without them,
+Set both `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` to bootstrap the operator account.
+Once saved, the SQLite account is authoritative and the bootstrap environment
+variables can be removed. Without a saved account or bootstrap credentials,
 RTMP input and health checks still run, but the broadcast remains OFF.
 
 ```sh
@@ -286,7 +287,8 @@ Set these in the stack's **Environment variables** section:
 Ingestion keys are generated automatically, and destination credentials are
 configured in desktop Settings. Configure these environment settings:
 
-- `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`: set both for dashboard access.
+- `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`: initial operator credentials; used only when the users database does not exist.
+- `USERS_DATABASE`: optional users database path; defaults to `users.sqlite` beside `TARGET_STATE_FILE` (Compose persists it in `/data`).
 - `STATUS_BIND_ADDRESS`: defaults to `127.0.0.1`; adjust for your proxy's network.
 
 Deploy after the repository's **CI / image** job has succeeded. When updating an
@@ -418,11 +420,44 @@ establish the cause of the earlier YouTube green-screen incident.
 ## Dashboard and live controls
 
 Open `http://127.0.0.1:8080/` on the Docker host (or your reverse proxy's HTTPS
-URL) and sign in with `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`. Authentication
+URL) and sign in with your operator credentials (initially `DASHBOARD_USERNAME`
+and `DASHBOARD_PASSWORD`). Authentication
 uses HTTP Basic; all dashboard assets, `/status`, and `/api/*` require it.
-`/healthz` remains public for Docker healthchecks. If both credentials are absent,
+`/healthz` remains public for Docker healthchecks. If no saved account exists and
+both bootstrap credentials are absent,
 the dashboard and status API return 503 while RTMP input continues operating.
 A broadcast starts only through the authenticated dashboard/API.
+
+Change the existing operator password in **Settings → Account**. Confirm the
+current password and enter a new password of 12–256 characters. The database
+stores a salted Argon2id hash, never the plaintext password. The change takes
+effect immediately, including for other dashboard clients; sign in again with
+the new password when prompted. Stream Deck pairings keep their separate access.
+There is one operator account; user creation and role management are not included.
+
+Compose persists `/data/users.sqlite` in the state volume. Keep this file private
+(mode 0600), and back up the state volume while the app is stopped. An existing
+empty, corrupt or inaccessible database fails closed; editing `.env` does not
+reset a saved password. Native configurations without a state file or explicit
+`users_database` retain environment authentication and show password changes as
+unavailable in Settings.
+
+If locked out, reset the existing account through a hidden terminal prompt on
+the server (replace `admin` with your operator username):
+
+```sh
+cd /opt/restreamer
+sudo docker compose --project-name restreamer-standalone exec restreamer \
+  /restreamer account reset-password -database /data/users.sqlite -username admin
+```
+
+The CLI also accepts `-password-stdin` for deliberate automation; do not put
+passwords in command arguments or shell history. It refuses missing databases
+and unknown users, and the running app adopts the reset without a restart.
+The installer checks active broadcasts through a private, read-only Unix socket
+beside the database, so updates continue to work after a password change.
+Only older binaries without this command use the previous authenticated HTTP
+check; a failed private status check refuses the update.
 
 Use **Live** (`/live`) to operate the broadcast, **Show setup** (`/setup`) to
 choose upcoming videos, **Library** (`/library`) to manage reusable resources,
@@ -682,7 +717,8 @@ configuration requires no mount; manage destinations in Settings.
 | `ingestion_key_file` | Private managed ingestion credential; bundled path `/data/ingestion-key.json`. First startup imports a legacy key or generates one; later starts retain the stored key |
 | `stream_key` | Optional one-time import for managed ingestion; required only without `ingestion_key_file`. Legacy keys use 16–256 letters/digits/`_`/`-` |
 | `queue_bytes` | 16 MiB per output; configurable from 1–256 MiB |
-| `dashboard_username`, `dashboard_password` | Both required to enable dashboard and status API; omitted disables access |
+| `dashboard_username`, `dashboard_password` | Initial operator credentials; existing SQLite account takes precedence |
+| `users_database` | Private SQLite users database; defaults to `users.sqlite` beside `state_file`; bundled config reads `USERS_DATABASE` |
 | `state_file` | Optional path for saved switches; bundled config uses `TARGET_STATE_FILE`, set to `/data/targets.json` by Compose |
 | `library_directory` | Persistent MP4 library root; Compose uses `/data/videos`, native default is `<brb.directory>/library` |
 | `library_upload_mib` | Maximum original MP4 size in MiB; 0 or omitted means 4096; maximum 32768 |

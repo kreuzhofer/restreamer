@@ -31,6 +31,8 @@
  <link rel="stylesheet" href="/studio-system.css">
  <script src="/studio-system.js" defer></script>
  <script src="/devices.js" defer></script>
+ <script src="/account.js" defer></script>
+ <link rel="stylesheet" href="/account.css">
  <link rel="stylesheet" href="/devices.css">
 </head>
 <body>
@@ -143,6 +145,21 @@
     </section>
     <p id="devices-message" role="status" aria-live="polite">Loading connected devices…</p>
     <div id="devices-list"></div><button id="devices-refresh" class="preview-button" type="button">Refresh devices</button>
+   </section>
+   <section id="account-settings" class="panel" aria-labelledby="account-heading">
+    <h2 id="account-heading">Account</h2>
+    <p id="account-identity">Loading account…</p>
+    <form id="account-password-form">
+     <fieldset id="account-fields" disabled>
+      <legend>Change password</legend>
+      <label>Current password <input id="account-current-password" type="password" autocomplete="current-password" required maxlength="4096"></label>
+      <label>New password <input id="account-new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256" aria-describedby="account-password-help"></label>
+      <label>Confirm new password <input id="account-confirm-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+      <p id="account-password-help">Use 12–256 characters. Changing your password signs out other dashboard sessions. Paired devices keep their access.</p>
+      <button class="preview-button" type="submit">Change password</button>
+     </fieldset>
+    </form>
+    <p id="account-feedback" role="status" aria-live="polite"></p>
    </section>
    <section id="ingestion-settings" class="panel settings-ingestion" data-ingestion-settings aria-label="OBS ingestion"></section>
    <p><a href="/library?collection=events">Open event archive and replay controls</a></p>

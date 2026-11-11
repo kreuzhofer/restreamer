@@ -1,0 +1,6 @@
+#account-fields { border: 0; padding: 0; margin: 0; max-width: 540px; }
+#account-fields legend { font-weight: 600; margin-bottom: 12px; }
+#account-fields label { display: grid; gap: 6px; margin: 12px 0; }
+#account-fields input { width: 100%; min-height: 44px; }
+#account-password-help, #account-feedback { color: var(--muted); line-height: 1.5; }
+#account-feedback:empty { display: none; }

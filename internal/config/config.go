@@ -119,6 +119,7 @@ type Config struct {
 	Targets            []Target   `json:"targets"`
 	DashboardUsername  string     `json:"dashboard_username"`
 	DashboardPassword  string     `json:"dashboard_password"`
+	UsersDatabase      string     `json:"users_database,omitempty"`
 	StateFile          string     `json:"state_file"`
 }
 
@@ -196,6 +197,7 @@ func Load(path string) (Config, error) {
 		}
 	}
 	c.StateFile = os.ExpandEnv(c.StateFile)
+	c.UsersDatabase = os.ExpandEnv(c.UsersDatabase)
 	c.EventsDirectory = os.ExpandEnv(c.EventsDirectory)
 	c.DestinationsFile = os.ExpandEnv(c.DestinationsFile)
 	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
@@ -317,4 +319,15 @@ func (t Target) ReadyError() error {
 		}
 	}
 	return nil
+}
+
+// UsersDatabasePath resolves the operator database on the mounted state directory.
+func (c Config) UsersDatabasePath() string {
+	if c.UsersDatabase != "" {
+		return c.UsersDatabase
+	}
+	if c.StateFile != "" {
+		return filepath.Join(filepath.Dir(c.StateFile), "users.sqlite")
+	}
+	return ""
 }

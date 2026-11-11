@@ -11,11 +11,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kreuzhofer/restreamer/internal/accounts"
 	"github.com/kreuzhofer/restreamer/internal/config"
 	"github.com/kreuzhofer/restreamer/internal/rtmp"
 )
 
 type Server struct {
+	accountFailures       accountFailures
+	accountOnce           sync.Once
+	accountStore          *accounts.Store
+	accountErr            error
 	eventStorageError     string
 	eventSlots            chan struct{}
 	eventAuthSlots        chan struct{}
@@ -69,9 +74,17 @@ func New(cfg config.Config, log *slog.Logger) *Server {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	if err := s.initializeAccount(); err != nil && !errors.Is(err, accounts.ErrUnconfigured) {
+		return err
+	}
 	if err := s.initialize(); err != nil {
 		return err
 	}
+	stopAdmin, err := s.startAdminStatus()
+	if err != nil {
+		return err
+	}
+	defer stopAdmin()
 	l, err := net.Listen("tcp", s.cfg.Listen)
 	if err != nil {
 		return errors.New("cannot bind RTMP listener")

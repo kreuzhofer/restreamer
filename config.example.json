@@ -8,6 +8,7 @@
   "queue_bytes": 16777216,
   "dashboard_username": "${DASHBOARD_USERNAME}",
   "dashboard_password": "${DASHBOARD_PASSWORD}",
+  "users_database": "${USERS_DATABASE}",
   "state_file": "${TARGET_STATE_FILE}",
   "library_directory": "${LIBRARY_DIRECTORY}",
   "events_directory": "${EVENTS_DIRECTORY}",

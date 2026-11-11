@@ -174,7 +174,7 @@ func (s *Server) deviceAccessPath() string {
 func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if s.cfg.DashboardUsername == "" || s.cfg.DashboardPassword == "" || s.deviceAccessPath() == "" {
+	if s.initializeAccount() != nil || s.deviceAccessPath() == "" {
 		generatorJSON(w, 503, map[string]string{"error": "Pairing requires dashboard authentication and persistent TARGET_STATE_FILE storage."})
 		return
 	}

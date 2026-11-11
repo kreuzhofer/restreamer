@@ -18,6 +18,12 @@ import (
 func main() { os.Exit(run()) }
 
 func run() int {
+	if len(os.Args) > 2 && os.Args[1] == "admin" && os.Args[2] == "status" {
+		return adminStatus(os.Args[3:])
+	}
+	if len(os.Args) > 2 && os.Args[1] == "account" && os.Args[2] == "reset-password" {
+		return resetAccount(os.Args[3:])
+	}
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
 		address := fs.String("url", "http://127.0.0.1:8080/healthz", "health endpoint")

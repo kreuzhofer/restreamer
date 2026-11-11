@@ -60,6 +60,11 @@ if (name === 'docker' && args.includes('volume')) {
 if (name === 'docker' && args.includes('up') && process.env.FAIL_UP) process.exit(1);
 if (name === 'docker' && args.includes('pull') && process.env.FAIL_PULL) process.exit(1);
 if (name === 'docker' && args.includes('ps') && args.includes('--all') && process.env.TEST_HTTP_PORT) console.log('test-app');
+if (name === 'docker' && args.includes('exec') && args.includes('admin')) {
+  if (args.includes('-check-support')) process.exit(process.env.ADMIN_STATUS ? 0 : 2);
+  if (process.env.ADMIN_STATUS === 'unavailable') process.exit(1);
+  console.log(process.env.ADMIN_STATUS); process.exit(0);
+}
 if (name === 'docker' && args.includes('inspect')) console.log(JSON.stringify([{State:{Running:true},Config:{Env:['DASHBOARD_USERNAME=stage-test','DASHBOARD_PASSWORD=stage-test']},NetworkSettings:{Ports:{'8080/tcp':[{HostIp:'127.0.0.1',HostPort:process.env.TEST_HTTP_PORT}]}}}]));
 if (name === 'curl') {
   if (process.env.FAIL_TLS) process.exit(60);
@@ -278,5 +283,27 @@ test('updates refuse active, pending, connected or unverifiable studios and rech
       assert.equal(calls.some(call => call.includes('pull')), allowed || !!scenario.changesAfterPull);
       assert.ok(readFileSync(join(directory, '.env'), 'utf8') === saved, 'guard failures preserve saved configuration');
     } finally { server.kill(); }
+  }
+});
+
+
+test('updates use private status after password changes and fail closed when it is unavailable', t => {
+  const {run, env} = launchFixture(t);
+  assert.equal(run('--domain', 'studio.example.com').status, 0);
+  // No HTTP dashboard is available at this port. Bootstrap credentials are stale.
+  env.TEST_HTTP_PORT = '1';
+  for (const [status, allowed] of [
+    [{stage: 'OFF', pending: false, publisher_connected: false}, true],
+    [{stage: 'LIVE', pending: false, publisher_connected: false}, false],
+    [{stage: 'OFF', pending: true, publisher_connected: false}, false],
+    [{stage: 'OFF', pending: false, publisher_connected: true}, false],
+    [{stage: 'OFF'}, false], ['unavailable', false]
+  ]) {
+    env.ADMIN_STATUS = typeof status === 'string' ? status : JSON.stringify(status);
+    writeFileSync(env.CALL_LOG, '');
+    const result = run('--update');
+    assert.equal(result.status === 0, allowed, result.stderr);
+    const calls = readFileSync(env.CALL_LOG, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(calls.some(call => call.includes('--force-recreate')), allowed);
   }
 });
