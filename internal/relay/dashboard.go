@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -55,6 +56,13 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
+	mux.HandleFunc("POST /api/devices/pair", s.pairingHTTP)
+	mux.HandleFunc("POST /api/devices/token", s.pairingHTTP)
+	private.HandleFunc("POST /api/devices/approve", s.approveDeviceHTTP)
+	private.HandleFunc("POST /api/devices/deny", s.approveDeviceHTTP)
+	private.HandleFunc("GET /api/devices", s.devicesHTTP)
+	private.HandleFunc("DELETE /api/devices/{id}", s.devicesHTTP)
+	private.HandleFunc("GET /api/destination-presets/twitch", s.twitchIngestsHTTP)
 	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)
@@ -73,10 +81,10 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/stage/commands/{id}", s.stageCommandOutcomeHTTP)
 	private.HandleFunc("GET /api/preview", s.preview)
 	private.HandleFunc("GET /api/broadcast-preview", s.preview)
-	for _, route := range []string{"/live", "/settings", "/studio"} {
+	for _, route := range []string{"/live", "/settings", "/studio", "/setup", "/library", "/editor"} {
 		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
 			page := "web/index.html"
-			if r.URL.Path == "/studio" {
+			if r.URL.Path == "/studio" || r.URL.Path == "/setup" || r.URL.Path == "/library" || r.URL.Path == "/editor" {
 				page = "web/generator.html"
 			}
 			data, _ := dashboardFiles.ReadFile(page)
@@ -89,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
+	private.HandleFunc("PUT /api/generator/jobs/{id}/name", s.generatorJobName)
 	private.HandleFunc("GET /api/generator/themes", s.generatorThemesHTTP)
 	private.HandleFunc("POST /api/generator/themes", s.generatorThemesHTTP)
 	private.HandleFunc("POST /api/generator/themes/preview", s.generatorThemePreviewHTTP)
@@ -157,6 +166,23 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			http.Error(w, "Dashboard disabled: configure DASHBOARD_USERNAME and DASHBOARD_PASSWORD.", http.StatusServiceUnavailable)
 			return
 		}
+		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+			record, authorized := s.deviceAuthorized(token)
+			if !authorized {
+				http.Error(w, "Device disconnected. Pair again in Stream Deck.", 401)
+				return
+			}
+			if !deviceRouteAllowed(r) {
+				http.Error(w, "Device permission does not allow this operation", 403)
+				return
+			}
+			if err := s.initialize(); err != nil {
+				http.Error(w, "Studio unavailable", 503)
+				return
+			}
+			next.ServeHTTP(w, withDevicePrincipal(r, record))
+			return
+		}
 		user, password, ok := r.BasicAuth()
 		expectedUser, expectedPassword := sha256.Sum256([]byte(s.cfg.DashboardUsername)), sha256.Sum256([]byte(s.cfg.DashboardPassword))
 		actualUser, actualPassword := sha256.Sum256([]byte(user)), sha256.Sum256([]byte(password))
@@ -178,24 +204,26 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	status := struct {
-		Time           int64           `json:"time"`
-		Publishing     bool            `json:"publishing"`
-		Forwarding     bool            `json:"forwarding"`
-		InputBytes     uint64          `json:"input_bytes"`
-		InputFrames    uint64          `json:"input_frames"`
-		Outputs        []OutputStatus  `json:"outputs"`
-		History        []bitrateSample `json:"history,omitempty"`
-		Persistent     bool            `json:"persistent"`
-		Playback       PlaybackStatus  `json:"playback"`
-		LibraryEnabled bool            `json:"library_enabled"`
-		BRB            BRBStatus       `json:"brb"`
-		BRBAssets      brbSettings     `json:"brb_assets"`
-		BRBProfile     any             `json:"brb_profile,omitempty"`
-		Stage          StageStatus     `json:"stage"`
+		ControlDestinations bool            `json:"control_destinations"`
+		Time                int64           `json:"time"`
+		Publishing          bool            `json:"publishing"`
+		Forwarding          bool            `json:"forwarding"`
+		InputBytes          uint64          `json:"input_bytes"`
+		InputFrames         uint64          `json:"input_frames"`
+		Outputs             []OutputStatus  `json:"outputs"`
+		History             []bitrateSample `json:"history,omitempty"`
+		Persistent          bool            `json:"persistent"`
+		Playback            PlaybackStatus  `json:"playback"`
+		LibraryEnabled      bool            `json:"library_enabled"`
+		BRB                 BRBStatus       `json:"brb"`
+		BRBAssets           brbSettings     `json:"brb_assets"`
+		BRBProfile          any             `json:"brb_profile,omitempty"`
+		Stage               StageStatus     `json:"stage"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputSnapshot())), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputSnapshot() {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
+	status.ControlDestinations = deviceCanControlDestinations(r)
 	status.Forwarding = s.forwarding.Load()
 	if s.broadcast != nil {
 		status.Stage = s.broadcast.stageStatus(now)

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand/v2"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +17,8 @@ import (
 
 type OutputStatus struct {
 	Name              string `json:"name"`
+	Platform          string `json:"platform"`
+	OutputMode        string `json:"output_mode"`
 	Enabled           bool   `json:"enabled"`
 	State             string `json:"state"`
 	Attempts          uint64 `json:"attempts"`
@@ -139,6 +143,7 @@ func (o *output) snapshot() OutputStatus {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	status := o.status
+	status.Platform = destinationPlatform(o.config.URL)
 	if o.draining && !o.drainDone {
 		status.State = "draining"
 	}
@@ -457,5 +462,25 @@ func (o *output) attempt(ctx context.Context, h *hub) error {
 			o.recordSent(&copy)
 			h.delivered(s)
 		}
+	}
+}
+
+// Expose only a platform hint, never the ingest URL or stream key.
+func destinationPlatform(address string) string {
+	u, err := url.Parse(address)
+	if err != nil {
+		return "custom"
+	}
+	host := strings.ToLower(u.Hostname())
+	matches := func(domain string) bool { return host == domain || strings.HasSuffix(host, "."+domain) }
+	switch {
+	case matches("twitch.tv"), matches("contribute.live-video.net"):
+		return "twitch"
+	case matches("youtube.com"):
+		return "youtube"
+	case matches("kick.com"):
+		return "kick"
+	default:
+		return "custom"
 	}
 }

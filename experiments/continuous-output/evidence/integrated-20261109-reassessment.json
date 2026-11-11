@@ -1,0 +1,417 @@
+{
+  "candidate_sha": "55555897ec190bb5c697bdd8b4062129fa207e6f",
+  "candidate_binary_sha256": "488e1ca3db0e9b1bbf2f9f767b4d9212e482dceabc213eda885da8fdf9874056",
+  "raw_report_sha256": "f57ff0b3c017d0dfd577a658c0c46b214fed45f3243f5dbe7d7f421b26200852",
+  "raw_report_status": "rejected",
+  "raw_gates": {
+    "four_hours": true,
+    "decoding_and_cadence": true,
+    "healthy_capture_duration": true,
+    "matched_delay": true,
+    "av_sync": true,
+    "cpu_headroom": true,
+    "bounded_queues": true,
+    "no_encoder_restart": true,
+    "ready_command_response": false,
+    "no_source_overflow": true,
+    "deferred_render_resumed": true,
+    "destination_isolation": true
+  },
+  "reassessment_date": "2026-11-10",
+  "reassessment_reason": "Operator accepted <=2 seconds from Go Live submission, including fresh-keyframe wait for a 2-second GOP. Ready BRB remains <=1 second. Historical post-readiness Go Live timing is not separately measured.",
+  "elapsed_seconds": 14400.609753734001,
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "logical_cpus": 8,
+    "memory_total_bytes": 33653932032,
+    "cpu_model": "AMD EPYC-Genoa Processor",
+    "cgroup_cpu_max": "300000 100000"
+  },
+  "container_limits": {
+    "cpu_cores": 3,
+    "memory_bytes": 2147483648,
+    "network": "none"
+  },
+  "reassessed_measured_gates": {
+    "four_hours": true,
+    "decoding_and_cadence": true,
+    "healthy_capture_duration": true,
+    "matched_delay": true,
+    "av_sync": true,
+    "cpu_headroom": true,
+    "bounded_queues": true,
+    "no_encoder_restart": true,
+    "no_source_overflow": true,
+    "deferred_render_resumed": true,
+    "destination_isolation": true,
+    "ready_brb_response": true,
+    "go_live_total_response": true
+  },
+  "commands": [
+    {
+      "action": "brb",
+      "at_seconds": 120.24743743099998,
+      "output_latency_seconds": 0.058565823
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 140.29212449299996,
+      "output_latency_seconds": 1.616280228
+    },
+    {
+      "action": "brb",
+      "at_seconds": 720.060399734,
+      "output_latency_seconds": 0.047772309
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 740.108352588,
+      "output_latency_seconds": 1.963671105
+    },
+    {
+      "action": "brb",
+      "at_seconds": 1320.8815396619998,
+      "output_latency_seconds": 0.064731435
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 1340.9297084089999,
+      "output_latency_seconds": 0.939577913
+    },
+    {
+      "action": "brb",
+      "at_seconds": 1920.723499273,
+      "output_latency_seconds": 0.142612163
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 1940.7699711329997,
+      "output_latency_seconds": 1.940176611
+    },
+    {
+      "action": "brb",
+      "at_seconds": 2520.547520952,
+      "output_latency_seconds": 0.118914526
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 2540.595044549,
+      "output_latency_seconds": 1.995068099
+    },
+    {
+      "action": "brb",
+      "at_seconds": 3120.3835824919997,
+      "output_latency_seconds": 0.161732918
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 3140.431395364,
+      "output_latency_seconds": 1.882126596
+    },
+    {
+      "action": "brb",
+      "at_seconds": 3720.223195395,
+      "output_latency_seconds": 0.042713129
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 3740.269865177,
+      "output_latency_seconds": 1.919691524
+    },
+    {
+      "action": "brb",
+      "at_seconds": 4320.057862814,
+      "output_latency_seconds": 0.087689604
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 4340.102150122,
+      "output_latency_seconds": 1.931111526
+    },
+    {
+      "action": "brb",
+      "at_seconds": 4920.899027733,
+      "output_latency_seconds": 0.086314516
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 4940.94551547,
+      "output_latency_seconds": 0.963902519
+    },
+    {
+      "action": "brb",
+      "at_seconds": 5520.748542961001,
+      "output_latency_seconds": 0.156895075
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 5540.793759628,
+      "output_latency_seconds": 1.95851749
+    },
+    {
+      "action": "brb",
+      "at_seconds": 6120.606163194,
+      "output_latency_seconds": 0.099608685
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 6140.65153154,
+      "output_latency_seconds": 1.979666174
+    },
+    {
+      "action": "brb",
+      "at_seconds": 6720.47913941,
+      "output_latency_seconds": 0.106940315
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 6740.52839107,
+      "output_latency_seconds": 1.903030164
+    },
+    {
+      "action": "brb",
+      "at_seconds": 7320.302699561001,
+      "output_latency_seconds": 0.083284258
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 7340.351748853001,
+      "output_latency_seconds": 1.880896376
+    },
+    {
+      "action": "brb",
+      "at_seconds": 7920.169891066,
+      "output_latency_seconds": 0.13621566
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 7940.216597717001,
+      "output_latency_seconds": 1.935185423
+    },
+    {
+      "action": "brb",
+      "at_seconds": 8520.032269728,
+      "output_latency_seconds": 0.15368447
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 8540.080224866,
+      "output_latency_seconds": 1.949233071
+    },
+    {
+      "action": "brb",
+      "at_seconds": 9120.939261164,
+      "output_latency_seconds": 0.086344868
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 9140.990781287,
+      "output_latency_seconds": 0.840299055
+    },
+    {
+      "action": "brb",
+      "at_seconds": 9720.832306296,
+      "output_latency_seconds": 0.073619119
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 9740.881633128,
+      "output_latency_seconds": 0.948844325
+    },
+    {
+      "action": "brb",
+      "at_seconds": 10320.711377238,
+      "output_latency_seconds": 0.076348726
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 10340.76039154,
+      "output_latency_seconds": 1.91177686
+    },
+    {
+      "action": "brb",
+      "at_seconds": 10920.589066651,
+      "output_latency_seconds": 0.117649297
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 10940.640092957,
+      "output_latency_seconds": 1.911586748
+    },
+    {
+      "action": "brb",
+      "at_seconds": 11520.470878237,
+      "output_latency_seconds": 0.115025659
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 11540.51975661,
+      "output_latency_seconds": 1.911738891
+    },
+    {
+      "action": "brb",
+      "at_seconds": 12120.373154328001,
+      "output_latency_seconds": 0.092294403
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 12140.420290366,
+      "output_latency_seconds": 1.929957587
+    },
+    {
+      "action": "brb",
+      "at_seconds": 12720.237460123,
+      "output_latency_seconds": 0.14823219
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 12740.284642089,
+      "output_latency_seconds": 1.94535748
+    },
+    {
+      "action": "brb",
+      "at_seconds": 13320.107223145,
+      "output_latency_seconds": 0.157850759
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 13340.157681613,
+      "output_latency_seconds": 1.871992592
+    },
+    {
+      "action": "brb",
+      "at_seconds": 13920.000360694,
+      "output_latency_seconds": 0.067614815
+    },
+    {
+      "action": "go_live",
+      "at_seconds": 13940.05256398,
+      "output_latency_seconds": 1.860191381
+    }
+  ],
+  "memory_after_warmup": {
+    "first_quarter_median_bytes": 971874304,
+    "last_quarter_median_bytes": 998813696,
+    "change_bytes": 26939392,
+    "peak_bytes": 1089728512
+  },
+  "memory_windows": [
+    {
+      "start_seconds": 600,
+      "end_seconds": 2400,
+      "samples": 1794,
+      "relay_rss_median_bytes": 746647552.0,
+      "relay_rss_max_bytes": 794775552,
+      "container_anonymous_median_bytes": 970172416.0,
+      "live_queue_median_frames": 110.0
+    },
+    {
+      "start_seconds": 2400,
+      "end_seconds": 4200,
+      "samples": 1795,
+      "relay_rss_median_bytes": 746967040,
+      "relay_rss_max_bytes": 793366528,
+      "container_anonymous_median_bytes": 973434880,
+      "live_queue_median_frames": 110
+    },
+    {
+      "start_seconds": 4200,
+      "end_seconds": 6000,
+      "samples": 1794,
+      "relay_rss_median_bytes": 747413504.0,
+      "relay_rss_max_bytes": 802344960,
+      "container_anonymous_median_bytes": 979953664.0,
+      "live_queue_median_frames": 110.0
+    },
+    {
+      "start_seconds": 6000,
+      "end_seconds": 7800,
+      "samples": 1795,
+      "relay_rss_median_bytes": 746291200,
+      "relay_rss_max_bytes": 794292224,
+      "container_anonymous_median_bytes": 982704128,
+      "live_queue_median_frames": 110
+    },
+    {
+      "start_seconds": 7800,
+      "end_seconds": 9600,
+      "samples": 1794,
+      "relay_rss_median_bytes": 748822528.0,
+      "relay_rss_max_bytes": 796639232,
+      "container_anonymous_median_bytes": 988706816.0,
+      "live_queue_median_frames": 110.0
+    },
+    {
+      "start_seconds": 9600,
+      "end_seconds": 11400,
+      "samples": 1794,
+      "relay_rss_median_bytes": 750850048.0,
+      "relay_rss_max_bytes": 794759168,
+      "container_anonymous_median_bytes": 996552704.0,
+      "live_queue_median_frames": 110.0
+    },
+    {
+      "start_seconds": 11400,
+      "end_seconds": 13200,
+      "samples": 1795,
+      "relay_rss_median_bytes": 748105728,
+      "relay_rss_max_bytes": 802582528,
+      "container_anonymous_median_bytes": 998580224,
+      "live_queue_median_frames": 110
+    },
+    {
+      "start_seconds": 13200,
+      "end_seconds": 14400,
+      "samples": 1196,
+      "relay_rss_median_bytes": 747061248.0,
+      "relay_rss_max_bytes": 795340800,
+      "container_anonymous_median_bytes": 1002246144.0,
+      "live_queue_median_frames": 110.0
+    }
+  ],
+  "memory_review": "Relay RSS and decoded queue occupancy show no sustained growth. Whole-container anonymous memory includes the Python observer retaining all samples; its gradual growth cannot be assigned solely to the engine. Future capture uses a bounded 122-sample deque. No four-hour proof of an aggregate memory plateau is claimed.",
+  "peak_rolling_minute_host_cpu_percent": 17.28689198591579,
+  "equivalent_peak_percent_of_four_logical_cpus": 34.57378397183158,
+  "maximum_ingress_to_sink_seconds": 5.794476438,
+  "median_ingress_to_sink_seconds": 4.6548192775,
+  "maximum_av_error_seconds": 0.0005210000000062109,
+  "av_events": 26692,
+  "captures": [
+    {
+      "file": "sinks/sink-1/connection-001.flv",
+      "frames": 372,
+      "marked_frames": 222,
+      "cadence_gaps": 0,
+      "media_seconds": 14.88,
+      "av_events": 9,
+      "maximum_av_error_seconds": 0.0005210000000008819,
+      "maximum_ingress_to_sink_seconds": 4.243656198
+    },
+    {
+      "file": "sinks/sink-1/connection-002.flv",
+      "frames": 359770,
+      "marked_frames": 334192,
+      "cadence_gaps": 0,
+      "media_seconds": 14390.8,
+      "av_events": 13336,
+      "maximum_av_error_seconds": 0.0005210000000062109,
+      "maximum_ingress_to_sink_seconds": 5.794466473
+    },
+    {
+      "file": "sinks/sink-2/connection-001.flv",
+      "frames": 360170,
+      "marked_frames": 334442,
+      "cadence_gaps": 0,
+      "media_seconds": 14406.8,
+      "av_events": 13347,
+      "maximum_av_error_seconds": 0.0005210000000062109,
+      "maximum_ingress_to_sink_seconds": 5.794476438
+    }
+  ],
+  "rollout_qualified": false,
+  "remaining_review": [
+    "Explicit test-channel trial and quality/ingest-health review",
+    "Confirm whole-container memory plateau with bounded observer during extended trial; historical aggregate measurement is confounded"
+  ]
+}

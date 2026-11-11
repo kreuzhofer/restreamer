@@ -290,8 +290,8 @@ func (s *Server) deleteGenerationLocked(w http.ResponseWriter, jobs map[string]b
 // Caller holds library.mu and controlMu, preventing new selections/commands.
 func (s *Server) mediaDeletionBlockLocked(id string) string {
 	l := s.library
-	if l.selected.Prestream == id || l.selected.Ending == id || l.selected.BRB == id {
-		return "Media is selected for PRESTREAM or ENDING. Clear or replace the selection in live control before deleting."
+	if l.selected.Prestream == id || l.selected.Ending == id || l.selected.BRB == id || l.selected.Fallback == id {
+		return "Media is selected for a stage or fallback. Replace its selection in Show setup before deleting."
 	}
 	for _, shortcut := range l.selected.Shortcuts {
 		if shortcut.Revision == id {
@@ -301,10 +301,16 @@ func (s *Server) mediaDeletionBlockLocked(id string) string {
 	b := s.broadcast
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.fallback != nil && b.fallback.Revision == id {
+		return "Media is playing as automatic fallback. Leave or replace it before deleting."
+	}
 	if b.clip != nil && b.clip.Revision == id {
 		return "Media is playing or retained by the current stage. Stop or replace it before deleting."
 	}
 	for f := b.control.returnTo; f != nil; f = f.returnTo {
+		if f.fallback != nil && f.fallback.Revision == id {
+			return "Media is retained as suspended fallback."
+		}
 		if f.clip != nil && f.clip.Revision == id {
 			return "Media is retained for return to a previous stage. Leave that sequence before deleting."
 		}

@@ -75,6 +75,15 @@ func TestEventCreationSurvivesRestartWithoutOperatorAccess(t *testing.T) {
 	}
 }
 
+func TestEventRejectsContinuousTranscodingAndRetainsPassthrough(t *testing.T) {
+	s := eventTestServer(t)
+	w := dashboardRequest(s, "POST", "/api/destinations", `{"version":0,"name":"event","type":"public_page","output_mode":"continuous"}`)
+	if w.Code != 400 {
+		t.Fatal("public event accepted transcoding", w.Code, w.Body.String())
+	}
+	createEvent(t, s, "", false)
+}
+
 func TestEventPasswordSessionRevokedAfterChange(t *testing.T) {
 	s := eventTestServer(t)
 	id := createEvent(t, s, "viewer-secret", false)

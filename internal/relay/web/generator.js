@@ -20,7 +20,8 @@
   let conflict = false;
   let editSequence = 0;
   let previewSequence = 0;
-  let saveTimer;
+  let savedContent = '';
+  const contentKey = value => window.designEditState.contentKey(value);
   let previewTimer;
   let previewAbort;
   let jobs = [];
@@ -53,7 +54,10 @@
     });
     if (name === 'themes' && editingTheme) scheduleThemePreview();
     if (focus) document.querySelector(`[data-studio-collection="${name}"]`)?.focus();
-    history.replaceState(null, '', name === 'brb' ? '/studio?editor=brb' : `/studio?collection=${name}`);
+    const filter=name === 'music' ? $('music-search') : document.querySelector(`[data-collection-panel="${name}"] [data-filter-list]`);
+    const musicView = name === 'music' ? `&music_view=${$('music-playlists').hidden ? 'tracks' : 'playlists'}` : '';
+    history.replaceState(null, '', name === 'brb' ? `/editor?editor=brb${requestedDesign?"&id="+encodeURIComponent(requestedDesign):""}&return=${encodeURIComponent(returnPath)}` : name === 'setup' ? '/setup' : `/library?collection=${name}${musicView}${filter?.value?'&q='+encodeURIComponent(filter.value):''}`);
+    window.dispatchEvent(new Event('studio-route-changed'));
   }
   function showEditor() {
     $('brb-theme-video').pause();
@@ -73,21 +77,22 @@
     document.querySelectorAll('[data-editor-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editorPanel === name)));
   }
   function showPreviewPanel(name) {
-    if (name === 'results') $('generation-history').open = true;
     $('studio-scene-preview').hidden = name !== 'scene';
     $('studio-results').hidden = name !== 'results';
     document.querySelectorAll('[data-preview-panel]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.previewPanel === name)));
   }
   document.querySelectorAll('[data-studio-collection]').forEach(button => button.addEventListener('click', () => showCollection(button.dataset.studioCollection)));
   const initialParams = new URLSearchParams(location.search);
-  const requestedCollection = initialParams.get('editor') === 'brb' ? 'brb' : initialParams.get('collection') || 'setup';
+  const initialRoute = window.studioRouting.parse(new URL(location.href));
+  let returnPath = initialRoute.page === 'library' ? `/library?collection=${initialRoute.collection}${initialParams.get('q')?'&q='+encodeURIComponent(initialParams.get('q')):''}` : initialRoute.back;
+  const requestedCollection = initialRoute.editor === 'brb' ? 'brb' : initialRoute.page === 'library' ? initialRoute.collection : 'setup';
   // Defer routing until the editor has loaded the requested design.
   const requestedDesign = initialParams.get('id');
   if (['prestream','ending'].includes(initialParams.get('stage'))) $('new-stage').value = initialParams.get('stage');
   document.querySelectorAll('[data-inspector]').forEach(button => button.addEventListener('click', () => showInspector(button.dataset.inspector)));
   document.querySelectorAll('[data-editor-panel]').forEach(button => button.addEventListener('click', () => showEditorPanel(button.dataset.editorPanel)));
   document.querySelectorAll('[data-preview-panel]').forEach(button => button.addEventListener('click', () => showPreviewPanel(button.dataset.previewPanel)));
-  $('back-to-designs').addEventListener('click', () => showCollection('setup', true));
+  $('back-to-designs').addEventListener('click', () => { location.href = returnPath; });
   $('resume-design').addEventListener('click', () => { showEditor(); $('editor-heading').focus(); });
   const mobileStudio = matchMedia('(max-width: 600px)');
   function updateStudioDevice() {
@@ -95,7 +100,9 @@
   }
   mobileStudio.addEventListener('change', updateStudioDevice);
   updateStudioDevice();
+  let animationTiming = null;
   const fields = {
+    animation_loops: ['scene-loops', 'loops-error'],
     ending_fade_seconds: ['ending-fade', 'ending-fade-error'],
     'soundtrack.asset': ['soundtrack-asset', 'soundtrack-asset-error'],
     'soundtrack.mode': ['soundtrack-mode', 'soundtrack-mode-error'],
@@ -133,9 +140,34 @@
     renderJobs();
   }
   function canLeave() {
+    if(namingJob){notify('Save or cancel the video name before opening another design.');return false;}
     if (deleting) { notify('Deletion is in progress. Wait for its result.'); return false; }
     if (saving) { notify('A save is in progress. Wait for its acknowledgement before opening another draft.'); return false; }
     return !dirty || window.confirm('Discard your unsaved local edits and open another design?');
+  }
+  const selectedDesigns=new Map(),selectedVideos=new Map(),cleanupModes={designs:false,jobs:false};
+  let namingJob='';
+  function cleanupControl(id,selected,kind,reload) {
+    const root=$(id);root.replaceChildren();
+    if(!cleanupModes[kind]){const start=document.createElement('button');start.type='button';start.className='preview-button';start.textContent='Select items';start.onclick=()=>{cleanupModes[kind]=true;document.querySelectorAll(`[data-cleanup-kind="${kind}"]`).forEach(box=>{box.hidden=false;});cleanupControl(id,selected,kind,reload);};root.append(start);return;}
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='preview-button';cancel.textContent='Cancel selection';cancel.onclick=()=>{cleanupModes[kind]=false;selected.clear();document.querySelectorAll(`[data-cleanup-kind="${kind}"]`).forEach(box=>{box.hidden=true;box.checked=false;});cleanupControl(id,selected,kind,reload);};root.append(cancel);
+    const button=document.createElement('button');button.type='button';button.className='preview-button';button.textContent=`Delete selected (${selected.size})`;button.disabled=!selected.size||deleting;root.append(button);
+    button.addEventListener('click',async()=>{
+      if(deleting||saving||jobRequest)return;
+      if(kind==='designs'&&draft&&selected.has(draft.id)&&!canLeave())return;
+      const items=[...selected.values()];
+      if(!window.confirm(`Delete ${items.length} ${kind==='designs'?'designs and their generated videos':'generated videos'}? Uploaded files stay. Selected, playing and shared media are protected.\n${items.map(item=>item.name||item.design_snapshot?.name||'Video').join('\n')}`))return;
+      deleting=true;button.disabled=true;
+      const results=await window.cleanupItems(items,item=>request(`/api/generator/${kind}/${item.id}`,'DELETE',kind==='designs'?{version:item.version}:{}));
+      for(const result of results)if(result.deleted){selected.delete(result.item.id);if(kind==='designs'&&draft?.id===result.item.id){draft=null;dirty=false;stopGeneratedPreview();$('design-editor').hidden=true;}}
+      deleting=false;await reload();
+      notify(`${results.filter(r=>r.deleted).length} deleted. Uploaded files kept.${results.some(r=>!r.deleted)?' Some items were kept: '+results.filter(r=>!r.deleted).map(r=>`${r.item.name||r.item.design_snapshot?.name}: ${r.error}`).join('; '):''}`);
+      cleanupControl(id,selected,kind,reload);
+    });
+  }
+  function cleanupCheckbox(item,selected,kind) {
+    const box=document.createElement('input');box.type='checkbox';box.checked=selected.has(item.id);box.className='cleanup-select studio-authoring';box.dataset.cleanupKind=kind;box.hidden=!cleanupModes[kind];box.setAttribute('aria-label',`Select ${item.name||item.design_snapshot?.name||'video'} for cleanup`);
+    box.addEventListener('change',()=>{box.checked?selected.set(item.id,item):selected.delete(item.id);cleanupControl(kind==='designs'?'design-cleanup':'video-cleanup',selected,kind,kind==='designs'?listDesigns:loadJobs);});return box;
   }
   async function listDesigns() {
     const designs = await (await request('/api/generator/designs')).json();
@@ -147,7 +179,7 @@
       button.textContent = design.name || 'Untitled design';
       button.setAttribute('aria-current', String(design.id === draft?.id));
       const detail = document.createElement('small');
-      detail.textContent = `${design.stage} · draft v${design.version}`;
+      detail.textContent = `${design.stage === 'prestream' ? 'Starting soon' : design.stage === 'brb' ? 'BRB' : 'Ending'} · Editable design`;
       button.append(detail);
       button.addEventListener('click', async () => {
         if (!canLeave()) return;
@@ -163,16 +195,16 @@
       remove.type = 'button'; remove.className = 'delete-button'; remove.textContent = 'Delete';
       remove.setAttribute('aria-label', `Delete design ${design.name || 'Untitled design'}`);
       remove.addEventListener('click', () => deleteDesign(design));
-      const row = document.createElement('div'); row.className = 'design-row'; row.append(button, remove);
+      const row = document.createElement('div'); row.className = 'design-row'; const more=document.createElement('details'),summary=document.createElement('summary');more.className='row-maintenance studio-authoring';summary.textContent='More';summary.setAttribute('aria-label',`More actions for ${design.name}`);more.append(summary,remove);row.append(cleanupCheckbox(design,selectedDesigns,'designs'),button,more);
       $('design-list').append(row);
     }
+    cleanupControl('design-cleanup',selectedDesigns,'designs',listDesigns);
   }
   async function deleteDesign(design) {
     if (deleting || saving || jobRequest) { notify('Wait for the current save or request before deleting.'); return; }
     if (!window.confirm(`Permanently delete “${design.name || 'Untitled design'}”, its generation history and generated files? Uploaded images, videos and music stay in Reusable media. Output shared with another saved result is kept. Selected or playing output blocks deletion.${draft?.id === design.id && dirty ? ' Unsaved edits to this design will also be discarded.' : ''}`)) return;
     deleting = true; editSequence++;
     const current = draft?.id === design.id;
-    if (current) clearTimeout(saveTimer);
     $('scene-form').inert = true;
     try {
       const result = await (await request(`/api/generator/designs/${design.id}`, 'DELETE', {version: current ? draft.version : design.version})).json();
@@ -186,15 +218,17 @@
       await listDesigns(); await loadJobs(); await loadAssets();
       notify(`Design deleted with ${result.deleted_media} generated file(s). Uploaded assets were kept.${result.retained_shared_media.length ? ' Shared generated output was retained for other results.' : ''}`);
     } catch (error) { notify(error.message); }
-    finally { deleting = false; $('scene-form').inert = false; if (draft && dirty && !conflict) saveTimer = setTimeout(() => saveDraft(), 700); }
+    finally { deleting = false; $('scene-form').inert = false; renderJobs(); }
   }
   function stopGeneratedPreview() {
     const video = $('generated-video'); video.pause(); video.removeAttribute('src'); video.load();
     reviewedRevision = ''; $('generated-preview').hidden = true;
   }
   function openDraft(value) {
-    clearTimeout(saveTimer);
-    draft = value; dirty = false; conflict = false; editSequence++;
+    if(document.body.dataset.workspace==='library')returnPath=location.pathname+location.search;
+    const back=$('shared-editor-nav').querySelector('a');back.href=returnPath;back.textContent=returnPath.startsWith('/library')?'Library':'Show setup';
+    if(value.stage==='brb'){location.href=`/editor?editor=brb&id=${encodeURIComponent(value.id)}&return=${encodeURIComponent(returnPath)}`;return;}
+    draft = value; savedContent = contentKey(value); dirty = false; conflict = false; editSequence++;
     loadPinnedTheme(value.theme);
     selectedScene = 0; validationIssues = [];
     stopGeneratedPreview();
@@ -212,17 +246,30 @@
     showEditor(); showInspector('scene'); showEditorPanel('preview');
     $('editor-heading').focus();
     notify(''); saveState(`Saved · version ${draft.version}`);
-    history.replaceState(null, '', `/studio?id=${encodeURIComponent(draft.id)}`);
+    history.replaceState(null, '', `/editor?id=${encodeURIComponent(draft.id)}&return=${encodeURIComponent(returnPath)}`);
+    window.dispatchEvent(new Event('studio-route-changed'));
     listDesigns().catch(error => notify(error.message));
     schedulePreview();
     loadJobs();
+  }
+  let thumbnailSignature = '', thumbnailProfile = '', thumbnails = new Map();
+  const scenePreviewSignature = value => JSON.stringify([value.id,value.stage,value.theme,value.scenes,value.loop_transition,value.ending_fade_seconds]);
+  function storeSceneThumbnail(index, bitmap) {
+    const thumbnail=document.createElement('canvas');thumbnail.width=160;thumbnail.height=90;
+    thumbnail.getContext('2d').drawImage(bitmap,0,0,160,90);thumbnails.set(index,thumbnail);
+    const visible=$('scene-list').children[index]?.querySelector('canvas');
+    if(visible)visible.getContext('2d').drawImage(thumbnail,0,0);
   }
   function renderScenes() {
     $('scene-list').replaceChildren();
     for (const [index, scene] of draft.scenes.entries()) {
       const button = document.createElement('button'); button.type = 'button';
       const invalid = validationIssues.some(issue => issue.field.startsWith(`scenes.${index}.`));
-      button.textContent = `${index + 1}. ${scene.text.split('\n')[0] || (scene.layout === 'list' ? 'List' : 'Untitled')} · ${scene.duration_seconds}s${invalid ? ' · needs attention' : ''}`;
+      const caption=document.createElement('span');
+      caption.textContent = `${index + 1}. ${scene.text.split('\n')[0] || (scene.layout === 'list' ? 'List' : 'Untitled')} · ${scene.duration_seconds}s${invalid ? ' · needs attention' : ''}`;
+      const thumbnail=document.createElement('canvas');thumbnail.width=160;thumbnail.height=90;thumbnail.setAttribute('aria-hidden','true');
+      if(thumbnailSignature===scenePreviewSignature(draft)&&thumbnails.has(index))thumbnail.getContext('2d').drawImage(thumbnails.get(index),0,0);
+      button.append(thumbnail,caption);
       button.setAttribute('aria-current', String(index === selectedScene));
       button.addEventListener('click', () => selectScene(index)); $('scene-list').append(button);
     }
@@ -245,6 +292,7 @@
     $('scene-font').value = scene.font || '';
     $('scene-size').value = scene.font_size || '';
     $('scene-duration').value = scene.duration_seconds;
+    renderSceneLength();
     $('scene-transition').value = scene.transition?.kind || 'cut';
     $('transition-duration').value = scene.transition?.duration_seconds || 0.5;
     renderTransitionControls();
@@ -268,16 +316,33 @@
     $('add-list-item').disabled = (scene.items || []).length >= 20;
     renderDesignTheme();
   }
+  function renderSceneLength(pending = false) {
+    const scene = draft?.scenes[selectedScene];
+    if (!scene) return;
+    const timing = animationTiming?.key === `${draft.stage}:${themeKey(draft.theme)}` ? animationTiming : null;
+    const loops = scene.animation_loops !== undefined;
+    $('scene-length-mode').value = loops ? 'loops' : 'seconds';
+    $('scene-length-mode').querySelector('[value="loops"]').disabled = !timing?.cycle;
+    $('scene-loops-control').hidden = !loops;
+    $('scene-seconds-control').hidden = loops;
+    $('scene-loops').value = scene.animation_loops ?? 1;
+    $('scene-loops').max = timing?.cycle ? Math.floor(3600 / timing.cycle) : 300;
+    $('scene-duration').value = scene.duration_seconds;
+    $('scene-length-help').textContent = !timing ? 'Checking the theme’s animation length…'
+      : !timing.cycle ? 'This theme has no repeating animation for this stage. Use seconds.'
+      : loops ? pending ? `${scene.animation_loops} × ${timing.cycle}s · calculating…` : `${scene.animation_loops} × ${timing.cycle}s = ${scene.animation_loops * timing.cycle}s. Render length: ${scene.duration_seconds}s, including any crossfade overlap.`
+      : `One animation loop is ${timing.cycle} seconds. Choose Animation loops to finish complete cycles. Background motion continues between scenes.`;
+  }
   function renderTransitionControls() {
     const last = selectedScene === draft.scenes.length - 1;
     $('transition-duration-controls').hidden = $('scene-transition').value !== 'crossfade';
-    $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Overlaps shorten the total duration. Generate to inspect the exact transition; the quick preview shows one scene.';
+    $('transition-help').textContent = last ? 'This is the last scene. Its outgoing transition is saved for reordering but is not applied here.' : 'Crossfades overlap the end of this scene with the beginning of the next, including enabled video audio. Seconds-based scenes lose the overlap from their duration; Animation loops adds it to preserve complete cycles. Generate to inspect the exact transition; the quick preview shows one scene.';
   }
   function selectScene(index) { selectedScene = index; renderScenes(); renderSelectedScene(); showInspector('scene'); schedulePreview(); }
   function changed() {
-    dirty = true; editSequence++;
-    if (!conflict) { saveState('Unsaved local changes'); clearTimeout(saveTimer); saveTimer = setTimeout(() => saveDraft(), 700); }
-    renderScenes(); schedulePreview();
+    dirty = contentKey(draft) !== savedContent; editSequence++;
+    if (!conflict) saveState(dirty ? 'Unsaved changes' : 'Saved');
+    renderSceneLength(true); renderScenes(); schedulePreview();
   }
   function captureFields() {
     draft.name = $('design-name').value;
@@ -300,6 +365,8 @@
     if (imageValue) { const [id, revision] = imageValue.split(':'); scene.image = {id, revision: Number(revision)}; } else delete scene.image;
     scene.text = $('scene-text').value; scene.font = $('scene-font').value;
     scene.font_size = Number($('scene-size').value); scene.duration_seconds = Number($('scene-duration').value);
+    if ($('scene-length-mode').value === 'loops') scene.animation_loops = Number($('scene-loops').value);
+    else delete scene.animation_loops;
     scene.transition = $('scene-transition').value === 'crossfade' ? {kind: 'crossfade', duration_seconds: Number($('transition-duration').value)} : {kind: 'cut'};
     renderTransitionControls();
     scene.alignment = $('scene-alignment').value;
@@ -360,6 +427,17 @@
     try {
       const result = await (await request('/api/generator/validate', 'POST', snapshot, previewAbort.signal)).json();
       if (sequence !== previewSequence) return;
+      animationTiming = {key: `${draft.stage}:${themeKey(draft.theme)}`, cycle: result.animation_loop_seconds};
+      for (let i = 0; i < draft.scenes.length; i++) {
+        if (draft.scenes[i].animation_loops !== undefined && result.scenes?.[i]) {
+          draft.scenes[i].duration_seconds = result.scenes[i].duration_seconds;
+          snapshot.scenes[i].duration_seconds = result.scenes[i].duration_seconds;
+        }
+      }
+      const nextThumbnailSignature=scenePreviewSignature(snapshot);
+      const nextThumbnailProfile=JSON.stringify(result.profile);
+      if(thumbnailSignature!==nextThumbnailSignature||thumbnailProfile!==nextThumbnailProfile){thumbnails.clear();thumbnailSignature=nextThumbnailSignature;thumbnailProfile=nextThumbnailProfile;}
+      renderSceneLength();
       validationIssues = result.issues;
       renderScenes();
       $('sequence-duration').textContent = `${draft.scenes.length} scene${draft.scenes.length === 1 ? '' : 's'} · ${result.duration_seconds.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')} seconds ${draft.duration_mode === 'music' ? 'per music pass (live repeats until stopped)' : draft.stage === 'prestream' ? 'per complete cycle after transition overlaps' : 'total after transition overlaps'} at ${result.profile.fps} fps`;
@@ -378,7 +456,7 @@
             if (editor) { editor.input.setAttribute('aria-invalid', 'true'); editor.error.textContent = issue.message; }
           } else {
             const field = fields[fieldName];
-            if (field) { $(field[0]).setAttribute('aria-invalid', 'true'); $(field[1]).textContent = issue.message; }
+            if (field) { $(field[0]).setAttribute('aria-invalid', 'true'); $(field[1]).textContent = issue.message; const details=$(field[0]).closest('details');if(details)details.open=true; }
           }
         }
         const entry = document.createElement(sceneIndex === null ? 'p' : 'button');
@@ -391,7 +469,7 @@
       $('preview-profile').textContent = `${result.profile.width} × ${result.profile.height} · ${result.profile.fps} fps`;
       const selectedInvalid = result.preview_issues.some(issue => !issue.field.startsWith('scenes.') || issue.field.startsWith(`scenes.${selectedScene}.`));
       if (!snapshot.scenes[selectedScene] || selectedInvalid) {
-        $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Draft edits are still saved.';
+        $('preview-state').textContent = 'Resolve this scene’s validation issues to preview. Your edits are kept locally. Click Save changes to keep them after leaving.';
         return;
       }
       const response = await request(`/api/generator/preview?scene=${selectedScene}&frame=${Math.round(Math.min(3600, Math.max(0, Number($('preview-time').value) || 0)) * result.profile.fps)}`, 'POST', snapshot, previewAbort.signal);
@@ -399,19 +477,33 @@
       if (sequence !== previewSequence) { bitmap.close(); return; }
       const canvas = $('scene-preview');
       canvas.width = bitmap.width; canvas.height = bitmap.height;
-      canvas.getContext('2d').drawImage(bitmap, 0, 0); bitmap.close();
+      canvas.getContext('2d').drawImage(bitmap, 0, 0); storeSceneThumbnail(selectedScene,bitmap); bitmap.close();
       canvas.hidden = false;
       canvas.setAttribute('aria-label', `Quick preview: ${snapshot.scenes[selectedScene].text || 'Blank title scene'}`);
       $('preview-state').textContent = `Current draft preview · ${snapshot.scenes[selectedScene].duration_seconds} seconds · ${snapshot.scenes[selectedScene].transition?.kind === 'crossfade' && selectedScene + 1 < snapshot.scenes.length ? 'crossfade shown in generated preview' : 'individual scene'} · not on air`;
+      // Keep requests sequential: the server admits one draft preview at a time.
+      // A new edit cancels this pass; an old response must never label a new scene.
+      for (let index=0;index<snapshot.scenes.length;index++) {
+        if(sequence!==previewSequence)return;
+        if(thumbnails.has(index)||result.preview_issues.some(issue=>!issue.field.startsWith('scenes.')||issue.field.startsWith(`scenes.${index}.`)))continue;
+        try {
+          const response=await request(`/api/generator/preview?scene=${index}`, 'POST', snapshot, previewAbort.signal);
+          const bitmap=await createImageBitmap(await response.blob());
+          if(sequence===previewSequence)storeSceneThumbnail(index,bitmap);
+          bitmap.close();
+        } catch(error) {
+          if(error.name==='AbortError'||sequence!==previewSequence)return;
+          const caption=$('scene-list').children[index]?.querySelector('span');
+          if(caption)caption.textContent+=' · preview unavailable';
+        }
+      }
     } catch (error) {
       if (error.name !== 'AbortError' && sequence === previewSequence) $('preview-state').textContent = `Preview unavailable: ${error.message}`;
     }
   }
   async function saveDraft(asCopy = false) {
-    clearTimeout(saveTimer);
     if (!draft || saving || deleting || (conflict && !asCopy) || (!dirty && !asCopy)) return;
     saving = true;
-    const sequence = editSequence;
     const snapshot = structuredClone(draft);
     saveState(asCopy ? 'Saving independent copy…' : 'Saving…');
     try {
@@ -420,9 +512,11 @@
       if (saved.id !== draft.id) { stopGeneratedPreview(); $('generation-history').open = false; }
       // Keep edits made while this request was in flight, but advance the CAS version.
       draft.id = saved.id; draft.version = saved.version; draft.updated_at = saved.updated_at;
-      conflict = false; dirty = editSequence !== sequence;
+      savedContent = contentKey(snapshot);
+      conflict = false; dirty = contentKey(draft) !== savedContent;
       saveState(dirty ? 'Unsaved local changes' : `Saved · version ${draft.version}`);
-      history.replaceState(null, '', `/studio?id=${encodeURIComponent(draft.id)}`);
+      history.replaceState(null, '', `/editor?id=${encodeURIComponent(draft.id)}&return=${encodeURIComponent(returnPath)}`);
+    window.dispatchEvent(new Event('studio-route-changed'));
       listDesigns().catch(error => notify(error.message));
       loadAssets();
     } catch (error) {
@@ -431,7 +525,6 @@
     } finally {
       saving = false;
       renderJobs();
-      if (dirty && !conflict && editSequence !== sequence) saveTimer = setTimeout(() => saveDraft(), 700);
     }
   }
   $('scene-form').addEventListener('submit', event => event.preventDefault());
@@ -444,6 +537,7 @@
     if (['soundtrack-asset','soundtrack-mode','duration-mode'].includes(event.target.id)) renderMusicPicker();
     changed();
   });
+  $('save-design').addEventListener('click', () => saveDraft());
   $('save-retry').addEventListener('click', () => saveDraft());
   $('save-copy').addEventListener('click', () => saveDraft(true));
   $('save-reload').addEventListener('click', async () => {
@@ -595,7 +689,7 @@
     const outstanding = jobs.filter(job => ['queued', 'running', 'cancelling'].includes(job.state));
     const busy = outstanding.length >= 8;
     const active = jobs.find(job => ['running', 'cancelling'].includes(job.state));
-    $('generation-status').textContent = !jobsLoaded ? 'Shared queue · loading…' : `Shared queue · ${outstanding.length}/8 outstanding · ${active ? `${active.design_snapshot.name}: ${active.state} · ${active.progress}%` : 'Renderer available'}${jobsCurrent ? '' : ' · status stale'}`;
+    $('generation-status').textContent = !jobsLoaded ? 'Shared queue · loading…' : `${outstanding.length ? `Generating ${outstanding.length} video${outstanding.length === 1 ? '' : 's'}` : 'Generation activity'}${active ? ` · ${active.progress}%` : ''}${jobsCurrent ? '' : ' · unavailable'}`;
     $('generation-queue').replaceChildren();
     if (!outstanding.length) {
       const empty = document.createElement('p'); empty.textContent = jobsLoaded ? 'No outstanding work. Completed and failed attempts are in each design’s history.' : 'Loading generation status…'; $('generation-queue').append(empty);
@@ -605,20 +699,31 @@
       const label = document.createElement('p'); label.textContent = `${job.design_snapshot.name} · captured draft v${job.design_snapshot.version} · ${job.state}${job.queue_position ? ` · queue #${job.queue_position}` : ` · ${job.progress}%`}`;
       const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'preview-button studio-authoring'; cancel.textContent = job.state === 'cancelling' ? 'Cancelling…' : 'Cancel generation'; cancel.disabled = !jobsCurrent || job.state === 'cancelling';
       cancel.addEventListener('click', async () => { cancel.disabled = true; try { await request(`/api/generator/jobs/${job.id}/cancel`, 'POST', {}); await loadJobs(); } catch (error) { queueError(error.message); cancel.disabled = false; } });
-      row.append(label, cancel); $('generation-queue').append(row);
+      row.append(label);
+      if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
+      row.append(cancel); $('generation-queue').append(row);
     }
     if (!draft) {
       historySignature = '';
       if (focusContainer === 'generation-queue') $('generation-status').focus({preventScroll: true});
       return;
     }
+    const videoSummary = window.mediaPresentation.latestDesignVideo(draft, jobs, dirty);
+    $('latest-video-name').textContent = videoSummary ? window.mediaPresentation.renderName(videoSummary.job) : 'No video generated yet';
+    $('latest-video-detail').textContent = videoSummary ? `${window.mediaPresentation.capturedMusic(videoSummary.job,assets,window.musicPlaylists?.catalog()||[])} · ${window.mediaPresentation.date(videoSummary.job.created_at)} · ${videoSummary.match}` : 'Generate to review this design with animation and music.';
+    $('review-latest-video').hidden = !videoSummary;
+    $('review-latest-video').disabled = !jobsCurrent || !mediaRevisions.some(media => media.id === videoSummary?.job.media_revision && media.state === 'ready');
+    $('save-design').disabled = !dirty || saving || deleting || conflict || jobRequest;
+    $('save-design').textContent = saving ? 'Saving…' : 'Save changes';
+    $('generate-design').hidden = !dirty && videoSummary?.match === 'Matches current design' && mediaRevisions.some(media => media.id === videoSummary.job.media_revision && media.state === 'ready');
     $('generate-design').disabled = !jobsCurrent || deleting || dirty || saving || conflict || jobRequest || busy;
     $('generation-save-hint').textContent = dirty || saving || conflict
       ? 'Save and resolve conflicts before generating. Your local edits are retained.'
       : `Generate saved draft v${draft.version}. Later edits leave the captured revision unchanged.`;
     const stagePhase = stageStatus.stage === 'ENDING' && stageStatus.ending?.draining ? 'ENDING · finishing destination writes' : stageStatus.stage === 'OFF' && stageStatus.ending?.completed ? 'Ending completed · destination results are in live control' : stageStatus.stage || 'Status unavailable';
     $('generation-stage-status').textContent = `${stagePhase}${stageStatus.mode === 'preview_only' ? ' · PREVIEW ONLY — NOT BROADCASTING' : stageStatus.mode === 'real' ? ' · real session' : ''}. Generation does not change stage, delivery, or completion.`;
-    const nextHistory = JSON.stringify([jobs, draft, dirty, saving, conflict, deleting, jobRequest, jobsCurrent, stageSelections, stageStatus.stage, stageStatus.source, stageStatus.mode, stageStatus.media, stageStatus.return_stage, stageStatus.return_media, stageStatus.ending, mediaRevisions]);
+    const nextHistory = JSON.stringify([jobs, [draft.id,draft.version,draft.stage], dirty, saving, conflict, deleting, jobRequest, jobsCurrent, stageSelections, stageStatus.stage, stageStatus.source, stageStatus.mode, stageStatus.media, stageStatus.return_stage, stageStatus.return_media, stageStatus.ending, mediaRevisions]);
+    if(namingJob)return;
     if (nextHistory === historySignature) return;
     historySignature = nextHistory;
     const relevant = jobs.filter(job => job.design_snapshot.id === draft.id).sort((a, b) => b.sequence - a.sequence);
@@ -644,8 +749,9 @@
     $('generation-summary').classList.toggle('stale', !jobsCurrent);
     $('preview-last-ready').hidden = !lastReadyJob;
     $('preview-last-ready').disabled = !jobsCurrent || readyMedia?.state !== 'ready';
-    $('generation-history-heading').textContent = `Design history · ${relevant.length} attempt${relevant.length === 1 ? '' : 's'}`;
-    $('generation-jobs').replaceChildren();
+    $('generation-history-heading').textContent = `Older videos · ${relevant.filter(job=>job!==lastReadyJob&&job!==latest).length}`;
+    $('generation-history').hidden=!relevant.some(job=>job!==lastReadyJob&&job!==latest);
+    $('generation-jobs').replaceChildren(); $('latest-generation').replaceChildren();
     if (!relevant.length) {
       const empty = document.createElement('p'); empty.className = 'stage-help'; empty.textContent = jobsLoaded ? 'No generated results for this design yet. Generate its saved draft on desktop, then review the exact prepared output here.' : 'Loading design generation history…'; $('generation-jobs').append(empty);
     }
@@ -662,7 +768,7 @@
       if (job.mix_gain != null) {
         const gain = document.createElement('p');
         gain.textContent = `Whole-mix gain: ${(job.mix_gain * 100).toFixed(2)}%${job.mix_gain < 1 ? ' · fixed peak protection; relative levels preserved' : ' · requested levels retained'}`;
-        row.append(gain);
+        technical.append(gain);
       }
       if (job.message) { const message = document.createElement('p'); message.textContent = job.message; row.append(message); }
       if (['failed', 'interrupted', 'cancelled'].includes(job.state)) {
@@ -683,7 +789,7 @@
         const returning = stageStatus.return_media?.revision === job.media_revision;
         const newer = job.design_snapshot.id === draft.id && job.design_snapshot.version < draft.version;
         detail.textContent = ` ${media?.state || 'unavailable'} · ${selected.length ? `selected for next ${selected.join(' / ')}` : 'not selected for a stage'} · ${onAir ? stageStatus.mode === 'preview_only' ? 'playing in rehearsal' : 'on-air source' : 'not the on-air source'}${returning ? ` · retained for return to ${stageStatus.return_stage}` : ''}${newer ? ' · newer saved draft exists' : ''}${job.design_snapshot.id === draft.id && dirty ? ' · unsaved local edits' : ''}${media?.error ? ` · ${media.error}` : ''}`;
-        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview exact revision'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
+        const preview = document.createElement('button'); preview.type = 'button'; preview.className = 'preview-button'; preview.textContent = 'Preview video'; preview.disabled = media?.state !== 'ready'; preview.addEventListener('click', () => previewGenerated(job)); row.append(detail, preview);
         const download = document.createElement('a'); download.href = `/api/library/revisions/${encodeURIComponent(job.media_revision)}/preview`; download.download = 'presentation.mp4'; download.textContent = 'Download one pass'; download.className = 'preview-button'; row.append(download);
         if (media?.state === 'ready') { const thumbnail = document.createElement('video'); thumbnail.className = 'render-thumbnail'; thumbnail.muted = true; thumbnail.playsInline = true; thumbnail.preload = 'metadata'; thumbnail.src = `/api/library/revisions/${encodeURIComponent(job.media_revision)}/preview#t=0.1`; thumbnail.setAttribute('aria-label', window.mediaPresentation.renderName(job)); row.prepend(thumbnail); }
         const mediaID = document.createElement('code'); mediaID.textContent = job.media_revision; technical.append(mediaID);
@@ -691,17 +797,24 @@
         if (media?.state === 'ready' && ['prestream', 'ending'].includes(kind)) {
           const actions = document.createElement('div'); actions.className = 'generator-actions';
           const addLink = (action, text) => {
-            const link = document.createElement('a'); link.className = 'preview-button'; link.target = '_blank'; link.rel = 'noopener'; link.textContent = text;
+            const link = document.createElement('a'); link.className = 'preview-button';  link.textContent = text;
             const params = {media_revision: job.media_revision, media_stage: kind, media_action: action};
             if (action !== 'select_next') Object.assign(params, {server_id: stageStatus.server_id, context: stageStatus.context});
-            link.href = action === 'select_next' ? `/studio?collection=setup&stage=${kind}&render=${encodeURIComponent(job.media_revision)}` : `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
+            link.href = action === 'select_next' ? `/setup?stage=${kind}&render=${encodeURIComponent(job.media_revision)}` : `/?${new URLSearchParams(params)}#media-intent`; actions.append(link);
           };
-          addLink('select_next', `Select for next ${stageName}`);
+          addLink('select_next', `Use for ${kind === 'prestream' ? 'Starting soon' : 'Ending'}`);
           if (stageStatus.stage === stageName && stageStatus.media?.revision && stageStatus.media.revision !== job.media_revision && (kind !== 'ending' || (!stageStatus.ending?.draining && !stageStatus.ending?.completed))) addLink('replace_now', `Review Replace ${stageName} now`);
           if (kind === 'prestream' && stageStatus.return_stage === 'PRESTREAM' && stageStatus.return_media?.revision && stageStatus.return_media.revision !== job.media_revision) addLink('replace_on_return', 'Review Replace PRESTREAM on return');
           row.append(actions);
         }
       }
+      const rename = document.createElement('button'); rename.type='button';rename.className='preview-button studio-authoring';rename.textContent='Name this video';
+      rename.addEventListener('click',()=>{
+        namingJob=job.id;
+        const form=document.createElement('form'),input=document.createElement('input'),label=document.createElement('label'),save=document.createElement('button');
+        label.textContent='Video name';input.value=job.name||'';input.required=true;input.maxLength=180;label.append(input);save.textContent='Save name';save.type='submit';save.className='preview-button';const cancel=document.createElement('button');cancel.type='button';cancel.className='preview-button';cancel.textContent='Cancel';cancel.onclick=()=>{namingJob='';historySignature='';renderJobs();};form.append(label,save,cancel);rename.replaceWith(form);input.focus();
+        form.addEventListener('submit',async event=>{event.preventDefault();try{await request(`/api/generator/jobs/${job.id}/name`,'PUT',{name:input.value});namingJob='';historySignature='';await loadJobs();}catch(error){generationError(error.message);}});
+      });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'preview-button studio-authoring'; remove.textContent = 'Delete result';
       remove.disabled = ['running', 'cancelling'].includes(job.state);
       remove.addEventListener('click', async () => {
@@ -714,15 +827,17 @@
           generationError(''); notify(result.retained_shared_media.length ? 'Result deleted. Shared output remains available to other results.' : 'Result and generated file deleted. Design and uploads kept.');
         } catch (error) { generationError(error.message); remove.disabled = false; }
       });
-      row.append(remove);
-      $('generation-jobs').append(row);
+      const more=document.createElement('details'),summary=document.createElement('summary');more.className='row-maintenance studio-authoring';summary.textContent='More';more.append(summary,rename,remove);row.append(more);row.prepend(cleanupCheckbox(job,selectedVideos,'jobs'));
+      (job === lastReadyJob || job === latest ? $('latest-generation') : $('generation-jobs')).append(row);
     }
+    cleanupControl('video-cleanup',selectedVideos,'jobs',loadJobs);
     if (focusJob && focusContainer) {
       const row = [...$(focusContainer).querySelectorAll('[data-job-id]')].find(item => item.dataset.jobId === focusJob);
       const nextFocus = [...(row?.querySelectorAll('button,a') || [])].find(button => button.textContent === focusAction);
       (nextFocus || $(focusContainer === 'generation-queue' ? 'generation-status' : 'generation-history-heading')).focus({preventScroll: true});
     }
   }
+  $('review-latest-video').addEventListener('click', () => { showPreviewPanel('results'); $('preview-last-ready').click(); });
   $('preview-last-ready').addEventListener('click', () => { if (lastReadyJob && jobsCurrent && mediaRevisions.some(media => media.id === lastReadyJob.media_revision && media.state === 'ready')) previewGenerated(lastReadyJob); });
   function queueError(message) { $('generation-queue-error').textContent = message; $('generation-queue-error').hidden = !message; }
   function generationError(message) { $('generation-error').textContent = message; $('generation-error').hidden = !message; }
@@ -757,7 +872,7 @@
   $('generated-video').addEventListener('error', () => { $('generated-playback-status').textContent = 'Exact output preview unavailable. Check the active profile and try Preview exact revision again.'; });
   $('generate-design').addEventListener('click', async () => {
     if (!draft || deleting || dirty || saving || conflict || jobRequest) return;
-    jobRequest = true; generationError(''); renderJobs();
+    showPreviewPanel('results'); jobRequest = true; generationError(''); renderJobs();
     try { await request('/api/generator/jobs', 'POST', {design_id: draft.id, version: draft.version}); await loadJobs(); }
     catch (error) { generationError(error.message); }
     finally { jobRequest = false; renderJobs(); }
@@ -792,7 +907,7 @@
       const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind === 'audio' ? `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds` : asset.kind} · ${asset.uses.length ? `Used by ${[...new Set(asset.uses.map(use => use.name))].join(', ')}` : 'Not used'}`;
       if (asset.kind === 'audio') {
         summary.replaceChildren(); summary.className = 'music-row-summary';
-        for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? [...new Set(asset.uses.map(use => use.name))].join(', ') : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
+        for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? `Used in ${asset.uses.length} saved ${asset.uses.length === 1 ? 'item' : 'items'}` : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
       }
       const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       img.addEventListener('error', () => assetError(`Preview unavailable for ${asset.name}. Refresh assets to check its exact revision.`));
@@ -816,7 +931,8 @@
     }
     renderImagePicker(); renderVideoPicker(); renderMusicPicker(); renderThemeAssets();
   }
-  $('music-upload-open').addEventListener('click', () => { showCollection('media'); $('asset-kind').value = 'audio'; $('asset-kind').dispatchEvent(new Event('change')); $('asset-file').focus(); });
+  $('music-upload-open').addEventListener('click', () => window.openAssetUpload('audio',$('music-upload-open')));
+  window.assetUploads={busy:()=>assetUploading};
   async function loadAssets() {
     if (assetsFetching) return;
     assetsFetching = true;
@@ -1150,7 +1266,7 @@
   $('theme-adopt').addEventListener('click', () => {
     if (!draft || !editingTheme || themeSaving) return;
     draft.theme = themeRef(themeKey(editingTheme)); renderDesignTheme(); changed(); renderCollectionContext();
-    $('theme-adoption-state').textContent = `Adopted ${editingTheme.name} revision ${editingTheme.revision} in ${draft.name}. Revalidation and autosave pending; prepared and on-air revisions are unchanged.`;
+    $('theme-adoption-state').textContent = `Adopted ${editingTheme.name} revision ${editingTheme.revision} in ${draft.name}. Review and save the design to keep this change; prepared and on-air revisions are unchanged.`;
   });
   $('design-theme').addEventListener('change', event => { event.stopPropagation(); if (!draft) return; draft.theme = themeRef($('design-theme').value); renderDesignTheme(); changed(); });
   $('apply-theme-update').addEventListener('click', () => {
@@ -1159,13 +1275,13 @@
   });
   $('preview-time').addEventListener('input', schedulePreview);
 
-  window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || saving || themeDirty || themeSaving)) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || saving || namingJob || themeDirty || themeSaving)) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {
     try {
       await listDesigns();
       await loadTemplates();
       await loadThemes();
-      if (requestedDesign) openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(requestedDesign)}`)).json());
+      if (requestedDesign && requestedCollection !== 'brb') openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(requestedDesign)}`)).json());
       else showCollection(['setup','designs','media','music','themes','templates','brb'].includes(requestedCollection) ? requestedCollection : 'setup');
     } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
   })();

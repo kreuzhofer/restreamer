@@ -38,3 +38,13 @@ test('assignment changes only the chosen stage and preserves clip shortcuts and 
   assert.equal(ui.selection(saved,'brb','new').ending,'end');
   assert.throws(() => ui.selection(saved,'unknown','new'));
 });
+test('latest video summary stays tied to the saved design and exposes newer edits',()=>{
+ const draft={id:'design-a',version:3};
+ const ready=job(3,'ready',{version:3});
+ const jobs=[ready,{...job(4,'pending',{version:3}),state:'running'},job(5,'other',{id:'other-design',version:3})];
+ assert.equal(ui.latestDesignVideo(draft,jobs,false).job.media_revision,'ready');
+ assert.equal(ui.latestDesignVideo(draft,jobs,false).match,'Matches current design');
+ assert.equal(ui.latestDesignVideo(draft,jobs,true).match,'Based on earlier changes');
+ assert.equal(ui.latestDesignVideo({...draft,version:4},jobs,false).match,'Based on earlier changes');
+ assert.equal(ui.latestDesignVideo({id:'empty'},jobs,false),null);
+});

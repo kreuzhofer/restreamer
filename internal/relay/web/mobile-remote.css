@@ -28,14 +28,14 @@
   .live-primary .stage-summary>div:last-child{display:flex;align-items:baseline;gap:6px}.live-primary .stage-summary strong{font-size:11px}.live-primary .stage-label{margin:0}
   .live-primary #stage-media{display:none}
   .live-primary .stage-buttons{margin:4px 0 8px;gap:8px}.live-primary .stage-button{min-height:58px;font-size:14px}
-  .live-primary .stage-secondary{order:1;gap:8px}.stage-secondary-actions{width:100%}.stage-secondary-actions button{flex:1}
+  .live-primary .stage-secondary{order:0;gap:8px}.stage-secondary-actions{width:100%}.stage-secondary-actions button{flex:1}
   .live-primary .live-clips{order:2;margin-top:10px;border-top:1px solid var(--border)}
   .live-primary #clip-playback-controls{order:3}.live-primary #stage-help{order:4}.live-primary #command-status{order:5}
   .live-primary .clip-shortcuts{max-height:none}.live-clips-heading{flex-wrap:nowrap}.live-clips-heading h3{font-size:11px}.live-clips-heading button{font-size:11px}
   #live-workspace .preview-button,#live-workspace .danger-button,#live-workspace summary,#live-workspace .toggle{min-height:44px}
   #live-workspace summary{display:flex;align-items:center}
   #live-workspace .toggle{min-width:48px}#live-destinations .target-panel .badge{font-size:10px}#live-destinations .target-brief{font-size:11px}
-  #rehearsal-label,.clip-playback-controls .check-label{min-height:44px}.check-label input{width:20px;height:20px}
+  .clip-playback-controls .check-label{min-height:44px}.check-label input{width:20px;height:20px}
   #brb-settings{display:none}
   .prepared-media-drawer button,.prepared-media-drawer select,.prepared-media-drawer input,.prepared-media-drawer summary{min-height:44px}
   .prepared-media-drawer input,.prepared-media-drawer select{font-size:16px}.prepared-media-heading{position:sticky;top:-18px;background:var(--panel);z-index:2;padding-top:8px}

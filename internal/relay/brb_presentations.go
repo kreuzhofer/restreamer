@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,8 @@ func (s *Server) brbPresentationHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
+		Theme        *mediaauthor.ThemeRef   `json:"theme,omitempty"`
+		Text         *string                 `json:"text,omitempty"`
 		Base         string                  `json:"base_generation"`
 		Name         string                  `json:"name"`
 		DurationMode string                  `json:"duration_mode"`
@@ -44,6 +47,19 @@ func (s *Server) brbPresentationHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings := media.settings
+	if (input.Theme == nil) != (input.Text == nil) {
+		http.Error(w, "Choose both a theme and a message", 422)
+		return
+	}
+	if input.Text != nil {
+		normalized, err := normalizeBRBText(*input.Text)
+		if err != nil || strings.TrimSpace(normalized) == "" {
+			http.Error(w, "Choose a valid BRB message", 422)
+			return
+		}
+		settings.Text = normalized
+		settings.Music, settings.CustomImage = false, false
+	}
 	if !validAssetName(input.Name) || (input.DurationMode != "fixed" && input.DurationMode != "music") {
 		http.Error(w, "Choose a name and a fixed or music-driven duration", 422)
 		return
@@ -59,6 +75,17 @@ func (s *Server) brbPresentationHTTP(w http.ResponseWriter, r *http.Request) {
 	g := s.generator
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if input.Theme != nil {
+		theme, err := g.resolveTheme(*input.Theme)
+		if err != nil {
+			http.Error(w, "Choose an available theme", 422)
+			return
+		}
+		settings.Theme = &theme
+		d.Theme = *input.Theme
+		d.Scenes[0].Text = settings.Text
+		d.Scenes[0].DurationSeconds = float64(themedBRBSeconds(theme.Style))
+	}
 	issues := append(g.assetIssues(d), g.musicIssues(d, settings.Profile.FPS, settings.Profile.SampleRate)...)
 	if len(issues) > 0 {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
@@ -72,7 +99,15 @@ func (s *Server) brbPresentationHTTP(w http.ResponseWriter, r *http.Request) {
 	j.Kind = "brb"
 	j.Design.Stage = "brb"
 	j.BRBFrames = len(media.video.frames)
-	sum := sha256.Sum256([]byte(input.Base))
+	if input.Theme != nil {
+		j.BRBFrames = themedBRBSeconds(settings.Theme.Style) * settings.Profile.FPS
+		j.BRBDraft = &settings
+	}
+	identity := []byte(input.Base)
+	if input.Theme != nil {
+		identity = []byte("brb-design")
+	}
+	sum := sha256.Sum256(identity)
 	j.Design.ID = hex.EncodeToString(sum[:16])
 	j.Design.Version = 1
 	if settings.Theme != nil {
@@ -81,6 +116,18 @@ func (s *Server) brbPresentationHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := g.captureMusicPresentation(&j); err != nil {
 		http.Error(w, err.Error(), 422)
+		return
+	}
+	if input.Theme != nil {
+		captured, _ := json.Marshal(struct {
+			Text  string
+			Theme *mediaauthor.Theme
+		}{settings.Text, settings.Theme})
+		digest := sha256.Sum256(captured)
+		j.BRBDigest = hex.EncodeToString(digest[:])
+		g.jobsMu.Lock()
+		defer g.jobsMu.Unlock()
+		g.admitJob(w, j)
 		return
 	}
 	captureRoot := filepath.Join(filepath.Dir(g.root), "captures")
@@ -118,6 +165,14 @@ func jobDesignBounds(j GenerationJob) bool {
 		if d.Stage != "brb" || !validRevisionID(j.BRBDigest) || j.BRBFrames < 1 || j.BRBFrames > 600*j.Profile.FPS {
 			return false
 		}
+		if j.BRBDraft != nil {
+			if j.BRBDraft.Theme == nil || j.BRBDraft.CustomImage || j.BRBDraft.Music || j.BRBDraft.Profile != j.Profile {
+				return false
+			}
+			if _, err := normalizeBRBText(j.BRBDraft.Text); err != nil {
+				return false
+			}
+		}
 		d.Stage = "prestream"
 	} else if j.Kind != "" {
 		return false
@@ -127,9 +182,21 @@ func jobDesignBounds(j GenerationJob) bool {
 func (s *Server) retainBRBVisual(ctx context.Context, j *GenerationJob) (string, error) {
 	source := s.generator.brbCapturePath(j.ID)
 
-	digest, err := mediaDigest(source)
-	if err != nil || digest != j.BRBDigest {
-		return "", errors.New("Captured BRB visual is missing or changed")
+	if j.BRBDraft != nil {
+		dir, err := os.MkdirTemp(s.cfg.BRB.Directory, "assets-")
+		if err != nil {
+			return "", errors.New("Cannot create draft BRB workspace")
+		}
+		defer os.RemoveAll(dir)
+		if _, err = s.encodeBRBSettings(ctx, *j.BRBDraft, dir); err != nil {
+			return "", err
+		}
+		source = filepath.Join(dir, "video.flv")
+	} else {
+		digest, err := mediaDigest(source)
+		if err != nil || digest != j.BRBDigest {
+			return "", errors.New("Captured BRB visual is missing or changed")
+		}
 	}
 	dir := filepath.Join(s.generator.workRoot, j.ID)
 	if err := os.Mkdir(dir, 0700); err != nil {

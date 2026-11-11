@@ -18,10 +18,22 @@ jobs:
           node-version: '24'
       - run: make check-brb-artwork check-arcade-artwork check-neon-artwork check-workshop-artwork check-pacman-artwork
       - run: make check-web
+      - run: make check-streamdeck
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restreamer-streamdeck-${{ github.sha }}
+          path: integrations/streamdeck/dist/*.streamDeckPlugin
+          if-no-files-found: error
+      - name: Check fresh Ubuntu installer bootstrap
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,exec,size=32m -v "$PWD:/repo:ro" ubuntu:24.04 bash /repo/tests/install-bootstrap-smoke.sh
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: make check-continuous-benchmark
+        env:
+          REQUIRE_FFMPEG_TESTS: '1'
+          CONTINUOUS_BENCH_LONG_TESTS: '1'
       # The real-media race suite can exceed Go's default package-wide 10m limit.
       # Keep a bounded deadline and individual test timings for diagnosis.
       - run: go test -race -v -timeout 20m ./...
@@ -33,6 +45,8 @@ jobs:
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.build.yml config --quiet
       - run: docker build -t restreamer:test .
+      - name: Smoke test the standalone HTTPS installer
+        run: bash tests/install-smoke.sh
       - name: Smoke test container, dashboard, and persistent controls
         shell: bash
         run: |
@@ -46,7 +60,7 @@ jobs:
             docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
               -v restreamer-smoke-events:/events -e EVENTS_DIRECTORY=/events \
-              -e TARGET_STATE_FILE=/data/targets.json -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
+              -e TARGET_STATE_FILE=/data/targets.json -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               "${env_args[@]}" restreamer:test
             # Startup prepares BRB media before opening HTTP, including after a
             # restart. Docker can reset connections while the port is not ready.
@@ -226,7 +240,7 @@ jobs:
             docker run -d --name restreamer-arm64-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-arm64-state:/data \
               -e INGEST_STREAM_KEY=ci-test-key-123456 -e TARGET_STATE_FILE=/data/targets.json \
-              -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb \
+              -e BRB_DIRECTORY=/data/brb \
               -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               restreamer:arm64-test
             for attempt in {1..60}; do

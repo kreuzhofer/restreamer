@@ -130,8 +130,11 @@ func (s *Server) eventDeleteHTTP(w http.ResponseWriter, r *http.Request) {
 	s.outputs = kept
 	s.outputsMu.Unlock()
 	s.broadcast.hub.mu.Lock()
-	s.broadcast.hub.outputs = append([]*output{}, kept...)
+	s.broadcast.hub.outputs = s.pathOutputs("passthrough")
 	s.broadcast.hub.mu.Unlock()
+	s.broadcast.continuous.hub.mu.Lock()
+	s.broadcast.continuous.hub.outputs = s.pathOutputs("continuous")
+	s.broadcast.continuous.hub.mu.Unlock()
 	s.broadcast.control.version++
 	s.broadcast.mu.Unlock()
 	broadcastLocked = false

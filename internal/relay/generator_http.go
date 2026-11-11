@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -26,7 +27,7 @@ func generatorJSON(w http.ResponseWriter, status int, value any) {
 
 func (s *Server) generatorAvailable(w http.ResponseWriter) bool {
 	if s.generator == nil {
-		http.Error(w, "Enable BRB and its video library to author media", 409)
+		http.Error(w, "Media authoring is unavailable; check server startup and media storage", 409)
 		return false
 	}
 	return true
@@ -97,6 +98,11 @@ func (s *Server) generatorDesignsHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
+	theme, _ := g.resolveTheme(draft.Theme)
+	s.library.mu.Lock()
+	fps := s.library.profile.FPS
+	s.library.mu.Unlock()
+	draft, _ = resolveAnimationTiming(draft, theme, fps)
 	draft.ID = hex.EncodeToString(id[:])
 	draft.Version = 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -149,6 +155,11 @@ func (s *Server) generatorDesignHTTP(w http.ResponseWriter, r *http.Request) {
 		generatorJSON(w, 422, map[string]any{"issues": issues})
 		return
 	}
+	theme, _ := g.resolveTheme(draft.Theme)
+	s.library.mu.Lock()
+	fps := s.library.profile.FPS
+	s.library.mu.Unlock()
+	draft, _ = resolveAnimationTiming(draft, theme, fps)
 	draft.ID = current.ID
 	draft.Version = current.Version + 1
 	draft.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -186,7 +197,12 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	s.generator.mu.Lock()
 	theme, themeErr := s.generator.resolveTheme(draft.Theme)
 	s.generator.mu.Unlock()
-	issues := mediaauthor.ValidateWithTheme(draft, theme, profile.Width, profile.Height)
+	draft, animationIssues := resolveAnimationTiming(draft, theme, profile.FPS)
+	validationDraft := draft
+	if draft.Stage == "brb" {
+		validationDraft.Stage = "prestream"
+	}
+	issues := append(animationIssues, mediaauthor.ValidateWithTheme(validationDraft, theme, profile.Width, profile.Height)...)
 	if themeErr != nil {
 		issues = append(issues, mediaauthor.Issue{Field: "theme", Message: themeErr.Error()})
 	}
@@ -206,7 +222,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/generator/validate" {
 		previewIssues := append(append([]mediaauthor.Issue{}, issues...), mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)
 		issues = append(issues, mediaauthor.ValidateTiming(draft, profile.FPS)...)
-		generatorJSON(w, 200, map[string]any{"issues": issues, "preview_issues": previewIssues, "profile": profile, "duration_seconds": duration})
+		generatorJSON(w, 200, map[string]any{"issues": issues, "preview_issues": previewIssues, "profile": profile, "duration_seconds": duration, "animation_loop_seconds": animationLoopSeconds(theme, draft.Stage), "scenes": draft.Scenes})
 		return
 	}
 	issues = append(issues, mediaauthor.ValidatePreviewTiming(draft, profile.FPS)...)
@@ -253,11 +269,13 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if animatedArtwork(theme.Style) {
 		artworkFrame := frame
-		if draft.Stage == "ending" && mediaauthor.IsWorkshopArtwork(theme.Style.Artwork) {
-			plan, _ := mediaauthor.PlanTiming(draft, profile.FPS)
-			artworkFrame += plan.Scenes[sceneIndex].Start
-		}
-		inputs.Background, err = artworkPreviewFrame(r.Context(), profile, artworkFrame, theme.Style, draft.Stage)
+		plan, _ := mediaauthor.PlanTiming(draft, profile.FPS)
+		artworkFrame += plan.Scenes[sceneIndex].Start
+		err = s.preparation.run(r.Context(), 30*time.Second, nil, func(attempt context.Context) error {
+			var attemptErr error
+			inputs.Background, attemptErr = artworkPreviewFrame(attempt, profile, artworkFrame, theme.Style, draft.Stage)
+			return attemptErr
+		})
 		if err != nil {
 			http.Error(w, err.Error(), 422)
 			return

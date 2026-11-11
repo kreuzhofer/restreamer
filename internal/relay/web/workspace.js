@@ -4,10 +4,12 @@
   const onDashboard = !!el('live-workspace');
   let lastUpdate = 0, online = false, snapshot;
   function navigate(focus = false) {
-    const view = location.pathname === '/settings' ? 'settings' : onDashboard ? 'live' : 'studio';
+    const route = window.studioRouting?.parse(new URL(location.href));
+    const view = route?.page || (location.pathname === '/settings' ? 'settings' : onDashboard ? 'live' : 'studio');
+    const navView = view === 'editor' ? (route.back.startsWith('/library') ? 'library' : 'setup') : view;
     document.body.dataset.workspace = view;
     document.querySelectorAll('[data-workspace]').forEach(link => {
-      if (link.dataset.workspace === view) link.setAttribute('aria-current', 'page');
+      if (link.dataset.workspace === navView) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
     document.querySelectorAll('[data-workspace-panel]').forEach(panel => { panel.hidden = panel.dataset.workspacePanel !== view; });
@@ -18,9 +20,9 @@
       heading?.focus();
     }
   }
-  document.querySelectorAll('.workspace-nav a, .workspace-alert-link, a.brand, a[href^="/studio"]').forEach(link => link.addEventListener('click', event => {
+  document.querySelectorAll('.workspace-nav a, .workspace-alert-link, a.brand, a[href^="/studio"], a[href^="/setup"], a[href^="/library"], a[href^="/editor"]').forEach(link => link.addEventListener('click', event => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    if (!onDashboard || link.dataset.workspace === 'studio' || link.getAttribute('href')?.startsWith('/studio')) {
+    if (!onDashboard || ['studio','setup','library'].includes(link.dataset.workspace) || /^\/(studio|setup|library|editor)/.test(link.getAttribute('href') || '')) {
       // Ask the existing form guards before replacing the document. Browser
       // beforeunload dialogs can be suppressed, so workspace departures get an
       // explicit review. This synthetic event never performs navigation.
@@ -37,6 +39,7 @@
     navigate(true);
   }));
   window.addEventListener('popstate', () => navigate(true));
+  window.addEventListener('studio-route-changed', () => navigate());
   navigate();
 
   function alerts(stale) {
@@ -47,6 +50,7 @@
       messages.push(lastUpdate ? 'Status is stale. Last known values do not confirm current delivery. Reconnecting automatically.' : 'Connecting to broadcast status. Live state is not available yet.');
       severity = 'warning';
     } else if (stage) {
+      if (stage.fallback_error) { messages.push(stage.fallback_error); severity='error'; }
       if (stage.error) { messages.push(stage.error); severity = 'error'; }
       if (stage.stage !== 'OFF' && stage.mode === 'real') {
         const eligible = (snapshot.outputs || []).filter(output => output.enabled && output.can_enable);
@@ -84,7 +88,7 @@
     if (data?.stage) {
       const stage = data.stage;
       el('workspace-stage').textContent = stage.stage || 'Unknown';
-      const sources = {off: 'None', obs: 'OBS', file: stage.media?.name || 'Prepared video', brb: stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB'};
+      const sources = {off: 'None', obs: 'OBS', file: stage.media?.name || 'Prepared video', brb: stage.emergency?'Emergency screen':stage.fallback_media?.name||(stage.stage === 'BRB' ? 'Deliberate BRB' : 'Fallback BRB')};
       el('workspace-source').textContent = sources[stage.source] || 'Unknown';
       const rehearsal = stage.mode === 'preview_only' || stage.pending?.mode === 'preview_only';
       el('workspace-mode').textContent = rehearsal ? 'REHEARSAL · destination delivery blocked' : stage.stage === 'OFF' ? 'OFF · delivery stopped' : 'Broadcast · relay delivery';

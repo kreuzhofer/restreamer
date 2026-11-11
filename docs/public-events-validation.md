@@ -49,3 +49,5 @@ reports “short ending did not finish black.” The same failure reproduces on 
 unchanged starting commit `c61349393efab38b0668f72387d8321a71df43b0` with this
 FFmpeg version. That commit's Linux CI passed. The final implementation still
 requires successful GitHub CI for its exact SHA, including image publication.
+The integration with newer main also includes its existing exact-black-ending
+fix; the integrated full suite is checked separately from the original baseline.

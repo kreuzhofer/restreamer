@@ -12,7 +12,7 @@ import (
 
 func (s *Server) libraryStatus(w http.ResponseWriter, r *http.Request) {
 	if s.library == nil {
-		http.Error(w, "Enable BRB to use the video library and its output profile", 409)
+		http.Error(w, "The video library is unavailable; check server startup and media storage", 409)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -25,7 +25,7 @@ func (s *Server) libraryUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	l := s.library
 	if l == nil {
-		http.Error(w, "Enable BRB before uploading videos", 409)
+		http.Error(w, "The video library is unavailable; check server startup and media storage", 409)
 		return
 	}
 	if !l.uploadMu.TryLock() {

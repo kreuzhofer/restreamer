@@ -1,0 +1,168 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.kreuzhofer.restreamer",
+  "Name": "Restreamer",
+  "Version": "1.2.2.0",
+  "Author": "Restreamer contributors",
+  "Description": "Operate Restreamer broadcast stages and monitor relay delivery.",
+  "Category": "Restreamer",
+  "CategoryIcon": "images/action",
+  "Icon": "images/plugin",
+  "CodePath": "bin/plugin.js",
+  "PropertyInspectorPath": "ui/inspector.html",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "7.1"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Actions": [
+    {
+      "UUID": "com.kreuzhofer.restreamer.prestream",
+      "Name": "Prestream",
+      "Icon": "images/prestream",
+      "Tooltip": "Prestream — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/prestream",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.go-live",
+      "Name": "Go live",
+      "Icon": "images/go-live",
+      "Tooltip": "Go live — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/go-live",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.brb-return",
+      "Name": "BRB / Return",
+      "Icon": "images/brb-return",
+      "Tooltip": "BRB / Return — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/brb-return",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.end-stream",
+      "Name": "End stream",
+      "Icon": "images/end-stream",
+      "Tooltip": "End stream — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/end-stream",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.play-clip",
+      "Name": "Play clip",
+      "Icon": "images/play-clip",
+      "Tooltip": "Play clip — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/play-clip",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.status",
+      "Name": "Status",
+      "Icon": "images/status",
+      "Tooltip": "Status — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/status",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.stop-now",
+      "Name": "Stop now",
+      "Icon": "images/stop-now",
+      "Tooltip": "Stop now — Restreamer",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/stop-now",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "com.kreuzhofer.restreamer.target-toggle",
+      "Name": "Target toggle",
+      "Icon": "images/target-toggle",
+      "Tooltip": "Hold two seconds, then release to enable or disable the selected destination",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "images/target-toggle",
+          "ShowTitle": false
+        }
+      ]
+    }
+  ]
+}

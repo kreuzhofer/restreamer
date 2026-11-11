@@ -14,7 +14,7 @@ import (
 func (s *Server) libraryDelete(w http.ResponseWriter, r *http.Request) {
 	l := s.library
 	if l == nil {
-		http.Error(w, "Enable BRB to manage the video library", 409)
+		http.Error(w, "The video library is unavailable; check server startup and media storage", 409)
 		return
 	}
 	var input struct {

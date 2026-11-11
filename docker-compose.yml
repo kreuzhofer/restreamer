@@ -8,11 +8,11 @@ services:
       - "${STATUS_BIND_ADDRESS:-127.0.0.1}:${STATUS_PORT:-8080}:8080"
     environment:
       # Optional one-time legacy migration; remove after the managed key is stored.
+      INGESTION_SERVER_URL: ${INGESTION_SERVER_URL:-}
       INGEST_STREAM_KEY: ${INGEST_STREAM_KEY:-}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       TARGET_STATE_FILE: /data/targets.json
-      BRB_ENABLED: "${BRB_ENABLED:-false}"
       BRB_DIRECTORY: /data/brb
       LIBRARY_DIRECTORY: /data/videos
       EVENTS_DIRECTORY: /events

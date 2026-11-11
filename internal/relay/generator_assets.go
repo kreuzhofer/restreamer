@@ -263,7 +263,7 @@ func (s *Server) assetUsesLocked(id string) ([]AssetUse, error) {
 		if stage.ReturnMedia != nil && stage.ReturnMedia.Revision == u.ID {
 			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "return", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
-		if selected.Prestream == u.ID || selected.Ending == u.ID || selected.BRB == u.ID {
+		if selected.Prestream == u.ID || selected.Ending == u.ID || selected.BRB == u.ID || selected.Fallback == u.ID {
 			uses = append(uses, AssetUse{AssetID: u.AssetID, Kind: "selection", ID: u.ID, Name: u.Name, Revision: u.Revision})
 		}
 	}

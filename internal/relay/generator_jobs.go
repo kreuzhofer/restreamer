@@ -18,7 +18,7 @@ import (
 	"github.com/kreuzhofer/restreamer/internal/mediaauthor"
 )
 
-const generatorRenderer = "go-png-ffmpeg-v4"
+const generatorRenderer = "go-png-ffmpeg-v5"
 const maxGeneratorJobs = 200
 const maxGeneratorOutstanding = 8
 const maxGeneratorSeconds = 600
@@ -28,6 +28,8 @@ const generatorTimeout = 15 * time.Minute
 // GenerationJob captures immutable inputs. Only state, progress, error and the
 // resulting media identity change after acceptance; drafts are never reread.
 type GenerationJob struct {
+	Name              string                 `json:"name,omitempty"`
+	BRBDraft          *brbSettings           `json:"brb_draft,omitempty"`
 	Kind              string                 `json:"kind,omitempty"`
 	BRBDigest         string                 `json:"brb_digest,omitempty"`
 	BRBFrames         int                    `json:"brb_frames,omitempty"`
@@ -176,7 +178,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 			}
 			continue
 		}
-		jobCtx, cancel := context.WithTimeout(ctx, generatorTimeout)
+		jobCtx, cancel := context.WithCancel(ctx)
 		g.cancel = cancel
 		job.State = "running"
 		job.Message = "Waiting for media preparation; live delivery continues."
@@ -192,20 +194,24 @@ func (s *Server) runGenerator(ctx context.Context) {
 		snapshot := *job
 		g.jobsMu.Unlock()
 		var revision string
-		release, err := s.preparation.acquire(jobCtx)
-		if err == nil {
+		err := s.preparation.run(jobCtx, generatorTimeout, func() {
+			g.jobsMu.Lock()
+			job.Message, job.Progress = broadcastCapacityMessage, 0
+			g.jobsMu.Unlock()
+		}, func(attempt context.Context) error {
 			g.jobsMu.Lock()
 			job.Message = "Rendering captured revision."
 			g.jobsMu.Unlock()
-			revision, err = s.renderPresentationJob(jobCtx, &snapshot, func(percent int) {
+			var err error
+			revision, err = s.renderPresentationJob(attempt, &snapshot, func(percent int) {
 				g.jobsMu.Lock()
 				defer g.jobsMu.Unlock()
 				if job.State == "running" {
 					job.Progress = percent
 				}
 			})
-			release()
-		}
+			return err
+		})
 		g.jobsMu.Lock()
 		job.MixGain = snapshot.MixGain
 		job.VisualRevision, job.VisualFingerprint, job.ReusedVisual = snapshot.VisualRevision, snapshot.VisualFingerprint, snapshot.ReusedVisual
@@ -216,7 +222,7 @@ func (s *Server) runGenerator(ctx context.Context) {
 		case ctx.Err() != nil:
 			job.State = "interrupted"
 			job.Error = "Server stopped during generation. Retry this captured revision explicitly when ready."
-		case errors.Is(jobCtx.Err(), context.DeadlineExceeded):
+		case errors.Is(err, context.DeadlineExceeded):
 			job.State = "failed"
 			job.Error = "Generation exceeded its 15 minute time limit. Shorten the design or reduce the active profile."
 		case err != nil:

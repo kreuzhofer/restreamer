@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,23 +144,34 @@ func TestDashboardCredentials(t *testing.T) {
 	}
 }
 
-func TestBRBConfigurationValidation(t *testing.T) {
-	base := strings.TrimSuffix(validJSON, "}") + `,"brb":{"enabled":"${BRB_TEST_ENABLED}","directory":"${BRB_TEST_DIR}","width":1920,"height":1080,"fps":25,"sample_rate":48000}}`
-	t.Setenv("BRB_TEST_ENABLED", "true")
-	t.Setenv("BRB_TEST_DIR", t.TempDir())
-	c, err := loadText(t, base)
-	if err != nil || !c.BRB.IsEnabled() || c.BRB.FPS != 25 {
-		t.Fatal("valid BRB config rejected", err)
-	}
-	for _, pair := range [][2]string{{`"fps":25`, `"fps":27`}, {`"width":1920`, `"width":1921`}, {`"sample_rate":48000`, `"sample_rate":96000`}, {`"directory":"${BRB_TEST_DIR}"`, `"directory":""`}} {
-		if _, err = loadText(t, strings.Replace(base, pair[0], pair[1], 1)); err == nil {
-			t.Fatal("invalid BRB config accepted", pair)
+func TestMediaConfigurationAlwaysAvailable(t *testing.T) {
+	t.Setenv("BRB_TEST_ENABLED", "false")
+	for _, fields := range []string{"", `,"brb":null`, `,"brb":{}`, `,"brb":{"enabled":false}`, `,"brb":{"enabled":"${BRB_TEST_ENABLED}"}`, `,"brb":{"enabled":"${REMOVED_BRB_FLAG_987}"}`} {
+		c, err := loadText(t, strings.TrimSuffix(validJSON, "}")+fields+"}")
+		if err != nil || c.BRB == nil {
+			t.Fatalf("media defaults unavailable for %s: %v", fields, err)
+		}
+		if c.BRB.Directory == "" || c.BRB.Width != 1920 || c.BRB.Height != 1080 || c.BRB.FPS != 30 || c.BRB.SampleRate != 48000 {
+			t.Fatalf("unexpected media defaults: %+v", c.BRB)
+		}
+		encoded, err := json.Marshal(c.BRB)
+		if err != nil || strings.Contains(string(encoded), `"enabled"`) {
+			t.Fatal("retired media switch remains in configuration", string(encoded), err)
 		}
 	}
-	t.Setenv("BRB_TEST_ENABLED", "")
-	c, err = loadText(t, base)
-	if err != nil || c.BRB.IsEnabled() {
-		t.Fatal("unset flag should leave BRB disabled")
+}
+
+func TestBRBConfigurationValidation(t *testing.T) {
+	base := strings.TrimSuffix(validJSON, "}") + `,"brb":{"enabled":false,"directory":"${BRB_TEST_DIR}","width":1920,"height":1080,"fps":25,"sample_rate":48000}}`
+	t.Setenv("BRB_TEST_DIR", t.TempDir())
+	c, err := loadText(t, base)
+	if err != nil || c.BRB == nil || c.BRB.FPS != 25 {
+		t.Fatal("valid media config rejected", err)
+	}
+	for _, pair := range [][2]string{{`"fps":25`, `"fps":27`}, {`"width":1920`, `"width":1921`}, {`"sample_rate":48000`, `"sample_rate":96000`}, {`"directory":"${BRB_TEST_DIR}"`, `"directory":""`}, {`"fps":25`, `"fps":0`}, {`"fps":25`, `"typo":25`}} {
+		if _, err = loadText(t, strings.Replace(base, pair[0], pair[1], 1)); err == nil {
+			t.Fatal("invalid media config accepted despite retired switch", pair)
+		}
 	}
 }
 
@@ -187,6 +199,43 @@ func TestManagedIngestionConfigurationNeedsNoEnvironmentKey(t *testing.T) {
 		c, err := loadText(t, `{"ingestion_key_file":"/private/ingestion-key.json","targets":[{"name":"disabled"}]`+legacy+`}`)
 		if err != nil || c.IngestionKeyFile != "/private/ingestion-key.json" {
 			t.Fatal("managed configuration requires legacy key", err)
+		}
+	}
+}
+
+func TestTargetNamesAllowSpacesWithoutRelaxingIngestionIdentifiers(t *testing.T) {
+	t.Setenv("TARGET_KEY", "test-key")
+	if _, err := loadText(t, strings.Replace(validJSON, `"name":"test"`, `"name":"Twitch Main"`, 1)); err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []string{
+		strings.Replace(validJSON, "input-key-1234567890", "input key 1234567890", 1),
+		strings.Replace(validJSON, "{", `{"application":"live app",`, 1),
+	} {
+		if _, err := loadText(t, body); err == nil {
+			t.Fatal("ingestion identifier accepted spaces")
+		}
+	}
+}
+
+func TestPublicIngestionAddress(t *testing.T) {
+	t.Setenv("TARGET_KEY", "test-target-key")
+	t.Setenv("INGESTION_SERVER_URL", "rtmp://studio.example.com:1935/live")
+	c, err := loadText(t, strings.Replace(validJSON, "{", `{"ingestion_server_url":"${INGESTION_SERVER_URL}",`, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(c)
+	if err != nil || !strings.Contains(string(encoded), `"ingestion_server_url":"rtmp://studio.example.com:1935/live"`) {
+		t.Fatal("public URL not expanded and retained")
+	}
+	for _, address := range []string{"https://studio.example.com:1935/live", "rtmp://studio.example.com/live", "rtmp://studio.example.com:0/live", "rtmp://studio.example.com:65536/live", "rtmp://user:secret@studio.example.com:1935/live", "rtmp://studio.example.com:1935/live/key", "rtmp://studio.example.com:1935/live?key=secret", "rtmp://studio.example.com:1935/live#secret"} {
+		t.Setenv("INGESTION_SERVER_URL", address)
+		_, err := loadText(t, strings.Replace(validJSON, "{", `{"ingestion_server_url":"${INGESTION_SERVER_URL}",`, 1))
+		if err == nil {
+			t.Error("accepted invalid public address")
+		} else if strings.Contains(err.Error(), "secret") {
+			t.Error("validation leaked URL contents")
 		}
 	}
 }

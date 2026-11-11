@@ -1,5 +1,5 @@
 ---
-status: superseded by ADR-0012
+status: superseded by ADR-0013
 ---
 
 # Bind public pages to events and separate replay publication

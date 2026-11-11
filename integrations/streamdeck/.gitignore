@@ -1,0 +1,4 @@
+node_modules/
+com.kreuzhofer.restreamer.sdPlugin/bin/
+com.kreuzhofer.restreamer.sdPlugin/logs/
+dist/

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +17,32 @@ import (
 )
 
 type Target struct {
-	Type      string     `json:"type,omitempty"`
-	EventID   string     `json:"event_id,omitempty"`
-	Name      string     `json:"name"`
-	URL       string     `json:"url"`
-	StreamKey string     `json:"stream_key"`
-	Enabled   EnableFlag `json:"enabled,omitempty"`
+	Type       string     `json:"type,omitempty"`
+	EventID    string     `json:"event_id,omitempty"`
+	Name       string     `json:"name"`
+	URL        string     `json:"url"`
+	StreamKey  string     `json:"stream_key"`
+	Enabled    EnableFlag `json:"enabled,omitempty"`
+	OutputMode string     `json:"output_mode,omitempty"`
+}
+
+// Mode preserves native passthrough for configurations written before output
+// paths were selectable. Unknown explicit values are rejected at the boundary.
+func (t Target) Mode() string {
+	if t.OutputMode == "" {
+		return "passthrough"
+	}
+	return t.OutputMode
+}
+
+func (t Target) ValidateOutputMode() error {
+	if t.Type == "public_page" && t.Mode() != "passthrough" {
+		return errors.New("public event targets preserve source quality using passthrough")
+	}
+	if t.Mode() != "passthrough" && t.Mode() != "continuous" {
+		return errors.New("output_mode must be passthrough or continuous")
+	}
+	return nil
 }
 
 // EnableFlag accepts a JSON boolean or a string containing an environment
@@ -64,32 +85,45 @@ func (b BRBProfile) Validate() error {
 }
 
 type BRBConfig struct {
-	Enabled   EnableFlag `json:"enabled"`
-	Directory string     `json:"directory"`
+	Directory string `json:"directory"`
 	BRBProfile
 }
 
-func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
+// UnmarshalJSON accepts the retired enabled field in existing configuration
+// files, but it no longer controls media availability. Keep unknown-field
+// validation inside this decoder as well as the outer configuration decoder.
+func (b *BRBConfig) UnmarshalJSON(data []byte) error {
+	type fields BRBConfig
+	value := struct {
+		*fields
+		Enabled json.RawMessage `json:"enabled"`
+	}{fields: (*fields)(b)}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(&value)
+}
 
 type Config struct {
-	EventsDirectory   string     `json:"events_directory,omitempty"`
-	DestinationsFile  string     `json:"destinations_file,omitempty"`
-	LibraryDirectory  string     `json:"library_directory,omitempty"`
-	LibraryUploadMiB  int        `json:"library_upload_mib,omitempty"`
-	BRB               *BRBConfig `json:"brb,omitempty"`
-	Listen            string     `json:"listen"`
-	HealthListen      string     `json:"health_listen"`
-	Application       string     `json:"application"`
-	StreamKey         string     `json:"stream_key,omitempty"`
-	IngestionKeyFile  string     `json:"ingestion_key_file,omitempty"`
-	QueueBytes        int        `json:"queue_bytes"`
-	Targets           []Target   `json:"targets"`
-	DashboardUsername string     `json:"dashboard_username"`
-	DashboardPassword string     `json:"dashboard_password"`
-	StateFile         string     `json:"state_file"`
+	EventsDirectory    string     `json:"events_directory,omitempty"`
+	IngestionServerURL string     `json:"ingestion_server_url,omitempty"`
+	DestinationsFile   string     `json:"destinations_file,omitempty"`
+	LibraryDirectory   string     `json:"library_directory,omitempty"`
+	LibraryUploadMiB   int        `json:"library_upload_mib,omitempty"`
+	BRB                *BRBConfig `json:"brb,omitempty"`
+	Listen             string     `json:"listen"`
+	HealthListen       string     `json:"health_listen"`
+	Application        string     `json:"application"`
+	StreamKey          string     `json:"stream_key,omitempty"`
+	IngestionKeyFile   string     `json:"ingestion_key_file,omitempty"`
+	QueueBytes         int        `json:"queue_bytes"`
+	Targets            []Target   `json:"targets"`
+	DashboardUsername  string     `json:"dashboard_username"`
+	DashboardPassword  string     `json:"dashboard_password"`
+	StateFile          string     `json:"state_file"`
 }
 
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+var targetName = regexp.MustCompile(`^[a-zA-Z0-9_ -]+$`)
 
 func Load(path string) (Config, error) {
 	f, err := os.Open(path)
@@ -97,7 +131,8 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("cannot open configuration file")
 	}
 	defer f.Close()
-	c := Config{Listen: ":1935", HealthListen: ":8080", Application: "live", QueueBytes: 16 << 20}
+	defaults := BRBConfig{Directory: filepath.Join(filepath.Dir(path), "data", "brb"), BRBProfile: BRBProfile{Width: 1920, Height: 1080, FPS: 30, SampleRate: 48000}}
+	c := Config{Listen: ":1935", HealthListen: ":8080", Application: "live", QueueBytes: 16 << 20, BRB: &defaults}
 	d := json.NewDecoder(io.LimitReader(f, 1<<20))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&c); err != nil {
@@ -109,6 +144,7 @@ func Load(path string) (Config, error) {
 	// Expand individual decoded strings, so quotes or backslashes in a secret
 	// cannot alter the structure of the configuration.
 	c.IngestionKeyFile = os.ExpandEnv(c.IngestionKeyFile)
+	c.IngestionServerURL = os.ExpandEnv(c.IngestionServerURL)
 	values := []*string{&c.Listen, &c.HealthListen, &c.Application}
 	if c.IngestionKeyFile == "" {
 		values = append(values, &c.StreamKey)
@@ -163,10 +199,10 @@ func Load(path string) (Config, error) {
 	c.EventsDirectory = os.ExpandEnv(c.EventsDirectory)
 	c.DestinationsFile = os.ExpandEnv(c.DestinationsFile)
 	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
-	if c.BRB != nil {
-		c.BRB.Enabled = EnableFlag(os.ExpandEnv(string(c.BRB.Enabled)))
-		c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
+	if c.BRB == nil {
+		c.BRB = &defaults
 	}
+	c.BRB.Directory = os.ExpandEnv(c.BRB.Directory)
 	return c, c.Validate()
 }
 
@@ -188,16 +224,11 @@ func (c Config) Validate() error {
 	}
 	if c.BRB != nil {
 		b := c.BRB
-		if b.Enabled != "" && b.Enabled != "true" && b.Enabled != "false" {
-			return errors.New("brb.enabled must be true or false")
+		if b.Directory == "" {
+			return errors.New("media authoring needs a persistent BRB directory")
 		}
-		if b.IsEnabled() {
-			if b.Directory == "" {
-				return errors.New("BRB needs a persistent directory")
-			}
-			if err := b.BRBProfile.Validate(); err != nil {
-				return err
-			}
+		if err := b.BRBProfile.Validate(); err != nil {
+			return err
 		}
 	}
 	if (c.DashboardUsername == "") != (c.DashboardPassword == "") {
@@ -214,6 +245,16 @@ func (c Config) Validate() error {
 	if !identifier.MatchString(c.Application) {
 		return errors.New("application must contain only letters, digits, underscores or hyphens")
 	}
+	if c.IngestionServerURL != "" {
+		u, err := url.Parse(c.IngestionServerURL)
+		if err != nil {
+			return errors.New("ingestion_server_url must be a public RTMP address with an explicit port and application, without a key")
+		}
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 || u.Scheme != "rtmp" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.EscapedPath() != "/"+c.Application {
+			return errors.New("ingestion_server_url must be a public RTMP address with an explicit port and application, without a key")
+		}
+	}
 	if !(c.StreamKey == "" && c.IngestionKeyFile != "") && (len(c.StreamKey) < 16 || len(c.StreamKey) > 256 || !identifier.MatchString(c.StreamKey)) {
 		return errors.New("input stream_key must contain 16–256 letters, digits, underscores or hyphens")
 	}
@@ -225,8 +266,11 @@ func (c Config) Validate() error {
 	}
 	names := make(map[string]bool)
 	for i, t := range c.Targets {
-		if !identifier.MatchString(t.Name) || names[t.Name] {
-			return fmt.Errorf("target %d needs a unique name using letters, digits, underscores or hyphens", i+1)
+		if err := t.ValidateOutputMode(); err != nil {
+			return fmt.Errorf("target %d: %s", i+1, err)
+		}
+		if !targetName.MatchString(t.Name) || strings.TrimSpace(t.Name) != t.Name || names[t.Name] {
+			return fmt.Errorf("target %d needs a unique name using letters A–Z, digits, spaces, underscores or hyphens, without leading or trailing spaces", i+1)
 		}
 		names[t.Name] = true
 		if t.Enabled != "" && t.Enabled != "true" && t.Enabled != "false" {
@@ -244,6 +288,9 @@ func (c Config) Validate() error {
 
 // ReadyError is safe to display: it never includes URLs or credentials.
 func (t Target) ReadyError() error {
+	if err := t.ValidateOutputMode(); err != nil {
+		return err
+	}
 	if t.Type == "public_page" {
 		if len(t.EventID) != 32 || t.URL != "" || t.StreamKey != "" {
 			return errors.New("invalid public event target")

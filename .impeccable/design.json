@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T13:31:00.363412+00:00",
+  "title": "Design System: Restreamer studio",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "tonalRamp": [
+          "oklch(15.0% 0.0231 164.7)",
+          "oklch(26.4% 0.0494 164.7)",
+          "oklch(37.9% 0.0759 164.7)",
+          "oklch(49.3% 0.0807 164.7)",
+          "oklch(60.7% 0.0807 164.7)",
+          "oklch(72.1% 0.0751 164.7)",
+          "oklch(83.6% 0.0441 164.7)",
+          "oklch(95.0% 0.0135 164.7)"
+        ]
+      },
+      "on-primary": {
+        "role": "primary",
+        "displayName": "On Primary",
+        "tonalRamp": [
+          "oklch(15.0% 0.0107 166.3)",
+          "oklch(26.4% 0.0230 166.3)",
+          "oklch(37.9% 0.0353 166.3)",
+          "oklch(49.3% 0.0376 166.3)",
+          "oklch(60.7% 0.0376 166.3)",
+          "oklch(72.1% 0.0350 166.3)",
+          "oklch(83.6% 0.0206 166.3)",
+          "oklch(95.0% 0.0063 166.3)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "tonalRamp": [
+          "oklch(15.0% 0.0019 258.4)",
+          "oklch(26.4% 0.0041 258.4)",
+          "oklch(37.9% 0.0063 258.4)",
+          "oklch(49.3% 0.0067 258.4)",
+          "oklch(60.7% 0.0067 258.4)",
+          "oklch(72.1% 0.0062 258.4)",
+          "oklch(83.6% 0.0036 258.4)",
+          "oklch(95.0% 0.0011 258.4)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar",
+        "tonalRamp": [
+          "oklch(15.0% 0.0020 258.4)",
+          "oklch(26.4% 0.0042 258.4)",
+          "oklch(37.9% 0.0065 258.4)",
+          "oklch(49.3% 0.0069 258.4)",
+          "oklch(60.7% 0.0069 258.4)",
+          "oklch(72.1% 0.0064 258.4)",
+          "oklch(83.6% 0.0038 258.4)",
+          "oklch(95.0% 0.0011 258.4)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "tonalRamp": [
+          "oklch(15.0% 0.0030 260.7)",
+          "oklch(26.4% 0.0064 260.7)",
+          "oklch(37.9% 0.0098 260.7)",
+          "oklch(49.3% 0.0104 260.7)",
+          "oklch(60.7% 0.0104 260.7)",
+          "oklch(72.1% 0.0097 260.7)",
+          "oklch(83.6% 0.0057 260.7)",
+          "oklch(95.0% 0.0017 260.7)"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised",
+        "tonalRamp": [
+          "oklch(15.0% 0.0035 258.4)",
+          "oklch(26.4% 0.0075 258.4)",
+          "oklch(37.9% 0.0116 258.4)",
+          "oklch(49.3% 0.0123 258.4)",
+          "oklch(60.7% 0.0123 258.4)",
+          "oklch(72.1% 0.0114 258.4)",
+          "oklch(83.6% 0.0067 258.4)",
+          "oklch(95.0% 0.0020 258.4)"
+        ]
+      },
+      "selected": {
+        "role": "primary",
+        "displayName": "Selected",
+        "tonalRamp": [
+          "oklch(15.0% 0.0064 163.2)",
+          "oklch(26.4% 0.0137 163.2)",
+          "oklch(37.9% 0.0210 163.2)",
+          "oklch(49.3% 0.0224 163.2)",
+          "oklch(60.7% 0.0224 163.2)",
+          "oklch(72.1% 0.0208 163.2)",
+          "oklch(83.6% 0.0122 163.2)",
+          "oklch(95.0% 0.0037 163.2)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "tonalRamp": [
+          "oklch(15.0% 0.0008 264.5)",
+          "oklch(26.4% 0.0018 264.5)",
+          "oklch(37.9% 0.0027 264.5)",
+          "oklch(49.3% 0.0029 264.5)",
+          "oklch(60.7% 0.0029 264.5)",
+          "oklch(72.1% 0.0027 264.5)",
+          "oklch(83.6% 0.0016 264.5)",
+          "oklch(95.0% 0.0005 264.5)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "tonalRamp": [
+          "oklch(15.0% 0.0041 258.4)",
+          "oklch(26.4% 0.0088 258.4)",
+          "oklch(37.9% 0.0136 258.4)",
+          "oklch(49.3% 0.0144 258.4)",
+          "oklch(60.7% 0.0144 258.4)",
+          "oklch(72.1% 0.0134 258.4)",
+          "oklch(83.6% 0.0079 258.4)",
+          "oklch(95.0% 0.0024 258.4)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "tonalRamp": [
+          "oklch(15.0% 0.0046 255.6)",
+          "oklch(26.4% 0.0098 255.6)",
+          "oklch(37.9% 0.0151 255.6)",
+          "oklch(49.3% 0.0160 255.6)",
+          "oklch(60.7% 0.0160 255.6)",
+          "oklch(72.1% 0.0149 255.6)",
+          "oklch(83.6% 0.0088 255.6)",
+          "oklch(95.0% 0.0027 255.6)"
+        ]
+      },
+      "error": {
+        "role": "neutral",
+        "displayName": "Error",
+        "tonalRamp": [
+          "oklch(15.0% 0.0286 24.0)",
+          "oklch(26.4% 0.0611 24.0)",
+          "oklch(37.9% 0.0940 24.0)",
+          "oklch(49.3% 0.1000 24.0)",
+          "oklch(60.7% 0.1000 24.0)",
+          "oklch(72.1% 0.0930 24.0)",
+          "oklch(83.6% 0.0547 24.0)",
+          "oklch(95.0% 0.0167 24.0)"
+        ]
+      },
+      "error-surface": {
+        "role": "neutral",
+        "displayName": "Error Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.0065 18.6)",
+          "oklch(26.4% 0.0139 18.6)",
+          "oklch(37.9% 0.0214 18.6)",
+          "oklch(49.3% 0.0228 18.6)",
+          "oklch(60.7% 0.0228 18.6)",
+          "oklch(72.1% 0.0212 18.6)",
+          "oklch(83.6% 0.0125 18.6)",
+          "oklch(95.0% 0.0038 18.6)"
+        ]
+      },
+      "danger-border": {
+        "role": "neutral",
+        "displayName": "Danger Border",
+        "tonalRamp": [
+          "oklch(15.0% 0.0172 28.0)",
+          "oklch(26.4% 0.0368 28.0)",
+          "oklch(37.9% 0.0565 28.0)",
+          "oklch(49.3% 0.0601 28.0)",
+          "oklch(60.7% 0.0601 28.0)",
+          "oklch(72.1% 0.0559 28.0)",
+          "oklch(83.6% 0.0329 28.0)",
+          "oklch(95.0% 0.0100 28.0)"
+        ]
+      },
+      "warning-surface": {
+        "role": "neutral",
+        "displayName": "Warning Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.0049 82.3)",
+          "oklch(26.4% 0.0106 82.3)",
+          "oklch(37.9% 0.0163 82.3)",
+          "oklch(49.3% 0.0173 82.3)",
+          "oklch(60.7% 0.0173 82.3)",
+          "oklch(72.1% 0.0161 82.3)",
+          "oklch(83.6% 0.0095 82.3)",
+          "oklch(95.0% 0.0029 82.3)"
+        ]
+      },
+      "warning-border": {
+        "role": "neutral",
+        "displayName": "Warning Border",
+        "tonalRamp": [
+          "oklch(15.0% 0.0128 75.4)",
+          "oklch(26.4% 0.0273 75.4)",
+          "oklch(37.9% 0.0420 75.4)",
+          "oklch(49.3% 0.0446 75.4)",
+          "oklch(60.7% 0.0446 75.4)",
+          "oklch(72.1% 0.0415 75.4)",
+          "oklch(83.6% 0.0244 75.4)",
+          "oklch(95.0% 0.0074 75.4)"
+        ]
+      },
+      "media-surface": {
+        "role": "neutral",
+        "displayName": "Media Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.0015 248.1)",
+          "oklch(26.4% 0.0032 248.1)",
+          "oklch(37.9% 0.0049 248.1)",
+          "oklch(49.3% 0.0052 248.1)",
+          "oklch(60.7% 0.0052 248.1)",
+          "oklch(72.1% 0.0048 248.1)",
+          "oklch(83.6% 0.0028 248.1)",
+          "oklch(95.0% 0.0009 248.1)"
+        ]
+      },
+      "badge-text": {
+        "role": "neutral",
+        "displayName": "Badge Text",
+        "tonalRamp": [
+          "oklch(15.0% 0.0100 261.0)",
+          "oklch(26.4% 0.0213 261.0)",
+          "oklch(37.9% 0.0328 261.0)",
+          "oklch(49.3% 0.0349 261.0)",
+          "oklch(60.7% 0.0349 261.0)",
+          "oklch(72.1% 0.0324 261.0)",
+          "oklch(83.6% 0.0191 261.0)",
+          "oklch(95.0% 0.0058 261.0)"
+        ]
+      },
+      "badge-surface": {
+        "role": "neutral",
+        "displayName": "Badge Surface",
+        "tonalRamp": [
+          "oklch(15.0% 0.0094 261.6)",
+          "oklch(26.4% 0.0201 261.6)",
+          "oklch(37.9% 0.0310 261.6)",
+          "oklch(49.3% 0.0329 261.6)",
+          "oklch(60.7% 0.0329 261.6)",
+          "oklch(72.1% 0.0306 261.6)",
+          "oklch(83.6% 0.0180 261.6)",
+          "oklch(95.0% 0.0055 261.6)"
+        ]
+      },
+      "badge-border": {
+        "role": "neutral",
+        "displayName": "Badge Border",
+        "tonalRamp": [
+          "oklch(15.0% 0.0108 260.5)",
+          "oklch(26.4% 0.0231 260.5)",
+          "oklch(37.9% 0.0355 260.5)",
+          "oklch(49.3% 0.0378 260.5)",
+          "oklch(60.7% 0.0378 260.5)",
+          "oklch(72.1% 0.0352 260.5)",
+          "oklch(83.6% 0.0207 260.5)",
+          "oklch(95.0% 0.0063 260.5)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Default application page heading."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Default second-level heading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Application body text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Supporting labels and helper text."
+      },
+      "command": {
+        "displayName": "Command",
+        "purpose": "Shared command labels."
+      },
+      "status": {
+        "displayName": "Status",
+        "purpose": "Status and diagnostic text."
+      }
+    },
+    "shadows": [
+      {
+        "name": "layout-options",
+        "value": "0 12px 30px #0008",
+        "purpose": "Existing layout popover only; not a card shadow."
+      }
+    ],
+    "motion": [
+      {
+        "name": "toggle-thumb",
+        "value": "transform .15s",
+        "purpose": "Existing destination toggle movement."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}",
+        "purpose": "Disable ornamental motion in reduced-motion mode."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone-max",
+        "value": "600px"
+      },
+      {
+        "name": "scene-panel-max",
+        "value": "800px"
+      },
+      {
+        "name": "legacy-editor-switch-max",
+        "value": "1150px"
+      },
+      {
+        "name": "narrow-shell-max",
+        "value": "1199px"
+      },
+      {
+        "name": "wide-editor-min",
+        "value": "1200px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary command",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Shared command primitive; source has no additional primary/danger hover treatment.",
+      "html": "<button class=\"ds-button-primary\" type=\"button\">Generate video</button>",
+      "css": ".ds-button-primary{font:14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:8px 14px;border:1px solid var(--border,#383e46);border-radius:6px;cursor:pointer;background:var(--cyan,#a7ebcc);color:#112b21;border-color:var(--cyan,#a7ebcc);font-weight:600;}.ds-button-primary:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}.ds-button-primary:disabled{opacity:.45;cursor:not-allowed}@media(max-width:600px){.ds-button-primary{min-height:44px}}"
+    },
+    {
+      "name": "Secondary command",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Shared command primitive; source has no additional primary/danger hover treatment.",
+      "html": "<button class=\"ds-button-secondary\" type=\"button\">Preview</button>",
+      "css": ".ds-button-secondary{font:14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:8px 14px;border:1px solid var(--border,#383e46);border-radius:6px;cursor:pointer;background:transparent;color:var(--text,#f0f1f3);}.ds-button-secondary:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}.ds-button-secondary:hover{background:#292d33}.ds-button-secondary:disabled{opacity:.45;cursor:not-allowed}@media(max-width:600px){.ds-button-secondary{min-height:44px}}"
+    },
+    {
+      "name": "Danger command",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Shared command primitive; source has no additional primary/danger hover treatment.",
+      "html": "<button class=\"ds-button-danger\" type=\"button\">Delete</button>",
+      "css": ".ds-button-danger{font:14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:8px 14px;border:1px solid var(--border,#383e46);border-radius:6px;cursor:pointer;background:transparent;color:var(--red,#ffaba5);border-color:#80544e;}.ds-button-danger:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}@media(max-width:600px){.ds-button-danger{min-height:44px}}"
+    },
+    {
+      "name": "Labelled field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Generic field baseline; specialized studio/Settings overrides are excluded.",
+      "html": "<label class=\"ds-field\">Design name<input value=\"Evening break\"></label>",
+      "css": ".ds-field{display:block;font:13px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--muted,#b2b8c1)}.ds-field input{display:block;font:15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;background:#111316;border:1px solid var(--border,#383e46);border-radius:6px;padding:10px 12px;color:var(--text,#f0f1f3);max-width:100%;caret-color:var(--cyan,#a7ebcc)}.ds-field input:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}"
+    },
+    {
+      "name": "Main navigation",
+      "kind": "nav",
+      "refersTo": "navigation-current",
+      "description": "Page anchors with current-page styling; sample shows desktop arrangement.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main navigation\"><a href=\"/live\" aria-current=\"page\">Live</a><a href=\"/setup\">Show setup</a><a href=\"/library\">Library</a><a href=\"/settings\">Settings</a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:6px;background:#111316;padding:18px;width:172px}.ds-nav a{display:block;font:15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--muted,#b2b8c1);text-decoration:none;padding:12px;border-radius:6px;min-height:46px}.ds-nav a:hover{background:#202328;color:var(--text,#f0f1f3)}.ds-nav a[aria-current=page]{background:#293730;color:var(--cyan,#a7ebcc)}.ds-nav a:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}"
+    },
+    {
+      "name": "Local view switch",
+      "kind": "nav",
+      "refersTo": "local-tab",
+      "description": "Static visual sample of local buttons; production code supplies selection behavior.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Design properties\"><button type=\"button\" aria-pressed=\"true\">Content</button><button type=\"button\" aria-pressed=\"false\">Music</button></nav>",
+      "css": ".ds-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border,#383e46)}.ds-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted,#b2b8c1);padding:10px 0;font:14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;min-height:44px;cursor:pointer}.ds-tabs button[aria-pressed=true]{color:var(--cyan,#a7ebcc);border-bottom-color:var(--cyan,#a7ebcc)}.ds-tabs button:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}"
+    },
+    {
+      "name": "Diagnostic badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Non-interactive diagnostic text; legacy local variants are not expanded into a new palette.",
+      "html": "<span class=\"ds-badge\">Stopped</span>",
+      "css": ".ds-badge{display:inline-block;font:12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;letter-spacing:.3px;padding:6px 10px;color:#a3b0c6;border:1px solid #374357;border-radius:5px;background:#1b2434;white-space:nowrap}"
+    },
+    {
+      "name": "Contextual form container",
+      "kind": "card",
+      "refersTo": "form-container",
+      "description": "Tonal containment used for contextual creation forms, not every section.",
+      "html": "<section class=\"ds-form\"><h2>New design</h2><p>Choose a name for your design.</p></section>",
+      "css": ".ds-form{font:15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--text,#f0f1f3);padding:24px;background:var(--panel,#202328);border-radius:6px;max-width:600px}.ds-form h2{font-size:20px;font-weight:600;letter-spacing:-.3px;margin:0}.ds-form p{color:var(--muted,#b2b8c1)}"
+    },
+    {
+      "name": "Named disclosure",
+      "kind": "custom",
+      "description": "Native disclosure keeps technical limits beside their task.",
+      "html": "<details class=\"ds-disclosure\"><summary>Scene limits</summary><p>Technical limits remain available here.</p></details>",
+      "css": ".ds-disclosure{font:12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--muted,#b2b8c1)}.ds-disclosure summary{cursor:pointer;min-height:36px}.ds-disclosure summary:focus-visible{outline:3px solid var(--cyan,#a7ebcc);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Restrained production studio",
+    "overview": "The accepted prototype keeps application controls restrained and lets broadcast media carry expressive themes. The production implementation preserves that direction with charcoal surfaces, mint actions, labelled navigation and compact rows. This is an operational workspace, with content previews providing the visual emphasis.\n\nThis inventory describes the production source, not a new aesthetic direction or a claim of complete release acceptance. PRODUCT.md and the approved UX plan retain authority over playback, selection and desktop/mobile contracts.",
+    "keyCharacteristics": [
+      "Persistent labelled navigation; underlined local views; filled task commands.",
+      "Flat sections and list dividers, with containment reserved for forms, media and dialogs.",
+      "Readable status text and explicit next-use versus playing-now identities."
+    ],
+    "rules": [
+      {
+        "name": "The Navigation and Command Rule",
+        "body": "Page links, local view switches and task commands retain distinct visual treatments.",
+        "section": "colors"
+      },
+      {
+        "name": "The Media Owns the Theme Rule",
+        "body": "Expressive Arcade and Neon artwork belongs inside media previews; application controls retain the studio palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The Flat Section Rule",
+        "body": "Ordinary sections use whitespace and dividers; do not give every section a raised card.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve semantic page links and their current-page state; use buttons for commands and local state changes.",
+      "Do keep supporting status in words, including selected-for-next-use and playing-now distinctions.",
+      "Do use bounded grid tracks, wrapping text and contained clip scrolling.",
+      "Do preserve visible keyboard focus, reduced-motion overrides and the desktop-only authoring boundary."
+    ],
+    "donts": [
+      "Don't use content-theme styling as application chrome.",
+      "Don't turn every list row or section into an elevated card.",
+      "Don't imply generation selected a result or replaced current playback.",
+      "Don't copy legacy specificity, small helper text or inconsistent focus treatments into new components."
+    ]
+  }
+}

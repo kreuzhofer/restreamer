@@ -287,6 +287,9 @@ func (s *Server) brbThemeActivate(w http.ResponseWriter, r *http.Request) {
 	s.broadcast.mu.Lock()
 	s.broadcast.media = candidate.media
 	if s.broadcast.active {
+		if !s.broadcast.fallbackManaged && !s.broadcast.fallbackFailed {
+			s.broadcast.fallbackMedia = candidate.media
+		}
 		s.broadcast.startFallback(time.Now())
 	}
 	s.broadcast.mu.Unlock()

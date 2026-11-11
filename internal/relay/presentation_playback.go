@@ -139,8 +139,8 @@ func (b *broadcast) startPresentation(now time.Time) error {
 	b.live, b.active = false, false
 	b.hub.clearHeaders()
 	b.resetBroadcastPreview()
-	b.emit(p.presentation.index.Video, p.broadcastBase)
-	b.emit(p.reader.index.Audio, p.broadcastBase)
+	b.emitPrepared(p.presentation.index.Video, p.broadcastBase)
+	b.emitPrepared(p.reader.index.Audio, p.broadcastBase)
 	p.presentation.runtime.waitingSince = time.Now()
 	return nil
 }
@@ -208,7 +208,7 @@ func (b *broadcast) tickPresentation(now time.Time) bool {
 		if msg == nil {
 			return true
 		}
-		b.emit(msg, p.broadcastBase+msg.Timestamp-p.startPosition)
+		b.emitPrepared(msg, p.broadcastBase+msg.Timestamp-p.startPosition)
 		if msg == r.pendingVideo {
 			r.pendingVideo = nil
 		} else {
