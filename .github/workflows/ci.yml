@@ -298,7 +298,7 @@ jobs:
   image:
     timeout-minutes: 20
     needs: [test, generator-arm64]
-    runs-on: ${{ github.repository == 'kreuzhofer/restreamer' && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.ref == 'refs/heads/feature/nebius-show-package' && github.event_name == 'push')) && fromJSON('["self-hosted", "linux", "x64", "restreamer"]') || fromJSON('["ubuntu-24.04"]') }}
+    runs-on: ${{ github.repository == 'kreuzhofer/restreamer' && ((github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.ref == 'refs/heads/feature/nebius-show-package' && github.event_name == 'push')) && fromJSON('["self-hosted", "linux", "x64", "restreamer-image"]') || fromJSON('["ubuntu-24.04"]') }}
     permissions:
       contents: read
       packages: write

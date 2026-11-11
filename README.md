@@ -808,8 +808,14 @@ run succeeds. Releases on `main` also require successful image publication.
 Follow the [delivery completion procedure](docs/agents/delivery.md) and include
 the exact commit SHA and successful CI run link when reporting completion.
 
-Trusted `main` pushes and manual `main` CI runs use the dedicated `restreamer`
-self-hosted Linux x64 runner for tests and image publication. The maintainer also
+Trusted `main` pushes and manual `main` CI runs use dedicated self-hosted Linux
+x64 runners: `restreamer` for tests and `restreamer-image` for image builds and
+publication. On agenthost these are separate services and working directories;
+do not give the image runner the `restreamer` label, because concurrent test jobs
+would collide on fixed smoke-test ports, container names and volumes. Image jobs
+can run alongside another workflow's tests, but still wait for their own tests.
+The test job is capped at 45 minutes; image and ARM64 jobs at 20 minutes each.
+The maintainer also
 approved pushes to `feature/nebius-show-package` for private x64 validation while
 hosted Ubuntu package DNS is unavailable; remove that exception from routing and
 the installed context check when the branch is retired. Pull requests, forks,
