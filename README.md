@@ -174,8 +174,9 @@ It does not replace Docker CE or another existing Docker distribution.
 The installer creates `/opt/restreamer`, stores the supplied credentials privately, and creates persistent
 Docker volumes for app data and certificates. It reports **Ready** only after
 checking trusted HTTPS, app health, and unauthenticated dashboard rejection.
-View your login details with `sudo cat /opt/restreamer/.env`; the default username
-is `admin` when omitted. Then open the printed HTTPS URL, add your destinations,
+View the initial login details with `sudo cat /opt/restreamer/.env`; the default
+username is `admin` when omitted. After changing the password in Settings, use
+the new password: `.env` still contains only the original bootstrap value. Then open the printed HTTPS URL, add your destinations,
 and create/select your show designs. The OBS server address is already filled
 from the supplied domain; copy that address and the managed ingestion key into OBS. BRB, the video library, four starter content templates and the built-in
 style themes are available immediately. Your own designs, uploads and generated
@@ -197,7 +198,9 @@ stop the broadcast or rehearsal and disconnect OBS, then run:
 bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/kreuzhofer/restreamer/main/install.sh | sudo bash -s -- --update --image ghcr.io/kreuzhofer/restreamer:main'
 ```
 
-The updater reads the saved domain and login; do not pass new credentials. It
+The updater reads the saved domain; do not pass new credentials. It uses the
+private status socket on current releases, and the saved login only for older
+releases that predate persisted accounts. It
 checks that the studio is idle before and after pulling, then recreates the
 containers and verifies health and HTTPS. It retains all volumes, media, designs,
 destination settings, ingestion keys, certificates, and customized Compose/Caddy
@@ -206,7 +209,7 @@ a private `.env.before-update.*` backup is kept. `--update` without `--image`
 pulls the currently configured references, so a pinned SHA stays pinned. Failed
 pulls do not restart services or change the saved image; later startup failures
 are reported without claiming success. Updates require Python 3 for the local,
-authenticated idle check (included when the installer provisions Ubuntu Docker).
+idle check (included when the installer provisions Ubuntu Docker).
 
 Useful commands on the server (the installation directory is root-private):
 
