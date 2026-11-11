@@ -812,7 +812,9 @@ other repositories/workflows/branches, or missing context. A failed hook is not
 an admission control: workflow steps using `if: always()` can still execute.
 Update the installed check deliberately when its reviewed source changes.
 Existing FFmpeg/FFprobe installations are used without upgrading the shared
-runner host; missing tools are installed through APT.
+runner host; missing tools are installed through APT. Remote Go and image-build
+cache transfers are limited to hosted jobs; the persistent runner retains its
+native Go cache locally.
 
 Run locally with the configured environment variables exported:
 
