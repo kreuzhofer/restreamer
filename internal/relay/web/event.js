@@ -2,15 +2,20 @@
 (() => {
   const $ = id => document.getElementById(id);
   const base = location.pathname.replace(/\/$/, '');
-  const video = $('event-video'), play = $('event-play');
+  const video = $('event-video'), play = $('event-play'), playOverlay = $('event-play-overlay');
   let source = '', hls, replay = false, busy = false, starting = false, playbackEpoch = 0;
   let pausedByViewer = false, audioChosen = false;
+  let replaySpeed = 1;
   function setMuted(muted) { video.muted = muted; audioControls(); }
   const screen = $('event-screen'), controls = $('event-controls'), poster = $('event-poster');
   const timeline = $('event-timeline'), preview = $('event-seek-preview'), thumbnail = $('event-thumbnail');
   let thumbnailIndex, indexLoading = false, scrubbing = false, previewTimer, pendingSeek, posterAttempts = 0, seekOperation = 0, previewResource = '';
   function label(button, text) { button.setAttribute('aria-label', text); button.title = text; }
-  function playLabel(text) { label(play, text); play.dataset.playing = String(text === 'Pause playback'); screen.dataset.playing = String(!video.paused && !video.hidden); }
+  function updatePlayOverlay() {
+    playOverlay.hidden = !replay || !source || starting || !video.paused;
+    label(playOverlay, video.ended ? 'Play replay again' : pausedByViewer ? 'Resume replay' : 'Play replay');
+  }
+  function playLabel(text) { label(play, text); play.dataset.playing = String(text === 'Pause playback'); screen.dataset.playing = String(!video.paused && !video.hidden); updatePlayOverlay(); }
   function audioControls() {
     const muted = video.muted || video.volume === 0;
     label($('event-mute'), muted ? 'Unmute audio' : 'Mute audio'); $('event-mute').dataset.muted = String(muted);
@@ -85,6 +90,15 @@
   video.addEventListener('timeupdate', updateTime);
   video.addEventListener('volumechange', audioControls);
   $('event-volume').oninput = () => { audioChosen = true; video.volume = Number($('event-volume').value); setMuted(video.volume === 0); };
+  function applyPlaybackSpeed() {
+    video.defaultPlaybackRate = video.playbackRate = replay ? replaySpeed : 1;
+    $('event-speed').value = String(replaySpeed);
+  }
+  $('event-speed').onchange = () => {
+    const rate = Number($('event-speed').value);
+    if (!replay || !source || !Number.isFinite(rate) || rate < 0.5 || rate > 2 || !Number.isInteger(rate * 4)) return;
+    replaySpeed = rate; applyPlaybackSpeed();
+  };
 
   function stop() {
     // load() cancels queued media events. Capture a native pause before resetting
@@ -93,7 +107,7 @@
     playbackEpoch++; starting = false; play.disabled = false;
     thumbnailIndex = undefined; indexLoading = false; pendingSeek = undefined; scrubbing = false; posterAttempts = 0; hidePreview();
     poster.hidden = true; poster.removeAttribute('src'); thumbnail.removeAttribute('src');
-    controls.hidden = true; $('event-seek').hidden = true; screen.dataset.playing = 'false';
+    controls.hidden = true; playOverlay.hidden = true; $('event-speed').hidden = true; $('event-seek').hidden = true; screen.dataset.playing = 'false';
     $('playback-error').textContent = '';
     if (hls) { hls.destroy(); hls = null; }
     video.removeAttribute('src'); video.load(); video.hidden = true;
@@ -118,9 +132,11 @@
       const next = live ? base + '/live.m3u8' : replay ? base + '/replay.m3u8' : '';
       const changed = next !== source;
       if (changed) { stop(); source = next; }
+      if (changed) applyPlaybackSpeed();
       play.hidden = !source; controls.hidden = !source;
       $('event-mute').hidden = $('event-fullscreen').hidden = !source;
       $('event-seek').hidden = !replay || !source; $('event-time').hidden = !replay; $('event-live').hidden = replay;
+      $('event-speed').hidden = !replay || !source;
       if (replay && source) {
         if (video.hidden && !poster.getAttribute('src')) { poster.src = base + '/poster.jpg'; poster.hidden = false; $('event-placeholder').hidden = true; }
         loadThumbnailIndex(); updateTime();
@@ -139,7 +155,8 @@
   async function startPlayback(automatic = false) {
     if (!source || starting) return;
     const epoch = playbackEpoch;
-    starting = true; play.disabled = true;
+    const overlayFocused = document.activeElement === playOverlay;
+    starting = true; play.disabled = true; updatePlayOverlay();
     $('playback-error').textContent = ''; $('event-retry').hidden = true;
     poster.hidden = true; controls.hidden = false;
     video.hidden = false; $('event-placeholder').hidden = true;
@@ -152,6 +169,7 @@
         hls.loadSource(source); hls.attachMedia(video);
       } else { stop(); playbackError('This browser cannot play this event. Use a current version of Safari, Chrome, Firefox, or Edge.'); return; }
     }
+    applyPlaybackSpeed();
     try { await video.play(); if (epoch === playbackEpoch) playLabel('Pause playback'); }
     catch (error) {
       if (epoch !== playbackEpoch) return;
@@ -159,7 +177,12 @@
         playbackError('Your browser blocked automatic playback. Select Play to start.');
         playLabel('Watch live');
       } else playbackError('Playback could not start. Try playback again, or refresh the event.');
-    } finally { if (epoch === playbackEpoch) { starting = false; play.disabled = false; } }
+    } finally {
+      if (epoch === playbackEpoch) {
+        starting = false; play.disabled = false; updatePlayOverlay();
+        if (overlayFocused && document.activeElement === document.body) (playOverlay.hidden ? play : playOverlay).focus();
+      }
+    }
   }
   play.onclick = () => {
     if (!source || starting) return;
@@ -167,6 +190,8 @@
     pausedByViewer = false;
     return startPlayback();
   };
+  playOverlay.onclick = play.onclick;
+  video.addEventListener('ended', () => { if (source && replay) playLabel('Play replay again'); });
   video.addEventListener('pause', () => {
     if (source && !video.hidden && video.paused) { pausedByViewer = true; playLabel('Resume playback'); }
   });
@@ -186,6 +211,6 @@
     finally { button.disabled = false; }
   };
   $('event-retry').onclick = () => { stop(); pausedByViewer = false; source = ''; return refresh(); };
-  $('event-seek').hidden = true; poster.hidden = true; audioControls();
+  $('event-seek').hidden = true; poster.hidden = true; playOverlay.hidden = true; $('event-speed').hidden = true; applyPlaybackSpeed(); audioControls();
   refresh(); setInterval(refresh, 3000);
 })();

@@ -60,6 +60,9 @@ test('opening or reloading an already-live event starts video without Watch live
   assert.equal(page.video.muted, true, 'automatic startup must satisfy muted-autoplay policies');
   assert.equal(page.video.paused, false);
   assert.equal(page.element('event-mute').getAttribute('aria-label'), 'Unmute audio');
+  assert.equal(page.element('event-play-overlay').hidden, true);
+  assert.equal(page.element('event-speed').hidden, true);
+  assert.equal(page.video.playbackRate, 1);
 });
 
 test('a waiting viewer starts automatically when live media becomes available', async () => {
@@ -120,6 +123,64 @@ test('replays retain deliberate playback instead of starting automatically', asy
   await page.element('event-play').onclick();
   assert.equal(page.video.plays.length, 1);
   assert.equal(page.video.src, '/watch/test-event/replay.m3u8');
+});
+
+test('replay has a prominent play action before playback and when paused', async () => {
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false});
+  const overlay = page.element('event-play-overlay');
+  assert.equal(overlay.hidden, false);
+  assert.equal(overlay.getAttribute('aria-label'), 'Play replay');
+  assert.equal(page.element('event-poster').hidden, false);
+  await overlay.onclick();
+  assert.equal(page.video.paused, false);
+  assert.equal(overlay.hidden, true);
+  await page.element('event-play').onclick();
+  assert.equal(overlay.hidden, false);
+  assert.equal(overlay.getAttribute('aria-label'), 'Resume replay');
+  await overlay.onclick();
+  assert.equal(page.video.paused, false);
+  assert.equal(overlay.hidden, true);
+});
+
+test('replay play overlay returns after a failed start and at the end', async () => {
+  const replay = {...live, state: 'ended', published: true, delivering: false};
+  const failed = await viewer(replay, {playError: new Error('decode failed')});
+  await failed.element('event-play-overlay').onclick();
+  assert.equal(failed.element('event-play-overlay').hidden, false);
+  assert.match(failed.element('playback-error').textContent, /could not start/);
+  const page = await viewer(replay);
+  await page.element('event-play-overlay').onclick();
+  page.video.paused = true; page.video.ended = true; page.video.dispatch('ended');
+  await new Promise(setImmediate);
+  assert.equal(page.element('event-play-overlay').hidden, false);
+  assert.equal(page.element('event-play-overlay').getAttribute('aria-label'), 'Play replay again');
+});
+
+test('replay speed supports quarter steps from half to double speed and survives pause and polling', async () => {
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false});
+  const speed = page.element('event-speed');
+  assert.equal(speed.hidden, false);
+  assert.equal(speed.value, '1');
+  for (const rate of [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]) {
+    speed.value = String(rate); speed.onchange();
+    assert.equal(page.video.playbackRate, rate);
+  }
+  await page.element('event-play-overlay').onclick();
+  await page.element('event-play').onclick();
+  await page.poll();
+  await page.element('event-play-overlay').onclick();
+  assert.equal(page.video.playbackRate, 2);
+  assert.equal(speed.value, '2');
+  await page.element('event-retry').onclick();
+  await page.element('event-play-overlay').onclick();
+  assert.equal(page.video.playbackRate, 2, 'refreshing the media keeps the selected speed');
+  for (const invalid of ['0', '3', '1.1', 'NaN']) {
+    speed.value = invalid; speed.onchange();
+    assert.equal(page.video.playbackRate, 2);
+  }
+  page.setStatus(live); await page.poll();
+  assert.equal(speed.hidden, true);
+  assert.equal(page.video.playbackRate, 1, 'replay speed must not carry over into live playback');
 });
 
 
@@ -187,6 +248,7 @@ test('an expired thumbnail response cannot revive a withdrawn replay', async () 
   finish(thumbnailIndex); await new Promise(setImmediate);
   assert.equal(page.element('event-poster').hidden, true);
   assert.equal(page.element('event-seek').hidden, true);
+  assert.equal(page.element('event-play-overlay').hidden, true);
 });
 
 
@@ -196,6 +258,7 @@ test('a delayed seek cannot move the replacement live stream', async () => {
   const page = await viewer({...live, state: 'ended', published: true, delivering: false}, {playGate});
   const timeline = page.element('event-timeline'); timeline.value = '7.5'; timeline.oninput();
   const seek = timeline.onchange();
+  assert.equal(page.element('event-play-overlay').hidden, true, 'hide the action while playback is starting');
   page.setStatus(live); await page.poll();
   resume(); await seek; await new Promise(setImmediate);
   assert.equal(page.video.currentTime, 0, 'stale replay seek must not rewind live media');

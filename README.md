@@ -59,8 +59,9 @@ Live before starting the broadcast. The public viewer starts live video automati
 when media becomes available, including after a reload. It starts muted; viewers
 can unmute using the controls over the video. Browsers that block muted autoplay
 retain a manual play control. Deliberate pauses are preserved. Replay pages show
-the first recorded frame, with playback on demand and thumbnail
-previews when hovering or dragging the seek bar. Live playback has no seek bar.
+the first recorded frame with a large play overlay and thumbnail previews when
+hovering or dragging the seek bar. Replay speed ranges from 0.5× to 2× in 0.25×
+steps. Live playback has no seek bar or speed selector.
 Open **Events** in the sidebar to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
