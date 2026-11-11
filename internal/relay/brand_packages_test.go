@@ -10,8 +10,10 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"image/color"
 	"math"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -334,5 +336,78 @@ func TestBrandPackageMembersRequirePackageRemoval(t *testing.T) {
 	w = dashboardRequest(s, "DELETE", "/api/generator/packages/owned/versions/1", `{}`)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestBrandPackageInvalidInputsLeaveLibraryUnchanged(t *testing.T) {
+	for _, kind := range []string{"incompatible", "manifest-size", "file-count", "checksum", "missing-file", "missing-reference", "invalid-font"} {
+		t.Run(kind, func(t *testing.T) {
+			s := libraryServer(t)
+			m := brandManifest{FormatVersion: 1, ID: "bad-kit", Version: 1, Name: "Bad kit"}
+			files := map[string][]byte{}
+			switch kind {
+			case "incompatible":
+				m.FormatVersion = 2
+			case "manifest-size":
+				m.Notes = strings.Repeat("x", maxBrandManifestBytes)
+			case "file-count":
+				for i := 0; i < 256; i++ {
+					files[fmt.Sprintf("file-%d", i)] = nil
+				}
+			case "checksum", "missing-file", "invalid-font":
+				data := assetPNG(t, color.NRGBA{A: 255})
+				a := brandAsset{ID: "logo", Name: "Logo", Kind: "image", Path: "logo.png", Digest: fmt.Sprintf("%x", sha256.Sum256(data))}
+				if kind == "checksum" {
+					a.Digest = strings.Repeat("0", 64)
+				}
+				if kind == "invalid-font" {
+					a.Kind = "font"
+				}
+				m.Assets = []brandAsset{a}
+				if kind != "missing-file" {
+					files[a.Path] = data
+				}
+			case "missing-reference":
+				style := mediaauthor.RetroTheme(1).Style
+				style.Logo = &mediaauthor.AssetRef{ID: "absent", Revision: 1}
+				m.Themes = []brandTheme{{ID: "primary", Name: "Primary", Style: style}}
+			}
+			w := assetUpload(t, s, "/api/generator/packages", "bad.zip", brandZIP(t, m, files))
+			if w.Code != 422 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			w = dashboardRequest(s, "GET", "/api/generator/packages", "")
+			if w.Body.String() != "[]\n" {
+				t.Fatal("partial kit published", w.Body.String())
+			}
+			if len(s.generator.assets) != 0 {
+				t.Fatal("partial assets published")
+			}
+		})
+	}
+}
+
+func TestBrandPackageEndpointsRequireAuthenticationAndSameOrigin(t *testing.T) {
+	s := libraryServer(t)
+	for _, item := range []struct{ method, path string }{{"GET", "/api/generator/packages"}, {"POST", "/api/generator/packages"}, {"POST", "/api/generator/packages/preview"}, {"GET", "/api/generator/packages/kit/versions/1/removal"}, {"DELETE", "/api/generator/packages/kit/versions/1"}} {
+		r := httptest.NewRequest(item.method, item.path, strings.NewReader("{}"))
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != 401 {
+			t.Fatalf("unauthenticated %s: %d", item.path, w.Code)
+		}
+		if item.method == "GET" {
+			continue
+		}
+		r = httptest.NewRequest(item.method, item.path, strings.NewReader("{}"))
+		r.SetBasicAuth(s.cfg.DashboardUsername, s.cfg.DashboardPassword)
+		r.Header.Set("Origin", "https://untrusted.example")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("X-Restreamer-Control", "1")
+		w = httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != 403 {
+			t.Fatalf("cross-origin %s: %d", item.path, w.Code)
+		}
 	}
 }
