@@ -24,6 +24,7 @@ type Server struct {
 	eventStorageError     string
 	eventSlots            chan struct{}
 	eventAuthSlots        chan struct{}
+	eventThumbnailSlots   chan struct{}
 	eventsMu              sync.RWMutex
 	events                map[string]*streamingEvent
 	ingestionMu           sync.Mutex
@@ -66,7 +67,7 @@ type Server struct {
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{eventSlots: make(chan struct{}, 64), eventAuthSlots: make(chan struct{}, 4), cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{}, devices: newDeviceAccess()}
+	s := &Server{eventThumbnailSlots: make(chan struct{}, 1), eventSlots: make(chan struct{}, 64), eventAuthSlots: make(chan struct{}, 4), cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{}, devices: newDeviceAccess()}
 	for _, target := range cfg.Targets {
 		s.outputs = append(s.outputs, s.newOutput(target))
 	}

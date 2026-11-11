@@ -57,8 +57,11 @@ unique name, optionally set an event password, and choose whether to publish rep
 automatically after the event. New targets start disabled; enable the target in
 Live before starting the broadcast. The public viewer starts live video automatically
 when media becomes available, including after a reload. It starts muted; viewers
-can select **Unmute audio**. Browsers that block muted autoplay retain a manual
-**Watch live** button. Deliberate pauses are preserved, and replays start on demand. Open **Events** in the sidebar to copy
+can unmute using the controls over the video. Browsers that block muted autoplay
+retain a manual play control. Deliberate pauses are preserved. Replay pages show
+the first recorded frame, with playback on demand and thumbnail
+previews when hovering or dragging the seek bar. Live playback has no seek bar.
+Open **Events** in the sidebar to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
 
@@ -102,6 +105,12 @@ control. Passwords protect playlists and media segments as well as page playback
 Viewer sessions expire after 12 hours; changing the password revokes them.
 Withdrawing/deleting replay blocks new retrieval, but cannot recall media a
 viewer has already downloaded.
+
+Replay poster images and seek thumbnails are generated from the recorded media
+on demand and cached in the mounted event directory. They follow the same password
+and replay-publication rules as the recording; deleting an event also deletes its
+cached images. Generation uses one bounded FFmpeg process at a time. A preview
+failure is shown in the player and does not prevent replay playback.
 
 ### Playback and limits
 
@@ -798,6 +807,23 @@ Implementation is complete after the final commit is pushed and its GitHub CI
 run succeeds. Releases on `main` also require successful image publication.
 Follow the [delivery completion procedure](docs/agents/delivery.md) and include
 the exact commit SHA and successful CI run link when reporting completion.
+
+Trusted `main` pushes and manual `main` CI runs use the dedicated `restreamer`
+self-hosted Linux x64 runner for tests and image publication. Pull requests and
+other branches use GitHub-hosted Ubuntu 24.04; native ARM64 checks remain hosted.
+Keep the repository's external-fork workflow approval policy set to
+`all_external_contributors`. Before approving an external fork run, review its
+workflow changes and referenced actions; do not approve jobs requesting the
+private runner. This maintainer approval is the security boundary for the public
+repository. Runner labels and workflow routing are not access controls.
+
+Install [the context check](tools/ci/runner-guard.sh) outside the checkout as
+`ACTIONS_RUNNER_HOOK_JOB_STARTED` to detect accidental routing of PR/fork contexts,
+other repositories/workflows/branches, or missing context. A failed hook is not
+an admission control: workflow steps using `if: always()` can still execute.
+Update the installed check deliberately when its reviewed source changes.
+Existing FFmpeg/FFprobe installations are used without upgrading the shared
+runner host; missing tools are installed through APT.
 
 Run locally with the configured environment variables exported:
 

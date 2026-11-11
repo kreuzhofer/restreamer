@@ -19,16 +19,26 @@
       <button type="submit">Continue to event</button>
       <p id="login-error" role="alert"></p>
     </form>
-    <section class="screen" aria-label="Event playback">
+    <section id="event-screen" class="screen" aria-label="Event playback">
       <video id="event-video" playsinline hidden></video>
+      <img id="event-poster" class="event-poster" alt="First frame of the recording" hidden>
       <div id="event-placeholder"><p id="event-message">Your event will appear here.</p></div>
+      <div id="event-controls" class="player-controls" hidden>
+        <div id="event-seek" class="seek-control" hidden>
+          <input id="event-timeline" type="range" min="0" max="0" step="0.1" value="0" aria-label="Playback position" disabled>
+          <div id="event-seek-preview" class="seek-preview" aria-hidden="true" hidden><img id="event-thumbnail" alt="" hidden><span id="event-thumbnail-status">Loading preview…</span><span id="event-thumbnail-time">0:00</span></div>
+        </div>
+        <div class="control-bar">
+          <button id="event-play" class="player-button" type="button" aria-label="Play" title="Play" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path class="play-icon" d="m8 5 11 7-11 7Z"/><path class="pause-icon" d="M7 5h3v14H7zm7 0h3v14h-3Z"/></svg></button>
+          <button id="event-mute" class="player-button" type="button" aria-label="Mute audio" title="Mute audio" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3Z"/><path class="sound-icon" d="M16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path class="muted-icon" d="m16 9 6 6m0-6-6 6"/></svg></button>
+          <input id="event-volume" class="volume-control" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+          <span id="event-live" class="live-indicator">Live</span>
+          <span id="event-time" class="playback-time" hidden>0:00 / 0:00</span>
+          <button id="event-fullscreen" class="player-button fullscreen-button" type="button" aria-label="Full screen" title="Full screen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button>
+        </div>
+      </div>
     </section>
-    <div class="playback-actions">
-      <button id="event-play" type="button" hidden>Watch live</button>
-      <button id="event-mute" type="button" hidden>Mute audio</button>
-      <button id="event-fullscreen" type="button" hidden>Full screen</button>
-      <button id="event-retry" type="button">Refresh event</button>
-    </div>
+    <button id="event-retry" class="refresh-event" type="button" hidden>Refresh event</button>
     <p id="playback-error" role="alert"></p>
     <footer>Powered by Restreamer</footer>
   </main>

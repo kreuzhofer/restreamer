@@ -347,11 +347,20 @@ func testMusicPresentationLocalRTMPAndRehearsal(t *testing.T, mode string) {
 	if w := stageRequest(t, s, "prestream", map[string]any{"mode": "preview_only"}); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	time.Sleep(120 * time.Millisecond)
+	if mode == "continuous" {
+		eventually(t, func() bool { return readStage(t, s).Continuous.State == "running" })
+	} else {
+		time.Sleep(120 * time.Millisecond)
+	}
 	if destination.count() != 0 {
 		t.Fatal("rehearsal opened a destination")
 	}
 	stageRequest(t, s, "stop_now", nil)
+	if mode == "continuous" {
+		// Rehearsal shutdown is asynchronous. Finish its encoder cleanup before
+		// measuring connection continuity in the separate real broadcast.
+		eventually(t, func() bool { return readStage(t, s).Continuous.State == "off" })
+	}
 	if w := stageRequest(t, s, "prestream", map[string]any{"mode": "real"}); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
