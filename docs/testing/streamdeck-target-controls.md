@@ -32,3 +32,8 @@ At this documentation checkpoint, full `make check` and GitHub CI were still pen
 ## Sidebar correction and local installation
 
 After the initial review, the user identified that all action-list entries still used the generic Restreamer logo. Plugin 1.2.1 assigns a distinct authored SVG to each action and its initial key image: clock, broadcast waves, break cup, finish flag, clip player, status bars, stop square and destination switch. Official packaging validated all 19 files. The implementing agent installed the update through Finder and visually verified all eight distinct sidebar icons in the actual macOS Stream Deck app; existing keys continued showing current status. No broadcast command or destination toggle was invoked. This supplementary native check does not extend the independent review verdict above, and production server deployment remains pending.
+
+
+## Pre-release review correction — 2026-11-11
+
+The combined standards/spec review against `c57a5d0` found one rendering bug: UTF-16 truncation could split an emoji and make URI encoding throw. Version 1.2.2 truncates names by code point and encodes SVG images as UTF-8 base64. A plugin WebSocket regression failed before the fix and passed afterward, covering clip/destination emoji boundaries, malformed imported text and continued updates of another key. All 17 plugin tests and official packaging passed. The reviewer confirmed the correction; the spec review found no material mismatch. Physical-button verification and production deployment are separate release checks.

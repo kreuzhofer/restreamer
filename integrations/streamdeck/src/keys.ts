@@ -51,7 +51,8 @@ export function keySVG(face:Face):string {
 
 export function targetFace(snapshot:Snapshot|undefined,name:string|undefined,problem:string):Face {
  const output=snapshot?.outputs.find(o=>o.name===name);
- const face:Face={label:name&&name.length>12?name.slice(0,11)+'…':name||'TARGET',detail:'SELECT',tone:'gray',symbol:'○',platform:output?.platform,description:'Choose a destination'};
+ const characters=Array.from(name||'TARGET');
+ const face:Face={label:characters.length>12?characters.slice(0,11).join('')+'…':characters.join(''),detail:'SELECT',tone:'gray',symbol:'○',platform:output?.platform,description:'Choose a destination'};
  if(!snapshot)return {...face,detail:problem||'OFFLINE',symbol:'?',description:'Connection unavailable'};
  if(!name)return face;
  if(!output)return {...face,detail:'MISSING',tone:'amber',description:'Destination removed or renamed — select it again'};

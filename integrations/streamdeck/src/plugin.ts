@@ -48,7 +48,7 @@ function render(){
       face={label:labels[b.kind],detail:snapshot?'READY':client.problem||'OFFLINE',tone:'gray',symbol:snapshot?'○':'?',description:snapshot?'READY':'UNKNOWN'};
       if(active)face={...face,tone:'green',symbol:'✓',detail:'ACTIVE',description:'ACTIVE'};
       if(b.kind==='brb-return'&&stage?.stage==='BRB')face.label='RETURN';
-      if(b.kind==='play-clip'&&!active&&snapshot)face.detail=b.settings.name?.slice(0,12)||'SELECT CLIP';
+      if(b.kind==='play-clip'&&!active&&snapshot)face.detail=(b.settings.name ? Array.from(b.settings.name).slice(0,12).join('') : '')||'SELECT CLIP';
       if(selected&&!active){
         const failed=stage?.error||stage?.fallback_error||stage?.playback?.state==='failed';
         const detail=failed?'FAILED':b.kind==='go-live'?'NO OBS':stage?.playback?.state==='paused'?'PAUSED':'NOT READY';
@@ -64,7 +64,7 @@ function render(){
     }else if(!snapshot)face.detail=client.problem||'OFFLINE';
     if(b.invalid)face={label:labels[b.kind],detail:'INVALID',tone:'amber',symbol:'!',description:'INVALID SETTINGS — reselect this key’s clip or recreate the key'};
     const svg=keySVG(face);
-    if(b.image!==svg){b.image=svg;void b.key.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);}
+    if(b.image!==svg){b.image=svg;void b.key.setImage(`data:image/svg+xml;base64,${Buffer.from(svg,'utf8').toString('base64')}`);}
   }
 }
 class Control extends SingletonAction<ClipSettings>{

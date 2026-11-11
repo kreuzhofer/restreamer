@@ -323,3 +323,19 @@ test('target toggles cancel changed holds and reject missing destinations or mis
  await eventually(()=>r.image('target').includes('PAIR AGAIN'));
  r.key('target-toggle','target');await wait(2100);r.key('target-toggle','target','keyUp');await wait(100);assert.equal(r.commands.length,0);
 });
+
+
+test('Unicode names render without interrupting other keys',async t=>{
+  const r=await rig(t);
+  r.appear('play-clip','emoji-clip',{revision:'a'.repeat(64),name:'abcdefghijk😀more'});
+  r.appear('target-toggle','emoji-target',{target:'abcdefghij😀more'});
+  r.appear('status');
+  await eventually(()=>r.image('emoji-clip').includes('abcdefghijk😀'));
+  await eventually(()=>r.image('emoji-target').includes('abcdefghij😀…'));
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.send('didReceiveSettings','emoji-clip','play-clip',{settings:{revision:'a'.repeat(64),name:'broken\ud800'}});
+  await eventually(()=>r.image('emoji-clip').includes('broken�'));
+  r.state.stage.stage='OFF';
+  await eventually(()=>r.image('status').includes('>OFF<'));
+  assert.equal(r.commands.length,0);
+});
