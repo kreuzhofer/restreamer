@@ -51,11 +51,11 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/events/{id}/media/{resource...}", s.eventOperatorHTTP)
 	private.HandleFunc("GET /events/{id}", s.eventOperatorHTTP)
 	private.HandleFunc("GET /events/{id}/{resource...}", s.eventOperatorHTTP)
-	private.HandleFunc("GET /events", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := dashboardFiles.ReadFile("web/events.html")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(data)
-	})
+	for _, route := range []string{"/events", "/events.html"} {
+		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/library?collection=events", http.StatusTemporaryRedirect)
+		})
+	}
 	mux.HandleFunc("POST /api/devices/pair", s.pairingHTTP)
 	mux.HandleFunc("POST /api/devices/token", s.pairingHTTP)
 	private.HandleFunc("POST /api/devices/approve", s.approveDeviceHTTP)

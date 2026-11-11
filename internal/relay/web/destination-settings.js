@@ -149,7 +149,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
         const row = node('article'), info = node('div'); info.className = 'destination-info';
         info.append(node('h3', destination.name), node('p', destination.ready ? 'Public streaming page · one event per link' : destination.reason));
         const watch = node('a', 'Open viewer page'); watch.href = '/watch/' + destination.event_id; watch.target = '_blank'; watch.rel = 'noopener';
-        const archive = node('a', 'Manage event and replay'); archive.href = '/events';
+        const archive = node('a', 'Manage event and replay'); archive.href = '/library?collection=events';
         const actions = node('div'); actions.className = 'destination-actions'; actions.append(watch, archive);
         row.append(info, actions); list.append(row); continue;
       }

@@ -11,6 +11,8 @@
  <script src="/bulk-cleanup.js" defer></script>
  <script src="/generator.js" defer></script>
  <script src="/show-setup.js" defer></script>
+ <script src="/events.js" defer></script>
+ <link rel="stylesheet" href="/events.css">
  <link rel="stylesheet" href="/show-setup.css">
  <script src="/studio-media.js" defer></script>
  <script src="/music-playlists.js" defer></script>
@@ -39,13 +41,20 @@
  <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
  <nav class="studio-collections" aria-label="Library sections">
   <button type="button" data-studio-collection="designs">Designs</button><button type="button" data-studio-collection="music">Music</button><button type="button" data-studio-collection="media">Uploads</button><button type="button" data-studio-collection="themes">Themes</button>
+  <button type="button" data-studio-collection="events">Events</button>
   <button id="resume-design" type="button" hidden>Return to open design</button>
  </nav>
  <details class="studio-queue"><summary id="generation-status">Shared queue · loading…</summary><div id="generation-queue" aria-label="Shared generation queue"></div><p id="generation-queue-error" class="notice" role="alert" hidden></p></details>
  <p class="studio-mobile-note">Text edits, uploads, generation and theme editing require desktop. Browse prepared results here, or open Live to operate your broadcast.</p>
  <p id="generator-notice" class="notice" role="alert" hidden></p>
  <nav id="shared-editor-nav" aria-label="Editor breadcrumb" hidden><a href="/setup">Show setup</a><span aria-hidden="true"> / </span><span>Design editor</span></nav>
+ <dialog id="archive-dialog" aria-labelledby="archive-dialog-title" aria-describedby="archive-dialog-description"><form id="archive-form"><h2 id="archive-dialog-title"></h2><p id="archive-dialog-description"></p><label id="archive-password-label" for="archive-password" hidden>New event password (leave empty to remove protection)</label><input id="archive-password" type="password" autocomplete="new-password" maxlength="256" hidden><p id="archive-error" role="alert"></p><div class="dialog-actions"><button id="archive-confirm" class="primary-button" type="submit">Confirm</button><button id="archive-cancel" class="preview-button" type="button">Cancel</button></div></form></dialog>
+
  <div class="generator-grid">
+ <section id="studio-events" class="panel studio-collection" data-collection-panel="events" hidden aria-labelledby="archive-heading"><header><h2 id="archive-heading">Events</h2><p>One event, one link. Keep recordings private or make them available as replays.</p><a class="context-resource-link" href="/settings">Create an event in Destinations</a></header>
+<div class="archive-toolbar"><p id="archive-status" role="status" aria-live="polite">Loading events…</p><button id="archive-refresh" class="preview-button" type="button">Refresh archive</button></div>
+<div id="archive-list"></div>
+</section>
  <section id="show-setup" class="panel studio-collection" data-collection-panel="setup" aria-labelledby="show-setup-heading"><div class="panel-heading"><div><h1 id="show-setup-heading">Show setup</h1><p class="stage-help">Choose what plays before, during a break, and after your show.</p></div><a href="/live" class="context-resource-link">Open Live</a></div><p id="show-setup-error" class="notice" role="alert" hidden></p><p id="show-setup-status" class="stage-help" role="status"></p><div id="show-setup-cards" class="show-cards"></div><button id="show-setup-refresh" class="text-button" type="button">Refresh status</button><p class="stage-help">Selections apply on the next use. What is playing now stays unchanged.</p></section>
  <dialog id="show-chooser" class="show-dialog" aria-labelledby="show-chooser-heading"><div class="panel-heading"><h2 id="show-chooser-heading">Choose a render</h2><button id="show-chooser-close" class="preview-button" type="button">Close</button></div><p id="show-chooser-status" class="stage-help" role="status"></p><div id="show-chooser-list"></div></dialog>
  <dialog id="show-preview" class="show-dialog" aria-labelledby="show-preview-heading"><div class="panel-heading"><h2 id="show-preview-heading">Preview</h2><button id="show-preview-close" class="preview-button" type="button">Close preview</button></div><video id="show-preview-video" controls playsinline preload="metadata"></video><p id="show-preview-error" class="notice" role="alert" hidden>This render could not be loaded. Refresh Show setup and check its readiness.</p><p class="stage-help">Preview only. Your broadcast is unchanged.</p></dialog>

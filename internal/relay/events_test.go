@@ -671,3 +671,11 @@ func TestEventPreparedProgrammeAndEndingProduceDecodableReplay(t *testing.T) {
 		t.Fatal("ending allowed reuse")
 	}
 }
+
+func TestEventArchiveUsesLibraryRoute(t *testing.T) {
+	s := eventTestServer(t)
+	response := dashboardRequest(s, "GET", "/events", "")
+	if response.Code != http.StatusTemporaryRedirect || response.Header().Get("Location") != "/library?collection=events" {
+		t.Fatalf("archive bookmark should open Library Events: %d %s", response.Code, response.Header().Get("Location"))
+	}
+}

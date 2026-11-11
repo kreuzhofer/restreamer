@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const collections = ['designs','music','media','themes','templates'];
+  const collections = ['designs','music','media','themes','templates','events'];
   function safeBack(value) {
     if(value==='/setup')return value;
     if(!value?.startsWith('/library'))return '/setup';

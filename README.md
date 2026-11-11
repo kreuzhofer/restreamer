@@ -55,7 +55,7 @@ and [Twitch's broadcasting guidelines](https://help.twitch.tv/s/article/broadcas
 In desktop **Settings → Destinations**, choose **Public streaming page**, enter a
 unique name, optionally set an event password, and choose whether to publish replay
 automatically after the event. New targets start disabled; enable the target in
-Live before starting the broadcast. Open **Event archive** from Settings to copy
+Live before starting the broadcast. Open **Library → Events** to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
 
