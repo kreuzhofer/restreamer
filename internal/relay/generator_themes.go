@@ -53,6 +53,9 @@ func (g *generatorStore) resolveTheme(ref mediaauthor.ThemeRef) (mediaauthor.The
 	if !ok {
 		return t, errors.New("The selected theme revision is unavailable. Choose an available revision explicitly.")
 	}
+	if err := g.resolveBrandFont(&t.Style); err != nil {
+		return t, err
+	}
 	return t, nil
 }
 func (g *generatorStore) themeIssues(ref mediaauthor.ThemeRef) []mediaauthor.Issue {
@@ -60,10 +63,21 @@ func (g *generatorStore) themeIssues(ref mediaauthor.ThemeRef) []mediaauthor.Iss
 	if err != nil {
 		return []mediaauthor.Issue{{Field: "theme", Message: err.Error()}}
 	}
-	return g.themeImageIssues(t.Style, "theme.")
+	issues := g.themeImageIssues(t.Style, "theme.")
+	if err := g.checkBrandMotion(t.Style); err != nil {
+		issues = append(issues, mediaauthor.Issue{Field: "theme.motion", Message: err.Error()})
+	}
+	return issues
 }
 func (g *generatorStore) themeStyleAssetIssues(style mediaauthor.Style) []mediaauthor.Issue {
-	return g.themeImageIssues(style, "style.")
+	issues := g.themeImageIssues(style, "style.")
+	if err := g.checkBrandMotion(style); err != nil {
+		issues = append(issues, mediaauthor.Issue{Field: "style.motion", Message: err.Error()})
+	}
+	if err := g.resolveBrandFont(&style); err != nil {
+		issues = append(issues, mediaauthor.Issue{Field: "style.font_asset", Message: err.Error()})
+	}
+	return issues
 }
 
 // Both the style editor and pinned design themes validate the same exact images.
@@ -72,7 +86,7 @@ func (g *generatorStore) themeImageIssues(style mediaauthor.Style, prefix string
 	for _, entry := range []struct {
 		field string
 		ref   *mediaauthor.AssetRef
-	}{{"background", style.Background}, {"logo", style.Logo}} {
+	}{{"background", style.Background}, {"logo", style.Logo}, {"obs_border", style.OBSBorder}} {
 		ref := entry.ref
 		if ref == nil {
 			continue
@@ -225,6 +239,13 @@ func (s *Server) generatorThemeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) loadThemeInputs(theme mediaauthor.Theme, width, height int, stage string) (mediaauthor.RenderInputs, error) {
 	inputs := mediaauthor.RenderInputs{}
+	s.generator.mu.Lock()
+	fontErr := s.generator.resolveBrandFont(&theme.Style)
+	s.generator.mu.Unlock()
+	if fontErr != nil {
+		return inputs, fontErr
+	}
+	inputs.Font = theme.Style.ResolvedFont
 	var err error
 	if theme.Style.Artwork != "" {
 		art, ok := themeArtworkForStage(theme.Style.Artwork, stage)

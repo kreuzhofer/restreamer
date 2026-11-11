@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -13,6 +14,18 @@ import (
 // Paths are relative to the media library. Only explicit library deletion owns originals.
 func validDeletionPath(path string) bool {
 	parts := strings.Split(filepath.ToSlash(path), "/")
+	if len(parts) == 3 && parts[0] == "generator" && parts[1] == "assets" {
+		return validDesignID(parts[2])
+	}
+	if len(parts) == 3 && parts[0] == "generator" && parts[1] == "packages" && strings.HasSuffix(parts[2], ".json") {
+		stem := strings.TrimSuffix(parts[2], ".json")
+		i := strings.LastIndex(stem, "-")
+		if i < 1 {
+			return false
+		}
+		v, e := strconv.Atoi(stem[i+1:])
+		return e == nil && v > 0 && strconv.Itoa(v) == stem[i+1:] && brandNamePattern.MatchString(stem[:i])
+	}
 	if len(parts) == 2 && parts[0] == "presentations" {
 		for _, suffix := range []string{"-scene.pcm", "-music.pcm"} {
 			if strings.HasSuffix(parts[1], suffix) && validRevisionID(strings.TrimSuffix(parts[1], suffix)) {
@@ -152,7 +165,7 @@ func deleteReviewedMediaFiles(root string, paths []string, review func(path, sta
 		if err != nil {
 			return rollback(err)
 		}
-		if !info.Mode().IsRegular() {
+		if !info.Mode().IsRegular() && !(info.IsDir() && strings.HasPrefix(path, "generator/assets/")) {
 			return rollback(errors.New("media deletion requires regular files"))
 		}
 		err = os.Rename(source, filepath.Join(dir, fmt.Sprint(i)))
@@ -179,7 +192,7 @@ func deleteReviewedMediaFiles(root string, paths []string, review func(path, sta
 // mistake the remaining files for an uncommitted transaction and restore them.
 func purgeMediaDeletion(dir string, paths []string) error {
 	for i := range paths {
-		if err := os.Remove(filepath.Join(dir, fmt.Sprint(i))); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := os.RemoveAll(filepath.Join(dir, fmt.Sprint(i))); err != nil {
 			return err
 		}
 	}

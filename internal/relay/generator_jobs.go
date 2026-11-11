@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
@@ -118,7 +119,7 @@ func (g *generatorStore) loadJobs() error {
 		return err
 	}
 	for _, entry := range entries {
-		if validDesignID(entry.Name()) {
+		if validDesignID(entry.Name()) || strings.HasPrefix(entry.Name(), "brand-stage-") || strings.HasPrefix(entry.Name(), "brand-") && strings.HasSuffix(entry.Name(), ".zip") {
 			if os.RemoveAll(filepath.Join(g.workRoot, entry.Name())) != nil {
 				return errors.New("cannot clear interrupted generator output")
 			}

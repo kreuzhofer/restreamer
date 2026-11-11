@@ -144,6 +144,17 @@ are outside this MVP. The standard HLS format keeps future CDN delivery possible
 See [validation evidence and remaining browser checks](docs/public-events-validation.md)
 for the tested media setup and the limits of the current verification.
 
+## Corporate brand packages
+
+Use **Library → Brand packages** to review and import a prepared ZIP containing
+assets, fonts, style themes and editable Starting soon, BRB and Ending templates.
+Create a show from an installed template; existing designs and on-air media stay
+unchanged. Package removal previews what will be deleted and preserves edited or
+referenced resources. Corporate assets can remain private without modifying the
+application image.
+
+See [the package format and sample builder](docs/brand-packages.md) to prepare a kit.
+
 ## Whole animation loops in scenes
 
 In the design editor, select a scene and choose **Scene length → Animation loops**,
@@ -797,9 +808,24 @@ run succeeds. Releases on `main` also require successful image publication.
 Follow the [delivery completion procedure](docs/agents/delivery.md) and include
 the exact commit SHA and successful CI run link when reporting completion.
 
-Trusted `main` pushes and manual `main` CI runs use the dedicated `restreamer`
-self-hosted Linux x64 runner for tests and image publication. Pull requests and
-other branches use GitHub-hosted Ubuntu 24.04; native ARM64 checks remain hosted.
+Trusted `main` pushes and manual `main` CI runs use dedicated self-hosted Linux
+x64 runners: `restreamer` for tests and `restreamer-image` for image builds and
+publication. On agenthost these are separate services and working directories;
+do not give the image runner the `restreamer` label, because concurrent test jobs
+would collide on fixed smoke-test ports, container names and volumes. Image jobs
+can run alongside another workflow's tests, but still wait for their own tests.
+The test job is capped at 45 minutes; image and ARM64 jobs at 20 minutes each.
+Private image runners retain BuildKit state locally using a stable builder name
+per runner. They do not import or export image layers through the GitHub cache;
+hosted jobs retain that remote cache. This avoids spending the image-job budget
+uploading a large cache over the runner's internet connection. Builder cleanup
+still removes the job's container but preserves its local cache volume.
+The maintainer also
+approved pushes to `feature/nebius-show-package` for private x64 validation while
+hosted Ubuntu package DNS is unavailable; remove that exception from routing and
+the installed context check when the branch is retired. Pull requests, forks,
+manual feature-branch runs and all other branches remain on GitHub-hosted Ubuntu
+24.04; native ARM64 checks remain hosted.
 Keep the repository's external-fork workflow approval policy set to
 `all_external_contributors`. Before approving an external fork run, review its
 workflow changes and referenced actions; do not approve jobs requesting the

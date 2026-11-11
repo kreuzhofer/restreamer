@@ -158,6 +158,11 @@ func layoutSceneStyled(scene Scene, width, height int, style Style) (result scen
 	switch scene.Font {
 	case "", "go-sans":
 	case "arcade-pixel":
+	case "brand-font":
+		if style.ResolvedFont == nil {
+			return fail("font", "The selected brand font is unavailable.")
+		}
+		f = style.ResolvedFont
 	case "go-mono":
 		f = monoFont
 	default:
@@ -268,6 +273,9 @@ func RenderSceneWithImage(scene Scene, width, height int, asset image.Image) (*i
 }
 
 func RenderSceneStyled(scene Scene, width, height int, style Style, inputs RenderInputs, frame, fps int) (*image.RGBA, error) {
+	if inputs.Font != nil {
+		style.ResolvedFont = inputs.Font
+	}
 	layout, _, message := layoutSceneStyled(scene, width, height, style)
 	if layout.face != nil {
 		defer layout.face.Close()

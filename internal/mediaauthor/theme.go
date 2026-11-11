@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	xdraw "golang.org/x/image/draw"
+	"golang.org/x/image/font/opentype"
 )
 
 type Theme struct {
@@ -21,30 +22,40 @@ type Theme struct {
 }
 
 // Style contains appearance only. Scene overrides remain in the unchanged draft.
+type ThemeMotion struct {
+	Asset        AssetRef `json:"asset"`
+	CycleSeconds int      `json:"cycle_seconds"`
+}
 type Style struct {
-	Artwork               string        `json:"artwork,omitempty"`
-	ContentOffsetYPercent float64       `json:"content_offset_y_percent,omitempty"`
-	Font                  string        `json:"font"`
-	ListFontSize          float64       `json:"list_font_size,omitempty"`
-	FontSize              float64       `json:"font_size"`
-	BackgroundColor       string        `json:"background_color"`
-	TextEdgeColor         string        `json:"text_edge_color,omitempty"`
-	TextColor             string        `json:"text_color"`
-	AccentColor           string        `json:"accent_color"`
-	Background            *AssetRef     `json:"background,omitempty"`
-	Logo                  *AssetRef     `json:"logo,omitempty"`
-	LogoPosition          string        `json:"logo_position"`
-	LogoHeightPercent     float64       `json:"logo_height_percent"`
-	ContentRegion         ContentRegion `json:"content_region"`
-	LineSpacingPercent    float64       `json:"line_spacing_percent"`
-	ListSpacingPercent    float64       `json:"list_spacing_percent"`
-	BorderStyle           string        `json:"border_style"`
-	BorderWidth           float64       `json:"border_width"`
-	Effect                string        `json:"effect"`
-	EffectSpeed           int           `json:"effect_speed"`
+	LogoInsetPercent      float64        `json:"logo_inset_percent,omitempty"`
+	Motion                *ThemeMotion   `json:"motion,omitempty"`
+	OBSBorder             *AssetRef      `json:"obs_border,omitempty"`
+	FontAsset             *AssetRef      `json:"font_asset,omitempty"`
+	ResolvedFont          *opentype.Font `json:"-"`
+	Artwork               string         `json:"artwork,omitempty"`
+	ContentOffsetYPercent float64        `json:"content_offset_y_percent,omitempty"`
+	Font                  string         `json:"font"`
+	ListFontSize          float64        `json:"list_font_size,omitempty"`
+	FontSize              float64        `json:"font_size"`
+	BackgroundColor       string         `json:"background_color"`
+	TextEdgeColor         string         `json:"text_edge_color,omitempty"`
+	TextColor             string         `json:"text_color"`
+	AccentColor           string         `json:"accent_color"`
+	Background            *AssetRef      `json:"background,omitempty"`
+	Logo                  *AssetRef      `json:"logo,omitempty"`
+	LogoPosition          string         `json:"logo_position"`
+	LogoHeightPercent     float64        `json:"logo_height_percent"`
+	ContentRegion         ContentRegion  `json:"content_region"`
+	LineSpacingPercent    float64        `json:"line_spacing_percent"`
+	ListSpacingPercent    float64        `json:"list_spacing_percent"`
+	BorderStyle           string         `json:"border_style"`
+	BorderWidth           float64        `json:"border_width"`
+	Effect                string         `json:"effect"`
+	EffectSpeed           int            `json:"effect_speed"`
 }
 
 type RenderInputs struct {
+	Font                    *opentype.Font
 	Image, Background, Logo image.Image
 	// TransparentBackdrop omits only the background, preserving borders and content.
 	TransparentBackdrop bool
@@ -160,7 +171,16 @@ func IsBuiltinTheme(id string) bool {
 	return false
 }
 func ThemeAssetRefs(t Theme) []AssetRef {
-	refs := make([]AssetRef, 0, 2)
+	refs := make([]AssetRef, 0, 5)
+	if t.Style.Motion != nil {
+		refs = append(refs, t.Style.Motion.Asset)
+	}
+	if t.Style.OBSBorder != nil {
+		refs = append(refs, *t.Style.OBSBorder)
+	}
+	if t.Style.FontAsset != nil {
+		refs = append(refs, *t.Style.FontAsset)
+	}
 	if t.Style.Background != nil {
 		refs = append(refs, *t.Style.Background)
 	}
@@ -185,6 +205,9 @@ func ParseColor(value string) (color.RGBA, error) {
 func ValidateStyle(s Style) []Issue {
 	issues := make([]Issue, 0)
 	add := func(field, message string) { issues = append(issues, Issue{"style." + field, message}) }
+	if s.Motion != nil && (s.Motion.CycleSeconds < 1 || s.Motion.CycleSeconds > 120 || s.Effect != "none" || s.Artwork != "") {
+		add("motion", "Motion requires a 1–120 second cycle, no built-in artwork and no additional effect.")
+	}
 	if s.Artwork != "" && s.Artwork != "arcade-after-hours" && s.Artwork != "neon-night" && !IsPixelArtwork(s.Artwork) {
 		add("artwork", "Choose an available built-in artwork.")
 	}
@@ -214,8 +237,11 @@ func ValidateStyle(s Style) []Issue {
 	if s.ContentRegion.HeightPercent/2+math.Abs(s.ContentOffsetYPercent) > 50 {
 		add("content_region", "The content region must remain within the frame.")
 	}
-	if s.Font != "go-sans" && s.Font != "go-mono" && s.Font != "arcade-pixel" {
+	if s.Font != "go-sans" && s.Font != "go-mono" && s.Font != "arcade-pixel" && s.Font != "brand-font" {
 		add("font", "Choose Go Sans, Go Mono or Arcade Pixel.")
+	}
+	if (s.Font == "brand-font") != (s.FontAsset != nil) {
+		add("font_asset", "Brand font requires an exact font asset revision.")
 	}
 	for field, v := range map[string]string{"background_color": s.BackgroundColor, "text_color": s.TextColor, "accent_color": s.AccentColor} {
 		if _, err := ParseColor(v); err != nil {
@@ -252,6 +278,9 @@ func ValidateStyle(s Style) []Issue {
 	if s.LogoPosition != "top-left" && s.LogoPosition != "top-right" && s.LogoPosition != "bottom-left" && s.LogoPosition != "bottom-right" {
 		add("logo_position", "Choose a top or bottom corner.")
 	}
+	if s.LogoInsetPercent != 0 && !validRange(s.LogoInsetPercent, 1, 10) {
+		add("logo_inset_percent", "Use a logo inset of 1–10%, or zero for the existing default.")
+	}
 	if !validRange(s.LogoHeightPercent, 2, 8) {
 		add("logo_height_percent", "Use a logo band height of 2–8%.")
 	}
@@ -280,12 +309,16 @@ func resolveSceneStyle(scene Scene, s Style) Scene {
 }
 func logoRegion(width, height int, s Style) image.Rectangle {
 	w, h := width/5, int(float64(height)*s.LogoHeightPercent/100)
-	x, y := width/20, height/100
+	inset := height / 100
+	if s.LogoInsetPercent != 0 {
+		inset = int(float64(height) * s.LogoInsetPercent / 100)
+	}
+	x, y := width/20, inset
 	if strings.HasSuffix(s.LogoPosition, "right") {
 		x = width - width/20 - w
 	}
 	if strings.HasPrefix(s.LogoPosition, "bottom") {
-		y = height - height/100 - h
+		y = height - inset - h
 	}
 	return image.Rect(x, y, x+w, y+h)
 }

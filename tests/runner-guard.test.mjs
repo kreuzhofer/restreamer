@@ -60,3 +60,14 @@ test('context check reports failure for other workflows, branches, or missing co
   assert.equal(runGuard({}, {ref: 'refs/heads/feature'}).status, 1);
   assert.equal(runGuard({}, {repository: null}).status, 1);
 });
+
+test('only pushes to the explicitly approved feature branch are accepted', () => {
+  const ref = 'refs/heads/feature/nebius-show-package';
+  const env = {GITHUB_REF:ref, GITHUB_WORKFLOW_REF:`kreuzhofer/restreamer/.github/workflows/ci.yml@${ref}`};
+  assert.equal(runGuard(env, {ref}).status, 0);
+  assert.equal(runGuard({...env,GITHUB_EVENT_NAME:'workflow_dispatch'}, {ref}).status, 1);
+  assert.equal(runGuard({...env,GITHUB_EVENT_NAME:'pull_request'}, {ref}).status, 1);
+  assert.equal(runGuard(env, {ref:'refs/heads/another-feature'}).status, 1);
+  assert.equal(runGuard({...env,GITHUB_WORKFLOW_REF:'kreuzhofer/restreamer/.github/workflows/ci.yml@refs/heads/main'}, {ref}).status, 1);
+  assert.equal(runGuard(env, {ref,repository:{full_name:'kreuzhofer/restreamer',fork:true}}).status, 1);
+});

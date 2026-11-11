@@ -48,7 +48,14 @@ func (s *Server) generatorThemePreviewHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	const width, height = 1920, 1080
 	var img image.Image
-	if input.View == "border" {
+	if input.View == "border" && input.Style.OBSBorder != nil {
+		var err error
+		img, err = s.loadAssetImage(*input.Style.OBSBorder)
+		if err != nil {
+			http.Error(w, err.Error(), 422)
+			return
+		}
+	} else if input.View == "border" {
 		// ValidateStyle restricts Artwork to known identifiers; embed also bounds IO.
 		data, err := obsFrames.ReadFile("artwork/obs-frames/" + input.Style.Artwork + ".png")
 		if err != nil {

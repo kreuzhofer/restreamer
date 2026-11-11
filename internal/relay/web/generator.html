@@ -10,6 +10,7 @@
  <script src="/music-selection.js" defer></script>
  <script src="/bulk-cleanup.js" defer></script>
  <script src="/generator.js" defer></script>
+ <script src="/brand-packages.js" defer></script>
  <script src="/show-setup.js" defer></script>
  <link rel="stylesheet" href="/show-setup.css">
  <script src="/studio-media.js" defer></script>
@@ -39,6 +40,7 @@
  <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
  <nav class="studio-collections" aria-label="Library sections">
   <button type="button" data-studio-collection="designs">Designs</button><button type="button" data-studio-collection="music">Music</button><button type="button" data-studio-collection="media">Uploads</button><button type="button" data-studio-collection="themes">Themes</button>
+  <button type="button" data-studio-collection="packages">Brand packages</button>
   <button id="resume-design" type="button" hidden>Return to open design</button>
  </nav>
  <details class="studio-queue"><summary id="generation-status">Shared queue · loading…</summary><div id="generation-queue" aria-label="Shared generation queue"></div><p id="generation-queue-error" class="notice" role="alert" hidden></p></details>
@@ -48,6 +50,12 @@
 
  <div class="generator-grid">
 
+ <section id="brand-packages" class="panel studio-collection" data-collection-panel="packages" hidden aria-labelledby="brand-package-heading">
+ <div class="collection-heading"><h1 id="brand-package-heading">Brand packages</h1><button type="button" id="brand-package-refresh" class="preview-button">Refresh packages</button></div>
+ <p class="stage-help">Install a complete branding kit: media, fonts, style themes and editable content templates. Existing shows and broadcasts stay unchanged.</p>
+ <form id="brand-package-upload" class="studio-authoring"><label>Brand package ZIP<input id="brand-package-file" type="file" accept=".zip,application/zip" required></label><div class="generator-actions"><button type="submit" class="primary-button">Review package</button><button id="brand-package-cancel" type="button" class="preview-button" hidden>Cancel request</button></div></form>
+ <p id="brand-package-status" class="stage-help" role="status" aria-live="polite"></p><div id="brand-package-preview" class="studio-authoring"></div><p class="collection-mobile-note">Inspect installed kits here. Open Studio on desktop to import packages and create shows.</p>
+ <h2>Installed packages</h2><div id="brand-package-list"></div></section>
  <section id="show-setup" class="panel studio-collection" data-collection-panel="setup" aria-labelledby="show-setup-heading"><div class="panel-heading"><div><h1 id="show-setup-heading">Show setup</h1><p class="stage-help">Choose what plays before, during a break, and after your show.</p></div><a href="/live" class="context-resource-link">Open Live</a></div><p id="show-setup-error" class="notice" role="alert" hidden></p><p id="show-setup-status" class="stage-help" role="status"></p><div id="show-setup-cards" class="show-cards"></div><button id="show-setup-refresh" class="text-button" type="button">Refresh status</button><p class="stage-help">Selections apply on the next use. What is playing now stays unchanged.</p></section>
  <dialog id="show-chooser" class="show-dialog" aria-labelledby="show-chooser-heading"><div class="panel-heading"><h2 id="show-chooser-heading">Choose a render</h2><button id="show-chooser-close" class="preview-button" type="button">Close</button></div><p id="show-chooser-status" class="stage-help" role="status"></p><div id="show-chooser-list"></div></dialog>
  <dialog id="show-preview" class="show-dialog" aria-labelledby="show-preview-heading"><div class="panel-heading"><h2 id="show-preview-heading">Preview</h2><button id="show-preview-close" class="preview-button" type="button">Close preview</button></div><video id="show-preview-video" controls playsinline preload="metadata"></video><p id="show-preview-error" class="notice" role="alert" hidden>This render could not be loaded. Refresh Show setup and check its readiness.</p><p class="stage-help">Preview only. Your broadcast is unchanged.</p></dialog>

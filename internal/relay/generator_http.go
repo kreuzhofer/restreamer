@@ -273,7 +273,7 @@ func (s *Server) generatorPreviewHTTP(w http.ResponseWriter, r *http.Request) {
 		artworkFrame += plan.Scenes[sceneIndex].Start
 		err = s.preparation.run(r.Context(), 30*time.Second, nil, func(attempt context.Context) error {
 			var attemptErr error
-			inputs.Background, attemptErr = artworkPreviewFrame(attempt, profile, artworkFrame, theme.Style, draft.Stage)
+			inputs.Background, attemptErr = s.artworkPreviewFrame(attempt, profile, artworkFrame, theme.Style, draft.Stage)
 			return attemptErr
 		})
 		if err != nil {

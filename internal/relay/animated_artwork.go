@@ -89,10 +89,16 @@ func themeArtworkForStage(id, stage string) (preparedArtwork, bool) {
 	}
 }
 func animatedArtwork(style mediaauthor.Style) bool {
+	if style.Motion != nil {
+		return true
+	}
 	art, ok := themeArtwork(style.Artwork)
 	return ok && style.Effect == art.effect
 }
 func themedBRBSeconds(style mediaauthor.Style) int {
+	if style.Motion != nil {
+		return style.Motion.CycleSeconds
+	}
 	if animatedArtwork(style) {
 		art, _ := themeArtwork(style.Artwork)
 		return art.seconds
@@ -112,10 +118,10 @@ func artworkBackdropFilter(p config.BRBProfile, style mediaauthor.Style) string 
 
 // Preview uses the same prepared master, frame-rate conversion and sizing as encoding.
 // The existing preview admission lock bounds concurrent decoder memory.
-func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style, stage string) (image.Image, error) {
+func (s *Server) artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, style mediaauthor.Style, stage string) (image.Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	art, ok := themeArtworkForStage(style.Artwork, stage)
+	art, ok := s.preparedThemeArtwork(style, stage)
 	if !ok {
 		return nil, errors.New("The selected artwork is unavailable.")
 	}
@@ -140,8 +146,8 @@ func artworkPreviewFrame(ctx context.Context, p config.BRBProfile, frame int, st
 
 // artworkOverlayArgs composes transparent content over the immutable artwork loop.
 // It only writes into the caller-owned, bounded preparation workspace.
-func artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style, stage string, startFrame int) ([]string, error) {
-	art, ok := themeArtworkForStage(style.Artwork, stage)
+func (s *Server) artworkOverlayArgs(dir, foreground string, p config.BRBProfile, style mediaauthor.Style, stage string, startFrame int) ([]string, error) {
+	art, ok := s.preparedThemeArtwork(style, stage)
 	if !ok {
 		return nil, errors.New("The selected artwork is unavailable.")
 	}
@@ -200,7 +206,7 @@ func (s *Server) renderArtworkVideoSegment(ctx context.Context, scene mediaautho
 	if err != nil || info.Size() >= budget {
 		return errors.New("Artwork video normalization reached its workspace limit.")
 	}
-	art, ok := themeArtworkForStage(style.Artwork, stage)
+	art, ok := s.preparedThemeArtwork(style, stage)
 	if !ok {
 		return errors.New("The selected artwork is unavailable.")
 	}

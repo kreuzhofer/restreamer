@@ -46,3 +46,10 @@ body[data-workspace=live]>main{padding-top:24px}.live-primary{padding:0 24px 0 0
 .monitor-path{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;font-size:13px;color:var(--muted)}
 .monitor-path select{width:auto;max-width:100%;min-height:44px}
 #broadcast-path-status{overflow-wrap:anywhere}
+
+#brand-packages { min-width: 0; grid-column: 1 / -1; }
+#brand-packages input { max-width: 100%; }
+.brand-package-summary { padding: 24px 0; border-bottom: 1px solid var(--border, #383e46); overflow-wrap: anywhere; }
+.brand-package-summary label { display: block; max-width: 480px; margin: 16px 0; }
+.brand-package-removal { margin-top: 20px; padding: 16px; background: var(--panel, #202328); }
+#brand-package-preview:empty { display: none; }
