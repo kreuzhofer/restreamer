@@ -1277,12 +1277,14 @@
 
   window.addEventListener('beforeunload', event => { if (!window.workspace?.departureApproved && (dirty || saving || namingJob || themeDirty || themeSaving)) { event.preventDefault(); event.returnValue = ''; } });
   (async () => {
+    // Events must remain reachable even when the authoring libraries cannot load.
+    if (requestedCollection === 'events') showCollection('events');
     try {
       await listDesigns();
       await loadTemplates();
       await loadThemes();
       if (requestedDesign && requestedCollection !== 'brb') openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(requestedDesign)}`)).json());
-      else showCollection(['setup','designs','media','music','themes','templates','brb'].includes(requestedCollection) ? requestedCollection : 'setup');
-    } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; notify(error.message); }
+      else if (requestedCollection !== 'events') showCollection(requestedCollection);
+    } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; if (requestedCollection !== 'events') notify(error.message); }
   })();
 })();
