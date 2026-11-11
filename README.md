@@ -57,8 +57,11 @@ unique name, optionally set an event password, and choose whether to publish rep
 automatically after the event. New targets start disabled; enable the target in
 Live before starting the broadcast. The public viewer starts live video automatically
 when media becomes available, including after a reload. It starts muted; viewers
-can select **Unmute audio**. Browsers that block muted autoplay retain a manual
-**Watch live** button. Deliberate pauses are preserved, and replays start on demand. Open **Events** in the sidebar to copy
+can unmute using the controls over the video. Browsers that block muted autoplay
+retain a manual play control. Deliberate pauses are preserved. Replay pages show
+the first recorded frame, with playback on demand and thumbnail
+previews when hovering or dragging the seek bar. Live playback has no seek bar.
+Open **Events** in the sidebar to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
 
@@ -102,6 +105,12 @@ control. Passwords protect playlists and media segments as well as page playback
 Viewer sessions expire after 12 hours; changing the password revokes them.
 Withdrawing/deleting replay blocks new retrieval, but cannot recall media a
 viewer has already downloaded.
+
+Replay poster images and seek thumbnails are generated from the recorded media
+on demand and cached in the mounted event directory. They follow the same password
+and replay-publication rules as the recording; deleting an event also deletes its
+cached images. Generation uses one bounded FFmpeg process at a time. A preview
+failure is shown in the player and does not prevent replay playback.
 
 ### Playback and limits
 

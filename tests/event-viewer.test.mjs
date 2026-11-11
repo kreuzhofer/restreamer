@@ -4,18 +4,22 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const script = readFileSync(new URL('../internal/relay/web/event.js', import.meta.url), 'utf8');
+const thumbnailIndex = {duration: 12, poster: 'poster.jpg', frames: [{time: 0, resource: 'thumbnail-00000000.jpg'}, {time: 6, resource: 'thumbnail-00000001.jpg'}]};
 const live = {name: 'Test event', state: 'live', delivering: true, recorded: true, published: false};
 
 // Execute the shipped viewer against browser HTTP/media boundaries. Decoding,
 // actual autoplay policy and visual layout are intentionally outside this seam.
-async function viewer(initial = live, {playError, native = true} = {}) {
+async function viewer(initial = live, {playError, native = true, thumbnails = thumbnailIndex, playGate} = {}) {
   let status = initial;
   const nodes = new Map(), timers = [], requests = [], hlsInstances = [];
   const element = id => {
     if (!nodes.has(id)) {
       const attributes = new Map(), listeners = new Map();
       let resourceEpoch = 0;
-      const node = {hidden: false, textContent: '', value: '', disabled: false,
+      const node = {hidden: false, textContent: '', value: '', disabled: false, dataset: {}, style: {},
+        setAttribute: (key, value) => attributes.set(key, String(value)),
+        getBoundingClientRect: () => ({left: 0, width: 600}),
+        requestFullscreen: async () => {node.fullscreenRequested = true;},
         getAttribute: key => attributes.get(key) ?? null,
         removeAttribute: key => attributes.delete(key),
         addEventListener: (name, listener) => listeners.set(name, listener),
@@ -28,9 +32,9 @@ async function viewer(initial = live, {playError, native = true} = {}) {
     return nodes.get(id);
   };
   const video = element('event-video');
-  Object.assign(video, {paused: true, muted: false, plays: [], canPlayType: () => native ? 'probably' : '',
+  Object.assign(video, {paused: true, muted: false, volume: 1, currentTime: 0, duration: 12, readyState: 1, plays: [], canPlayType: () => native ? 'probably' : '',
     pause() {const wasPaused = this.paused; this.paused = true; if (!wasPaused) this.dispatch('pause');}, load() {this.cancelMediaEvents(); this.paused = true;},
-    async play() {this.plays.push({muted: this.muted, src: this.src}); if (playError) throw playError; this.paused = false; this.dispatch('play');}});
+    async play() {this.plays.push({muted: this.muted, src: this.src}); if (playError) throw playError; if (playGate) await playGate; this.paused = false; this.dispatch('play');}});
   class Hls {
     static Events = {ERROR: 'error'};
     static isSupported() {return true;}
@@ -40,9 +44,10 @@ async function viewer(initial = live, {playError, native = true} = {}) {
     attachMedia(media) {this.media = media;}
     destroy() {this.destroyed = true;}
   }
-  const context = {document: {getElementById: element}, location: {pathname: '/watch/test-event'},
+  const context = {document: {getElementById: element, addEventListener() {}}, location: {pathname: '/watch/test-event'},
     window: {Hls}, Hls, AbortSignal,
-    fetch: async (url, options) => {requests.push({url, options}); return {ok: true, status: 200, json: async () => status};},
+    fetch: async (url, options) => {requests.push({url, options}); return {ok: true, status: 200, json: async () => url.endsWith('/thumbnails.json') ? thumbnails : status};},
+    setTimeout, clearTimeout,
     setInterval: fn => {timers.push(fn); return timers.length;}};
   vm.runInNewContext(script, context, {filename: 'event.js'});
   await new Promise(setImmediate);
@@ -54,7 +59,7 @@ test('opening or reloading an already-live event starts video without Watch live
   assert.equal(page.video.plays.length, 1, 'live status must attempt playback without a click');
   assert.equal(page.video.muted, true, 'automatic startup must satisfy muted-autoplay policies');
   assert.equal(page.video.paused, false);
-  assert.equal(page.element('event-mute').textContent, 'Unmute audio');
+  assert.equal(page.element('event-mute').getAttribute('aria-label'), 'Unmute audio');
 });
 
 test('a waiting viewer starts automatically when live media becomes available', async () => {
@@ -81,7 +86,7 @@ test('a viewer pause survives polling and a temporary broadcast gap', async () =
   await page.element('event-play').onclick();
   assert.equal(page.video.paused, true);
   await page.poll();
-  assert.equal(page.element('event-play').textContent, 'Resume playback');
+  assert.equal(page.element('event-play').getAttribute('aria-label'), 'Resume playback');
   page.setStatus({...live, delivering: false}); await page.poll();
   page.setStatus(live); await page.poll();
   assert.equal(page.video.plays.length, 1, 'automatic recovery must respect an intentional pause');
@@ -93,7 +98,7 @@ test('unmuting is explicit and refresh starts live playback again', async () => 
   const page = await viewer();
   page.element('event-mute').onclick();
   assert.equal(page.video.muted, false);
-  assert.equal(page.element('event-mute').textContent, 'Mute audio');
+  assert.equal(page.element('event-mute').getAttribute('aria-label'), 'Mute audio');
   await page.element('event-retry').onclick();
   await new Promise(setImmediate);
   assert.equal(page.video.plays.length, 2);
@@ -104,7 +109,7 @@ test('autoplay rejection leaves an enabled manual fallback without repeated atte
   const page = await viewer(live, {playError: Object.assign(new Error('blocked'), {name: 'NotAllowedError'})});
   assert.match(page.element('playback-error').textContent, /browser blocked automatic playback/i);
   assert.equal(page.element('event-play').disabled, false);
-  assert.equal(page.element('event-play').textContent, 'Watch live');
+  assert.equal(page.element('event-play').getAttribute('aria-label'), 'Watch live');
   await page.poll();
   assert.equal(page.video.plays.length, 1);
 });
@@ -142,4 +147,79 @@ test('resource resets cannot consume the next genuine native pause', async () =>
   page.setStatus({...live, delivering: false}); await page.poll();
   page.setStatus(live); await page.poll();
   assert.equal(page.video.plays.length, 2, 'the pause after a resource reset must remain effective');
+});
+
+
+test('replay opens on its first frame with thumbnail seeking before playback', async () => {
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false});
+  assert.equal(page.video.plays.length, 0);
+  assert.equal(page.element('event-poster').src, '/watch/test-event/poster.jpg');
+  assert.equal(page.element('event-poster').hidden, false);
+  assert.equal(page.element('event-timeline').disabled, false);
+  page.element('event-timeline').onpointermove({clientX: 450});
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert.equal(page.element('event-thumbnail').src, '/watch/test-event/thumbnail-00000001.jpg');
+  assert.equal(page.element('event-thumbnail-time').textContent, '0:09');
+  assert.equal(page.video.currentTime, 0, 'hovering must not seek the main video');
+  const timeline = page.element('event-timeline');
+  timeline.value = '7.5'; timeline.oninput(); await timeline.onchange();
+  assert.equal(page.video.currentTime, 7.5);
+  assert.equal(page.video.plays.length, 1);
+  assert.equal(page.element('event-poster').hidden, true);
+});
+
+test('live controls stay in the player without a replay timeline or thumbnail requests', async () => {
+  const page = await viewer();
+  assert.equal(page.element('event-seek').hidden, true);
+  assert.equal(page.requests.some(request => request.url.endsWith('/thumbnails.json')), false);
+  page.element('event-volume').value = '0.3'; page.element('event-volume').oninput();
+  assert.equal(page.video.volume, 0.3);
+  assert.equal(page.video.muted, false);
+  await page.element('event-fullscreen').onclick();
+  assert.equal(page.element('event-screen').fullscreenRequested, true);
+});
+
+test('an expired thumbnail response cannot revive a withdrawn replay', async () => {
+  let finish;
+  const thumbnails = new Promise(resolve => {finish = resolve;});
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false}, {thumbnails});
+  page.setStatus({...live, state: 'ended', published: false, delivering: false}); await page.poll();
+  finish(thumbnailIndex); await new Promise(setImmediate);
+  assert.equal(page.element('event-poster').hidden, true);
+  assert.equal(page.element('event-seek').hidden, true);
+});
+
+
+test('a delayed seek cannot move the replacement live stream', async () => {
+  let resume;
+  const playGate = new Promise(resolve => {resume = resolve;});
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false}, {playGate});
+  const timeline = page.element('event-timeline'); timeline.value = '7.5'; timeline.oninput();
+  const seek = timeline.onchange();
+  page.setStatus(live); await page.poll();
+  resume(); await seek; await new Promise(setImmediate);
+  assert.equal(page.video.currentTime, 0, 'stale replay seek must not rewind live media');
+});
+
+test('the latest replay seek wins while playback is starting', async () => {
+  let resume;
+  const playGate = new Promise(resolve => {resume = resolve;});
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false}, {playGate});
+  const timeline = page.element('event-timeline');
+  timeline.value = '3'; timeline.oninput(); const first = timeline.onchange();
+  timeline.value = '9'; timeline.oninput(); await timeline.onchange();
+  resume(); await first;
+  assert.equal(page.video.currentTime, 9);
+});
+
+test('returning to the displayed thumbnail cancels a pending different preview', async () => {
+  const page = await viewer({...live, state: 'ended', published: true, delivering: false});
+  const timeline = page.element('event-timeline'), image = page.element('event-thumbnail');
+  timeline.onpointermove({clientX: 100}); await new Promise(resolve => setTimeout(resolve, 120));
+  image.complete = true; image.naturalWidth = 192; image.onload();
+  timeline.onpointermove({clientX: 450}); timeline.onpointermove({clientX: 100});
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert.equal(image.src, '/watch/test-event/thumbnail-00000000.jpg');
+  assert.equal(image.hidden, false);
+  assert.equal(page.element('event-thumbnail-time').textContent, '0:02');
 });

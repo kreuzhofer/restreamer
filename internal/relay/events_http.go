@@ -73,6 +73,10 @@ func (s *Server) eventViewerHTTP(w http.ResponseWriter, r *http.Request) {
 // Called with e.mu held; releases it before writing to any viewer socket.
 func (s *Server) eventMediaHTTP(w http.ResponseWriter, r *http.Request, e *streamingEvent, resource string, operator bool) {
 	replay := operator || e.Published && (e.State == "ended" || e.State == "interrupted" || e.State == "failed")
+	if resource == "thumbnails.json" || resource == "poster.jpg" || eventThumbnailName.MatchString(resource) {
+		s.eventThumbnailHTTP(w, r, e, resource, replay)
+		return
+	}
 	live := e.State == "live" && e.delivering.Load()
 	if resource == "live.m3u8" || resource == "replay.m3u8" {
 		allowed := live
