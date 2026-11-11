@@ -14,11 +14,13 @@ async function viewer(initial = live, {playError, native = true} = {}) {
   const element = id => {
     if (!nodes.has(id)) {
       const attributes = new Map(), listeners = new Map();
+      let resourceEpoch = 0;
       const node = {hidden: false, textContent: '', value: '', disabled: false,
         getAttribute: key => attributes.get(key) ?? null,
         removeAttribute: key => attributes.delete(key),
         addEventListener: (name, listener) => listeners.set(name, listener),
-        dispatch: name => queueMicrotask(() => listeners.get(name)?.()),
+        cancelMediaEvents: () => {resourceEpoch++;},
+        dispatch: name => {const epoch = resourceEpoch; setImmediate(() => {if (epoch === resourceEpoch) listeners.get(name)?.();});},
         querySelector: () => element(id + '-button')};
       Object.defineProperty(node, 'src', {get: () => attributes.get('src') || '', set: value => attributes.set('src', value)});
       nodes.set(id, node);
@@ -27,7 +29,7 @@ async function viewer(initial = live, {playError, native = true} = {}) {
   };
   const video = element('event-video');
   Object.assign(video, {paused: true, muted: false, plays: [], canPlayType: () => native ? 'probably' : '',
-    pause() {const wasPaused = this.paused; this.paused = true; if (!wasPaused) this.dispatch('pause');}, load() {},
+    pause() {const wasPaused = this.paused; this.paused = true; if (!wasPaused) this.dispatch('pause');}, load() {this.cancelMediaEvents(); this.paused = true;},
     async play() {this.plays.push({muted: this.muted, src: this.src}); if (playError) throw playError; this.paused = false; this.dispatch('play');}});
   class Hls {
     static Events = {ERROR: 'error'};
@@ -128,4 +130,16 @@ test('native fullscreen pause and resume preserve the viewer intent across broad
   resumed.setStatus({...live, delivering: false}); await resumed.poll();
   resumed.setStatus(live); await resumed.poll();
   assert.equal(resumed.video.plays.length, 3, 'after a native resume, recovery should start playback again');
+});
+
+
+test('resource resets cannot consume the next genuine native pause', async () => {
+  const page = await viewer();
+  page.setStatus({...live, delivering: false}); await page.poll();
+  page.setStatus(live); await page.poll();
+  assert.equal(page.video.plays.length, 2);
+  page.video.pause(); await new Promise(setImmediate);
+  page.setStatus({...live, delivering: false}); await page.poll();
+  page.setStatus(live); await page.poll();
+  assert.equal(page.video.plays.length, 2, 'the pause after a resource reset must remain effective');
 });

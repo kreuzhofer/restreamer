@@ -4,14 +4,16 @@
   const base = location.pathname.replace(/\/$/, '');
   const video = $('event-video'), play = $('event-play');
   let source = '', hls, replay = false, busy = false, starting = false, playbackEpoch = 0;
-  let pausedByViewer = false, audioChosen = false, expectedPauses = 0;
+  let pausedByViewer = false, audioChosen = false;
   function setMuted(muted) { video.muted = muted; $('event-mute').textContent = muted ? 'Unmute audio' : 'Mute audio'; }
   function stop() {
+    // load() cancels queued media events. Capture a native pause before resetting
+    // the resource, including a pause whose event has not been dispatched yet.
+    if (source && !video.hidden && video.paused && !starting && !video.ended && !$('playback-error').textContent) pausedByViewer = true;
     playbackEpoch++; starting = false; play.disabled = false;
     $('playback-error').textContent = '';
     if (hls) { hls.destroy(); hls = null; }
-    if (!video.paused) expectedPauses++;
-    video.pause(); video.removeAttribute('src'); video.load(); video.hidden = true;
+    video.removeAttribute('src'); video.load(); video.hidden = true;
     $('event-placeholder').hidden = false;
     $('event-mute').hidden = $('event-fullscreen').hidden = true;
   }
@@ -76,7 +78,6 @@
     return startPlayback();
   };
   video.addEventListener('pause', () => {
-    if (expectedPauses) { expectedPauses--; return; }
     if (source && !video.hidden && video.paused) { pausedByViewer = true; play.textContent = 'Resume playback'; }
   });
   video.addEventListener('play', () => {
@@ -94,6 +95,6 @@
     } catch (error) { $('login-error').textContent = error.message; }
     finally { button.disabled = false; }
   };
-  $('event-retry').onclick = () => { pausedByViewer = false; stop(); source = ''; return refresh(); };
+  $('event-retry').onclick = () => { stop(); pausedByViewer = false; source = ''; return refresh(); };
   refresh(); setInterval(refresh, 3000);
 })();
