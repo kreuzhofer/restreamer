@@ -116,7 +116,9 @@ func (s *Server) eventDeleteHTTP(w http.ResponseWriter, r *http.Request) {
 			o.setEnabled(false)
 			if cancel := s.outputCancels[o]; cancel != nil {
 				cancel()
+				s.broadcast.mu.Unlock()
 				<-s.outputDone[o]
+				s.broadcast.mu.Lock()
 				delete(s.outputCancels, o)
 				delete(s.outputDone, o)
 			}

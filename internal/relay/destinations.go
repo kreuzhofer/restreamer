@@ -241,9 +241,11 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, o := range s.outputSnapshot() {
 		// Retained recordings belong to the archive, not the active target limit.
 		if r.Method == "POST" && o.event != nil {
+			b.mu.Unlock()
 			o.event.mu.Lock()
 			closed := o.event.State != "waiting" && o.event.State != "live"
 			o.event.mu.Unlock()
+			b.mu.Lock()
 			if closed {
 				continue
 			}
@@ -379,7 +381,9 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if found == nil {
+			b.mu.Unlock()
 			found = s.newOutput(target)
+			b.mu.Lock()
 			found.blocked = !s.forwarding.Load()
 		}
 		outputs = append(outputs, found)
@@ -395,7 +399,9 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			o.setEnabled(false)
 			if cancel := s.outputCancels[o]; cancel != nil {
 				cancel()
+				b.mu.Unlock()
 				<-s.outputDone[o]
+				b.mu.Lock()
 				delete(s.outputCancels, o)
 				delete(s.outputDone, o)
 			}

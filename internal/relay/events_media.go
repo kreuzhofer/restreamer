@@ -227,6 +227,7 @@ func (e *streamingEvent) playlist(replay bool) string {
 
 func (o *output) manageEvent(ctx context.Context, h *hub) {
 	e := o.event
+	e.recordingActive.Store(true)
 	var sub *subscription
 	var pack *eventPackager
 	fail := func(err error) {
@@ -266,10 +267,14 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 		o.connected = false
 		o.mu.Unlock()
 	}
-	defer stop()
+	defer func() { stop(); e.recordingActive.Store(false) }()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if !o.snapshot().CanEnable {
+			o.finishDrain(false, "event_failed")
+			return
+		}
 		draining, deadline := o.drainState()
 		finishing := o.eventFinish.Load() || draining && e.begun.Load()
 		if finishing && (sub == nil || h.pending(sub) == 0 || draining && time.Now().After(deadline)) {
@@ -278,6 +283,11 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 			}
 			stop()
 			e.mu.Lock()
+			if e.State == "deleted" {
+				e.mu.Unlock()
+				o.finishDrain(false, "event_deleted")
+				return
+			}
 			if e.begun.Load() {
 				if e.Incomplete {
 					e.State = "interrupted"
@@ -313,12 +323,17 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 		}
 		if !finishing && o.forwardingAllowed() && sub == nil && o.snapshot().CanEnable {
 			e.mu.Lock()
+			if e.State != "waiting" && e.State != "live" {
+				e.mu.Unlock()
+				return
+			}
 			e.State = "live"
 			e.Version++
 			err := e.save()
 			e.mu.Unlock()
 			if err != nil {
 				fail(errors.New("Cannot start recording; check event storage"))
+				return
 			} else {
 				e.begun.Store(true)
 				e.delivering.Store(true)
@@ -359,6 +374,8 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 		case <-failed:
 			fail(errors.New("Event recording queue overflowed"))
 			stop()
+			o.finishDrain(false, "event_failed")
+			return
 		case m := <-packets:
 			h.consumed(sub, m)
 			err := pack.push(m)
@@ -366,6 +383,8 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 			if err != nil {
 				fail(err)
 				stop()
+				o.finishDrain(false, "event_failed")
+				return
 			} else {
 				o.recordSent(m)
 				o.state("streaming")

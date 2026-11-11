@@ -124,6 +124,8 @@ retry deletion or restart to finish cleanup.
 
 S3, CDN integration, adaptive-quality transcoding, live rewind, and video editing
 are outside this MVP. The standard HLS format keeps future CDN delivery possible.
+See [validation evidence and remaining browser checks](docs/public-events-validation.md)
+for the tested media setup and the limits of the current verification.
 
 ## Run with Docker Compose
 

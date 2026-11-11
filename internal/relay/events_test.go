@@ -397,6 +397,18 @@ func TestEventStorageFailureIsVisibleAndDoesNotStopAnotherDestination(t *testing
 	if err := os.Remove(metadata); err != nil {
 		t.Fatal(err)
 	}
+	eventually(t, func() bool {
+		return strings.Contains(viewerRequest(s, "GET", "/watch/"+id+"/status", "").Body.String(), `"finalizing":false`)
+	})
+	body, _ = json.Marshal(map[string]any{"version": eventVersion(t, s, id), "published": true, "acknowledge_incomplete": true})
+	if w := dashboardRequest(s, "PATCH", "/api/events/"+id, string(body)); w.Code != 200 {
+		t.Fatal("recovered partial recording cannot be published", w.Code, w.Body.String())
+	}
+	stageRequest(t, s, "stop_now", nil)
+	time.Sleep(100 * time.Millisecond)
+	if w := viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", ""); w.Code != 200 {
+		t.Fatal("stopping other destinations withdrew explicit partial replay", w.Code)
+	}
 }
 
 func TestEventRejectsLegacyMutationAndRollsBackFailedCreation(t *testing.T) {

@@ -39,7 +39,7 @@
         if (event.state !== 'deleted' && !event.unavailable) {
           button('Copy event link', async () => { try { await navigator.clipboard.writeText(new URL(event.url, location.origin).href); $('archive-status').textContent = 'Link copied for ' + event.name + '.'; } catch (_) { $('archive-status').textContent = 'Copy this link: ' + new URL(event.url, location.origin).href; } });
           if (event.recorded) { const preview = node('a', 'Preview recording'); preview.href = '/events/' + event.id; preview.target = '_blank'; preview.rel = 'noopener'; actions.append(preview); }
-          if (event.recorded && event.state !== 'live') button(event.published ? 'Withdraw replay' : 'Publish replay', () => action(event, event.published ? 'withdraw' : 'publish'));
+          if (event.recorded && event.state !== 'live' && !event.finalizing) button(event.published ? 'Withdraw replay' : 'Publish replay', () => action(event, event.published ? 'withdraw' : 'publish'));
           button('Change password', () => action(event, 'password'));
         }
         const remove = button('Delete event', () => action(event, 'delete')); remove.className = 'danger'; remove.disabled = event.state === 'live';

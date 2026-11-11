@@ -278,7 +278,7 @@ func (s *Server) eventsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if change.Published != nil {
-		if *change.Published && (len(e.Segments) == 0 || e.State == "live" || e.State == "waiting" || e.Incomplete && !change.AcknowledgeIncomplete) {
+		if *change.Published && (e.recordingActive.Load() || len(e.Segments) == 0 || e.State == "live" || e.State == "waiting" || e.Incomplete && !change.AcknowledgeIncomplete) {
 			http.Error(w, "A finalized recording is required; acknowledge an incomplete recording before publishing", 409)
 			return
 		}

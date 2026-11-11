@@ -25,25 +25,26 @@ type eventLoginAttempts struct {
 var eventIdentifier = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 type streamingEvent struct {
-	begun         atomic.Bool
-	delivering    atomic.Bool
-	Segments      []eventSegment `json:"segments"`
-	Bytes         int64          `json:"bytes"`
-	Error         string         `json:"error,omitempty"`
-	Incomplete    bool           `json:"incomplete"`
-	mu            sync.Mutex
-	dir           string
-	unavailable   bool
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	State         string `json:"state"`
-	AutoReplay    bool   `json:"auto_replay"`
-	Published     bool   `json:"published"`
-	Version       uint64 `json:"version"`
-	Salt          []byte `json:"password_salt,omitempty"`
-	Hash          []byte `json:"password_hash,omitempty"`
-	SessionKey    []byte `json:"session_key"`
-	loginAttempts map[string]eventLoginAttempts
+	begun           atomic.Bool
+	delivering      atomic.Bool
+	recordingActive atomic.Bool
+	Segments        []eventSegment `json:"segments"`
+	Bytes           int64          `json:"bytes"`
+	Error           string         `json:"error,omitempty"`
+	Incomplete      bool           `json:"incomplete"`
+	mu              sync.Mutex
+	dir             string
+	unavailable     bool
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	State           string `json:"state"`
+	AutoReplay      bool   `json:"auto_replay"`
+	Published       bool   `json:"published"`
+	Version         uint64 `json:"version"`
+	Salt            []byte `json:"password_salt,omitempty"`
+	Hash            []byte `json:"password_hash,omitempty"`
+	SessionKey      []byte `json:"session_key"`
+	loginAttempts   map[string]eventLoginAttempts
 }
 
 func (s *Server) initializeEvents() error {
@@ -225,7 +226,7 @@ func (e *streamingEvent) setPassword(password string) error {
 }
 
 func (e *streamingEvent) view() map[string]any {
-	return map[string]any{"id": e.ID, "name": e.Name, "state": e.State, "auto_replay": e.AutoReplay, "published": e.Published, "protected": len(e.Hash) > 0, "version": e.Version, "url": "/watch/" + e.ID, "bytes": e.Bytes, "incomplete": e.Incomplete, "error": e.Error, "recorded": len(e.Segments) > 0 && !e.unavailable, "delivering": e.delivering.Load(), "unavailable": e.unavailable}
+	return map[string]any{"id": e.ID, "name": e.Name, "state": e.State, "auto_replay": e.AutoReplay, "published": e.Published, "protected": len(e.Hash) > 0, "version": e.Version, "url": "/watch/" + e.ID, "bytes": e.Bytes, "incomplete": e.Incomplete, "error": e.Error, "recorded": len(e.Segments) > 0 && !e.unavailable, "delivering": e.delivering.Load(), "unavailable": e.unavailable, "finalizing": e.recordingActive.Load() && e.State != "waiting" && e.State != "live"}
 }
 
 func randomEventToken() string {
