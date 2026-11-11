@@ -27,14 +27,51 @@ scales with source bitrate and simultaneous viewers: for example, 6 Mbit/s ×
 100 viewers is 600 Mbit/s before protocol overhead. This arithmetic does not
 establish that a particular deployment can support 100 viewers.
 
-## Remaining browser verification
+## Browser verification
 
-The browser-control host was unavailable. Desktop/mobile visual checks,
-screenshots, native iOS Safari and Android Chrome playback, and measured
-end-to-end player latency remain unverified. FFmpeg decoding does not substitute
-for those checks. The 10–20-second live delay is a design target, not a measured
-result. The task must retain these acceptance items until browser verification
-is available.
+The desktop browser-control host was unavailable. With the user's approval,
+Playwright used fresh, isolated browser profiles against the localhost app:
+
+- Chrome 157.0.8103.39 completed a 30.12-second replay across an OBS-to-BRB
+  source/initialization change and sought backward successfully. The bundled
+  hls.js path was explicitly selected for a separate successful run.
+- WebKit 27.2 completed the same replay using native HLS and sought backward.
+  Its 390 × 844 touch viewport and Chrome's desktop/mobile viewports showed no
+  horizontal overflow in the player or archive.
+- Browser interactions created a password-protected target, authenticated a
+  viewer, rotated the password and observed session revocation, and deleted the
+  event and observed HTTP 404 for its URL. Archive withdrawal blocked public
+  replay; authenticated private preview still played; publication restored
+  replay at the same URL.
+- A live Chrome touch-viewport sample showed source time 20.04 seconds after
+  approximately 32.5 seconds of real-time source execution: roughly 12 seconds
+  of end-to-end delay on localhost. Live seeking controls were absent. This is
+  one sample, not a latency guarantee. Concurrent local tests loaded the host;
+  headless Chrome reported dropped presentation frames (187 of 751 frames in
+  the hls.js replay run), so this setup does not establish smooth playback or
+  device capacity under normal deployment conditions.
+
+Screenshots: [create target](testing/public-events/create-desktop.png),
+[mobile live](testing/public-events/live-mobile.png),
+[mobile replay](testing/public-events/replay-mobile.png),
+[archive](testing/public-events/archive-mobile.png), and
+[delete confirmation](testing/public-events/delete-mobile.png).
+
+Physical iOS Safari and Android Chrome playback, audible output on those
+devices, and real-network performance remain unverified. Desktop WebKit and
+touch emulation do not substitute for those acceptance checks; retain them in
+the live-playback ticket.
+
+### FFmpeg source-transition limitation
+
+FFmpeg 9.0.2 decodes every retained segment with its corresponding initialization
+section, but its HLS demuxer reports decoding errors when this replay changes
+initialization sections at the OBS-to-BRB transition. An independent control
+repackaged by FFmpeg reproduces the same error. Both browser paths above play
+that transition. This is consistent with the FFmpeg developers' discussion of
+[HLS initialization changes and discontinuities](https://ffmpeg.org/pipermail/ffmpeg-devel/2022-April/295275.html).
+The successful single-source FFmpeg replay check above must not be interpreted
+as validation of all source transitions in FFmpeg's playlist decoder.
 
 ## Local full-suite limitation
 
