@@ -5,8 +5,8 @@ import {readFileSync} from 'node:fs';
 const window = {};
 vm.runInNewContext(readFileSync(new URL('../internal/relay/web/studio-routing.js', import.meta.url),'utf8'), {window, URL});
 const route = path => window.studioRouting.parse(new URL(path, 'http://localhost'));
-test('four destinations have direct, refreshable routes', () => {
-  for (const page of ['live','setup','library','settings']) assert.equal(route('/'+page).page,page);
+test('primary destinations have direct, refreshable routes', () => {
+  for (const page of ['live','setup','events','library','settings']) assert.equal(route('/'+page).page,page);
 });
 test('legacy studio bookmarks retain their task context', () => {
   assert.equal(route('/studio').page,'setup');

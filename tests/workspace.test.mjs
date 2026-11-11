@@ -91,8 +91,10 @@ function navigation(onDashboard) {
 }
 
 test('cross-document workspace departure explicitly reviews dirty forms and keeps them on cancel',()=>{
- const ui=navigation(true);ui.dirty();assert.equal(ui.click('studio'),true);assert.equal(ui.prompts(),1);assert.equal(ui.unload(),true);
- ui.answer(true);assert.equal(ui.click('studio'),false);assert.equal(ui.unload(),false);
+ for (const view of ['studio', 'events']) {
+  const ui=navigation(true);ui.dirty();assert.equal(ui.click(view),true);assert.equal(ui.prompts(),1);assert.equal(ui.unload(),true);
+  ui.answer(true);assert.equal(ui.click(view),false);assert.equal(ui.unload(),false);
+ }
 });
 test('same-document and new-tab navigation preserve drafts without discard prompts',()=>{
  const ui=navigation(true);ui.dirty();assert.equal(ui.click('live'),true);assert.equal(ui.prompts(),0);assert.equal(ui.click('studio',true),false);assert.equal(ui.prompts(),0);assert.equal(ui.unload(),true);

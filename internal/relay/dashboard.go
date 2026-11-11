@@ -53,11 +53,9 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/events/{id}/media/{resource...}", s.eventOperatorHTTP)
 	private.HandleFunc("GET /events/{id}", s.eventOperatorHTTP)
 	private.HandleFunc("GET /events/{id}/{resource...}", s.eventOperatorHTTP)
-	for _, route := range []string{"/events", "/events.html"} {
-		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/library?collection=events", http.StatusTemporaryRedirect)
-		})
-	}
+	private.HandleFunc("GET /events.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/events", http.StatusTemporaryRedirect)
+	})
 	mux.HandleFunc("POST /api/devices/pair", s.pairingHTTP)
 	mux.HandleFunc("POST /api/devices/token", s.pairingHTTP)
 	private.HandleFunc("POST /api/devices/approve", s.approveDeviceHTTP)
@@ -83,11 +81,18 @@ func (s *Server) Handler() http.Handler {
 	private.HandleFunc("GET /api/stage/commands/{id}", s.stageCommandOutcomeHTTP)
 	private.HandleFunc("GET /api/preview", s.preview)
 	private.HandleFunc("GET /api/broadcast-preview", s.preview)
-	for _, route := range []string{"/live", "/settings", "/studio", "/setup", "/library", "/editor"} {
+	for _, route := range []string{"/live", "/settings", "/studio", "/setup", "/library", "/editor", "/events"} {
 		private.HandleFunc("GET "+route, func(w http.ResponseWriter, r *http.Request) {
+			if (r.URL.Path == "/library" || r.URL.Path == "/studio") && r.URL.Query().Get("collection") == "events" {
+				http.Redirect(w, r, "/events", http.StatusTemporaryRedirect)
+				return
+			}
 			page := "web/index.html"
 			if r.URL.Path == "/studio" || r.URL.Path == "/setup" || r.URL.Path == "/library" || r.URL.Path == "/editor" {
 				page = "web/generator.html"
+			}
+			if r.URL.Path == "/events" {
+				page = "web/events.html"
 			}
 			data, _ := dashboardFiles.ReadFile(page)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -235,7 +240,11 @@ func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 		Stage               StageStatus     `json:"stage"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputSnapshot())), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputSnapshot() {
-		status.Outputs = append(status.Outputs, o.snapshot())
+		output := o.snapshot()
+		if r.URL.Path == "/api/dashboard" && o.config.Type == "public_page" && o.eventFinish.Load() && !output.CanEnable {
+			continue
+		}
+		status.Outputs = append(status.Outputs, output)
 	}
 	status.ControlDestinations = deviceCanControlDestinations(r)
 	status.Forwarding = s.forwarding.Load()

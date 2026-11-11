@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
+ <title>Restreamer · Events</title>
+ <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+ <link rel="stylesheet" href="/dashboard.css">
+ <link rel="stylesheet" href="/workspace.css">
+ <link rel="stylesheet" href="/mobile-remote.css">
+ <link rel="stylesheet" href="/studio-system.css">
+ <link rel="stylesheet" href="/events.css">
+ <script src="/studio-routing.js" defer></script>
+ <script src="/workspace.js" defer></script>
+ <script src="/mobile-remote.js" defer></script>
+ <script src="/events.js" defer></script>
+</head>
+<body class="events-app"><main>
+ <header class="workspace-header">
+  <a class="brand" href="/live" aria-label="Restreamer Live">restreamer </a>
+  <nav class="workspace-nav" aria-label="Main navigation"><a href="/live" data-workspace="live">Live</a><a href="/setup" data-workspace="setup">Show setup</a><a href="/events" data-workspace="events">Events</a><a href="/library" data-workspace="library">Library</a><a href="/settings" data-workspace="settings">Settings</a></nav>
+  <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection">Connecting…</span></div>
+ </header>
+ <div id="workspace-status" class="workspace-status" role="status" aria-label="Broadcast status">
+  <span>Stage <strong id="workspace-stage">Unknown</strong></span><span>On-air source <strong id="workspace-source">Unknown</strong></span><span id="workspace-mode">Connecting to server</span><span id="workspace-freshness">Awaiting first update</span>
+ </div>
+ <div id="workspace-alert" class="workspace-alert" role="status" hidden><span id="workspace-alert-message"></span><a href="/live" class="workspace-alert-link">Open Live</a></div>
+ <section id="studio-events" class="panel" aria-labelledby="archive-heading"><header><h1 id="archive-heading">Events</h1><p>Manage upcoming and past events. Each event has its own link; recordings stay private until replay is published.</p><a class="context-resource-link" href="/settings#destinations">Create an event in Destinations</a></header>
+<div class="archive-toolbar"><p id="archive-status" role="status" aria-live="polite">Loading events…</p><button id="archive-refresh" class="preview-button" type="button">Refresh archive</button></div>
+<div id="archive-list"></div>
+</section>
+ <dialog id="archive-dialog" aria-labelledby="archive-dialog-title" aria-describedby="archive-dialog-description"><form id="archive-form"><h2 id="archive-dialog-title"></h2><p id="archive-dialog-description"></p><label id="archive-password-label" for="archive-password" hidden>New event password (leave empty to remove protection)</label><input id="archive-password" type="password" autocomplete="new-password" maxlength="256" hidden><p id="archive-error" role="alert"></p><div class="dialog-actions"><button id="archive-confirm" class="primary-button" type="submit">Confirm</button><button id="archive-cancel" class="preview-button" type="button">Cancel</button></div></form></dialog>
+</main></body>
+</html>

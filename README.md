@@ -58,7 +58,7 @@ automatically after the event. New targets start disabled; enable the target in
 Live before starting the broadcast. The public viewer starts live video automatically
 when media becomes available, including after a reload. It starts muted; viewers
 can select **Unmute audio**. Browsers that block muted autoplay retain a manual
-**Watch live** button. Deliberate pauses are preserved, and replays start on demand. Open **Library → Events** to copy
+**Watch live** button. Deliberate pauses are preserved, and replays start on demand. Open **Events** in the sidebar to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
 
@@ -69,8 +69,9 @@ not finish the event. Every public event records the programme it actually
 delivers, including Starting soon, BRB, clips, and Ending, excluding rehearsal and
 disabled-delivery periods. Selecting automatic replay controls publication, not
 recording. With it off, recordings remain private until explicitly published.
-Creating another target removes finished event targets from the active target
-list without removing their archive entries or replays. A new event can reuse a
+Finished event targets disappear from Live and Settings → Destinations as soon
+as they end. Upcoming and past events remain in Events, including their recordings
+and replays. A new event can reuse a
 display name, but always receives a new URL.
 
 **Delete event is permanent:** it removes the recording and public page, and the

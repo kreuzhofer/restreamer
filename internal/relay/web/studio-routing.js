@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const collections = ['designs','music','media','themes','templates','events'];
+  const collections = ['designs','music','media','themes','templates'];
   function safeBack(value) {
     if(value==='/setup')return value;
     if(!value?.startsWith('/library'))return '/setup';
@@ -16,7 +16,7 @@
     const collection = collections.includes(requested) ? requested : 'designs';
     let page = url.pathname.slice(1);
     if (['studio','generator','generator.html'].includes(page)) page = editor ? 'editor' : collections.includes(requested) ? 'library' : 'setup';
-    if (!['live','setup','library','settings','editor'].includes(page)) page = 'live';
+    if (!['live','setup','library','settings','editor','events'].includes(page)) page = 'live';
     const back = params.get('return');
     return {page, collection, design, editor, back:safeBack(back)};
   }

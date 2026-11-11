@@ -80,6 +80,9 @@ func (s *Server) newOutput(target config.Target) *output {
 		} else {
 			o.event.mu.Lock()
 			if o.event.State != "waiting" {
+				// Recovered recordings are archive entries. Unavailable storage
+				// still needs a visible destination error for the operator.
+				o.eventFinish.Store(!o.event.unavailable)
 				o.status.CanEnable = false
 				o.status.Enabled = false
 				o.status.UnavailableReason = "Event has finished"
@@ -193,6 +196,11 @@ func (s *Server) destinationResponse(w http.ResponseWriter) {
 	views := []destinationView{}
 	for _, o := range s.outputSnapshot() {
 		status := o.snapshot()
+		// Consumed public links remain in Events; they are no longer choices
+		// for a new broadcast. Ordinary platform destinations stay reusable.
+		if o.config.Type == "public_page" && o.eventFinish.Load() && !status.CanEnable {
+			continue
+		}
 		views = append(views, destinationView{OutputMode: o.config.Mode(), Type: o.config.Type, EventID: o.config.EventID, Name: o.config.Name, URL: o.config.URL, HasKey: strings.TrimSpace(o.config.StreamKey) != "", Enabled: status.Enabled, Ready: status.CanEnable, Reason: status.UnavailableReason})
 	}
 	w.Header().Set("Content-Type", "application/json")

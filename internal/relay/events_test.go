@@ -397,6 +397,12 @@ func TestEventStorageFailureIsVisibleAndDoesNotStopAnotherDestination(t *testing
 	eventually(t, func() bool {
 		return strings.Contains(dashboardRequest(s, "GET", "/api/events", "").Body.String(), `"incomplete":true`)
 	})
+	for _, path := range []string{"/api/dashboard", "/api/destinations"} {
+		w := dashboardRequest(s, "GET", path, "")
+		if !strings.Contains(w.Body.String(), `"name":"event"`) || !strings.Contains(w.Body.String(), "Recording failed") {
+			t.Fatalf("active event failure hidden in %s: %s", path, w.Body.String())
+		}
+	}
 	if readStage(t, s).Stage != "LIVE" || sink.count() != 1 {
 		t.Fatal("event failure stopped other delivery")
 	}
@@ -415,6 +421,11 @@ func TestEventStorageFailureIsVisibleAndDoesNotStopAnotherDestination(t *testing
 	}
 	stageRequest(t, s, "stop_now", nil)
 	time.Sleep(100 * time.Millisecond)
+	for _, path := range []string{"/api/dashboard", "/api/destinations"} {
+		if w := dashboardRequest(s, "GET", path, ""); strings.Contains(w.Body.String(), `"name":"event"`) {
+			t.Fatalf("finished failed event remains selectable in %s: %s", path, w.Body.String())
+		}
+	}
 	if w := viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", ""); w.Code != 200 {
 		t.Fatal("stopping other destinations withdrew explicit partial replay", w.Code)
 	}
@@ -672,10 +683,48 @@ func TestEventPreparedProgrammeAndEndingProduceDecodableReplay(t *testing.T) {
 	}
 }
 
-func TestEventArchiveUsesLibraryRoute(t *testing.T) {
+func TestEventsWorkspaceHasDirectAndCompatibleRoutes(t *testing.T) {
 	s := eventTestServer(t)
 	response := dashboardRequest(s, "GET", "/events", "")
-	if response.Code != http.StatusTemporaryRedirect || response.Header().Get("Location") != "/library?collection=events" {
-		t.Fatalf("archive bookmark should open Library Events: %d %s", response.Code, response.Header().Get("Location"))
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `data-workspace="events"`) || !strings.Contains(response.Body.String(), `id="studio-events"`) {
+		t.Fatalf("Events must use the shared workspace: %d", response.Code)
 	}
+	for _, path := range []string{"/events.html", "/library?collection=events"} {
+		response = dashboardRequest(s, "GET", path, "")
+		if response.Code != http.StatusTemporaryRedirect || response.Header().Get("Location") != "/events" {
+			t.Fatalf("%s did not retain event management context: %d %s", path, response.Code, response.Header().Get("Location"))
+		}
+	}
+}
+
+func TestFinishedEventsLeaveSelectableDestinationsButRemainManaged(t *testing.T) {
+	s := eventTestServer(t)
+	id := createEvent(t, s, "", true)
+	assertList := func(server *Server, path, key string, want int) {
+		t.Helper()
+		w := dashboardRequest(server, "GET", path, "")
+		var response map[string]json.RawMessage
+		var items []json.RawMessage
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &response) != nil || json.Unmarshal(response[key], &items) != nil || len(items) != want {
+			t.Fatalf("%s: expected %d %s: %d %s", path, want, key, w.Code, w.Body.String())
+		}
+	}
+	assertList(s, "/api/destinations", "destinations", 1)
+	assertList(s, "/api/dashboard", "outputs", 1)
+	recordEvent(t, s, id)
+	for _, server := range []*Server{s, New(s.cfg, s.log)} {
+		assertList(server, "/api/destinations", "destinations", 0)
+		assertList(server, "/api/dashboard", "outputs", 0)
+		assertList(server, "/api/events", "events", 1)
+		if w := viewerRequest(server, "GET", "/watch/"+id+"/replay.m3u8", ""); w.Code != 200 {
+			t.Fatalf("archive replay lost: %d", w.Code)
+		}
+	}
+	next := createEvent(t, s, "", false)
+	if next == id {
+		t.Fatal("finished event URL reused")
+	}
+	assertList(s, "/api/destinations", "destinations", 1)
+	assertList(s, "/api/dashboard", "outputs", 1)
+	assertList(s, "/api/events", "events", 2)
 }

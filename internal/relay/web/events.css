@@ -1,5 +1,5 @@
 #studio-events { min-width: 0; }
-#archive-heading { margin: 0 0 8px; font-size: 22px; }
+#archive-heading { margin: 0 0 8px; font-size: 28px; }
 #studio-events header p { color: var(--muted); }
 .archive-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 24px 0 12px; }
 .archive-event { border-top: 1px solid var(--border); padding: 24px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; }

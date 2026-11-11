@@ -20,9 +20,9 @@
       heading?.focus();
     }
   }
-  document.querySelectorAll('.workspace-nav a, .workspace-alert-link, a.brand, a[href^="/studio"], a[href^="/setup"], a[href^="/library"], a[href^="/editor"]').forEach(link => link.addEventListener('click', event => {
+  document.querySelectorAll('.workspace-nav a, .workspace-alert-link, a.brand, a[href^="/studio"], a[href^="/setup"], a[href^="/library"], a[href^="/editor"], a[href^="/events"]').forEach(link => link.addEventListener('click', event => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    if (!onDashboard || ['studio','setup','library'].includes(link.dataset.workspace) || /^\/(studio|setup|library|editor)/.test(link.getAttribute('href') || '')) {
+    if (!onDashboard || ['studio','setup','library','events'].includes(link.dataset.workspace) || /^\/(studio|setup|library|editor|events)/.test(link.getAttribute('href') || '')) {
       // Ask the existing form guards before replacing the document. Browser
       // beforeunload dialogs can be suppressed, so workspace departures get an
       // explicit review. This synthetic event never performs navigation.
