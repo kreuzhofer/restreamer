@@ -312,6 +312,10 @@ jobs:
         with:
           platforms: arm64
       - uses: docker/setup-buildx-action@v3
+        with:
+          # Persistent private runners reuse local layers instead of uploading them.
+          name: ${{ runner.environment == 'self-hosted' && format('restreamer-{0}', runner.name) || '' }}
+          keep-state: ${{ runner.environment == 'self-hosted' }}
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
@@ -331,5 +335,5 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: ${{ runner.environment != 'self-hosted' && 'type=gha' || '' }}
+          cache-to: ${{ runner.environment != 'self-hosted' && 'type=gha,mode=max' || '' }}

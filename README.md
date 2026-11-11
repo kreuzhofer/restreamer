@@ -815,6 +815,11 @@ do not give the image runner the `restreamer` label, because concurrent test job
 would collide on fixed smoke-test ports, container names and volumes. Image jobs
 can run alongside another workflow's tests, but still wait for their own tests.
 The test job is capped at 45 minutes; image and ARM64 jobs at 20 minutes each.
+Private image runners retain BuildKit state locally using a stable builder name
+per runner. They do not import or export image layers through the GitHub cache;
+hosted jobs retain that remote cache. This avoids spending the image-job budget
+uploading a large cache over the runner's internet connection. Builder cleanup
+still removes the job's container but preserves its local cache volume.
 The maintainer also
 approved pushes to `feature/nebius-show-package` for private x64 validation while
 hosted Ubuntu package DNS is unavailable; remove that exception from routing and
