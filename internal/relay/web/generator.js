@@ -901,7 +901,7 @@
     const musicOpened = new Set([...$('music-list').querySelectorAll('details[open]')].map(card => card.dataset.assetId));
     $('music-list').replaceChildren();
     $('music-list-state').textContent = `${assets.filter(asset => asset.kind === 'audio').length} uploaded tracks`;
-    $('asset-list-state').textContent = assets.length ? `${assets.filter(asset => asset.kind !== 'audio').length} images / videos · music is in the Music collection` : 'No scene assets uploaded. Add an image, video or music file on desktop to use it in your designs.';
+    $('asset-list-state').textContent = assets.length ? `${assets.filter(asset => asset.kind !== 'audio').length} images / videos / fonts · music is in the Music collection` : 'No scene assets uploaded. Add an image, video or music file on desktop to use it in your designs.';
     for (const asset of assets) {
       const card = document.createElement('details'); card.className = 'generator-asset'; card.dataset.assetId = asset.id; card.open = (asset.kind === 'audio' ? musicOpened : opened).has(asset.id);
       const summary = document.createElement('summary'); summary.textContent = `${asset.name} · ${asset.kind === 'audio' ? `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds` : asset.kind} · ${asset.uses.length ? `Used by ${[...new Set(asset.uses.map(use => use.name))].join(', ')}` : 'Not used'}`;
@@ -909,14 +909,14 @@
         summary.replaceChildren(); summary.className = 'music-row-summary';
         for (const text of [asset.name, `${Math.round(asset.revisions.find(item => item.revision === asset.revision)?.duration_seconds || 0)} seconds`, asset.uses.length ? `Used in ${asset.uses.length} saved ${asset.uses.length === 1 ? 'item' : 'items'}` : 'Not used']) { const cell = document.createElement('span'); cell.textContent = text; summary.append(cell); }
       }
-      const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
+      const img = document.createElement(asset.kind === 'video' ? 'video' : asset.kind === 'audio' ? 'audio' : asset.kind === 'font' ? 'p' : 'img'); if (asset.kind !== 'image') { img.controls = true; img.muted = asset.kind === 'video'; img.playsInline = true; img.preload = 'none'; } else { img.alt = asset.name; img.loading = 'lazy'; } if (asset.kind === 'font') { img.textContent = 'Brand font · preview it in Themes or in a design.'; } else img.src = `/api/generator/assets/${asset.id}/revisions/${asset.revision}`;
       img.addEventListener('error', () => assetError(`Preview unavailable for ${asset.name}. Refresh assets to check its exact revision.`));
       const revisionLabel = document.createElement('label'); revisionLabel.textContent = 'Preview exact revision';
       const revisionPicker = document.createElement('select');
       revisionPicker.replaceChildren(...asset.revisions.map(revision => new Option(`Revision ${revision.revision}${revision.revision === asset.revision ? ' · latest' : ''}`, revision.revision)));
       revisionPicker.value = asset.revision;
       revisionPicker.addEventListener('change', () => { img.src = `/api/generator/assets/${asset.id}/revisions/${revisionPicker.value}`; });
-      revisionLabel.append(revisionPicker);
+      revisionLabel.append(revisionPicker); if (asset.kind === 'font') revisionLabel.hidden = true;
       const referenceStatus = document.createElement('p'); referenceStatus.className = 'stage-help'; referenceStatus.textContent = asset.uses.length ? 'Protected while referenced by saved content or generation history.' : 'No saved references. Eligible for separate deletion.';
       const list = document.createElement('ul');
       for (const use of asset.uses) { const item = document.createElement('li'); item.textContent = `${use.kind}: ${use.name} · revision ${use.revision}`; list.append(item); }
@@ -1087,10 +1087,10 @@
 
 
   const themeFields = [
-    ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel']], ['font_size', 'Title/default font size at 1080p', 24, 120], ['list_font_size', 'List font size at 1080p (blank inherits default)', 'optional-size'],
+    ['font', 'Default font', ['go-sans', 'go-mono', 'arcade-pixel', 'brand-font']], ['font_size', 'Title/default font size at 1080p', 24, 120], ['list_font_size', 'List font size at 1080p (blank inherits default)', 'optional-size'],
     ['background_color', 'Background color', 'color'], ['text_color', 'Text color', 'color'], ['text_edge_color', 'Pixel text edge color (blank for warm default)', 'text'], ['accent_color', 'Accent color', 'color'],
     ['artwork', 'Built-in background artwork', ['', 'arcade-after-hours', 'neon-night', 'maker-workshop', 'maker-halloween', 'maker-christmas', 'pacman-maze']], ['background', 'Background image revision (clear built-in artwork first)', 'asset'], ['logo', 'Logo image revision', 'asset'],
-    ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8],
+    ['logo_position', 'Logo corner', ['top-left', 'top-right', 'bottom-left', 'bottom-right']], ['logo_height_percent', 'Logo height (%)', 2, 8], ['logo_inset_percent', 'Logo vertical inset (%; 0 uses default)', 0, 10],
     ['content_offset_y_percent', 'Content vertical offset (%)', -40, 40], ['width_percent', 'Default content width (%)', 30, 90], ['height_percent', 'Default content height (%)', 12, 90],
     ['line_spacing_percent', 'Line spacing (%)', 100, 180], ['list_spacing_percent', 'List item spacing (%)', 0, 100],
     ['border_style', 'Border', ['none', 'line', 'pixel']], ['border_width', 'Border width at 1080p', 1, 12],
@@ -1126,7 +1126,7 @@
     const latest = themes.filter(theme => theme.id === draft?.theme.id).sort((a,b) => b.revision-a.revision)[0];
     $('apply-theme-update').hidden = !latest || latest.revision <= draft.theme.revision;
     $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
-    $('preview-time-control').hidden = !['pixel-trail', 'arcade-palette', 'neon-palette', 'workshop-motion', 'pacman-motion'].includes(selected?.style.effect);
+    $('preview-time-control').hidden = !selected?.style.motion && !['pixel-trail', 'arcade-palette', 'neon-palette', 'workshop-motion', 'pacman-motion'].includes(selected?.style.effect);
     if (selected) {
       $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
       const defaultSize = draft.scenes[selectedScene]?.layout === 'list' && selected.style.list_font_size ? selected.style.list_font_size : selected.style.font_size;
@@ -1140,9 +1140,10 @@
     $('theme-name').value = theme.name; $('theme-library').value = themeKey(theme);
     for (const key of ['background', 'logo']) $(`theme-${key}`).replaceChildren();
     renderThemeAssets();
+    $('theme-font').querySelector('option[value="brand-font"]').disabled = !theme.style.font_asset;
     for (const [key] of themeFields) {
       const value = ['width_percent','height_percent'].includes(key) ? theme.style.content_region[key] : theme.style[key];
-      $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? (key === 'content_offset_y_percent' ? 0 : '');
+      $(`theme-${key}`).value = value && typeof value === 'object' ? themeKey(value) : value ?? (['content_offset_y_percent','logo_inset_percent'].includes(key) ? 0 : '');
     }
     scheduleThemePreview();
     $('theme-publish').disabled = theme.builtin;
@@ -1159,6 +1160,7 @@
       else if (kind === 'optional-size') { if (value) theme.style[key] = Number(value); else delete theme.style[key]; }
       else theme.style[key] = typeof kind === 'number' ? Number(value) : value;
     }
+    if (theme.style.font !== 'brand-font') delete theme.style.font_asset;
     return theme;
   }
   async function loadPinnedTheme(ref) {

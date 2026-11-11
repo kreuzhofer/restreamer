@@ -108,7 +108,7 @@ func (s *Server) renderGenerator(ctx context.Context, j *GenerationJob, progress
 				"-protocol_whitelist", "file,pipe", "-threads", "2", "-loop", "1", "-framerate", strconv.Itoa(p.FPS), "-i", still,
 			}
 			if animatedArtwork(theme.Style) {
-				artworkArgs, err := artworkOverlayArgs(dir, still, p, theme.Style, j.Design.Stage, plan.Scenes[i].Start)
+				artworkArgs, err := s.artworkOverlayArgs(dir, still, p, theme.Style, j.Design.Stage, plan.Scenes[i].Start)
 				if err != nil {
 					return "", err
 				}

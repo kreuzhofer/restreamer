@@ -314,6 +314,11 @@ func (s *Server) generatorAssetImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 409)
 		return
 	}
-	w.Header().Set("Content-Type", "image/png")
+	if kind == "font" {
+		w.Header().Set("Content-Type", "font/otf")
+		w.Header().Set("Content-Disposition", `attachment; filename="brand-font.otf"`)
+	} else {
+		w.Header().Set("Content-Type", "image/png")
+	}
 	http.ServeContent(w, r, "image.png", time.Time{}, bytes.NewReader(data))
 }

@@ -67,6 +67,8 @@ func assetRevisionPath(root string, ref mediaauthor.AssetRef, kind string) strin
 	extension := ".png"
 	if kind == "video" {
 		extension = ".mp4"
+	} else if kind == "font" {
+		extension = ".otf"
 	} else if kind == "audio" {
 		extension = ".wav"
 	}
@@ -100,11 +102,11 @@ func (g *generatorStore) loadAssets() error {
 			return errors.New("invalid asset storage entry")
 		}
 		var a GeneratorAsset
-		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || (a.Kind != "image" && a.Kind != "video" && a.Kind != "audio") || a.Revision != len(a.Revisions) || a.Revision < 1 {
+		if readMediaJSON(filepath.Join(g.assetsRoot, entry.Name(), "asset.json"), &a) != nil || a.ID != entry.Name() || !validAssetName(a.Name) || (a.Kind != "image" && a.Kind != "video" && a.Kind != "audio" && a.Kind != "font") || a.Revision != len(a.Revisions) || a.Revision < 1 {
 			return errors.New("invalid asset metadata")
 		}
 		for i, r := range a.Revisions {
-			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || (a.Kind == "image" && (r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels)) || (a.Kind == "video" && !validVideoMetadata(r)) || (a.Kind == "audio" && !validMusicMetadata(r)) {
+			if r.Revision != i+1 || !validRevisionID(r.Digest) || r.Bytes < 1 || (a.Kind == "image" && (r.Bytes > maxAssetImageBytes || r.Width < 1 || r.Height < 1 || int64(r.Width)*int64(r.Height) > maxAssetPixels)) || (a.Kind == "video" && !validVideoMetadata(r)) || (a.Kind == "audio" && !validMusicMetadata(r)) || (a.Kind == "font" && r.Bytes > maxBrandFontBytes) {
 				return errors.New("invalid asset revision metadata")
 			}
 		}
@@ -163,6 +165,17 @@ func (g *generatorStore) assetIssues(d mediaauthor.Design) []mediaauthor.Issue {
 // this scan when introduced. Keep lock order g.mu then jobsMu.
 func (g *generatorStore) assetUsesLocked(id string) ([]AssetUse, error) {
 	out := make([]AssetUse, 0)
+	packages, err := g.listBrandPackages()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range packages {
+		for _, a := range p.Assets {
+			if id == "" || a.ID == id {
+				out = append(out, AssetUse{AssetID: a.ID, Kind: "package", ID: p.filename(), Name: p.Name, Revision: 1})
+			}
+		}
+	}
 	for _, playlist := range g.playlists {
 		for _, revision := range playlist.Revisions {
 			for _, ref := range revision.Tracks {

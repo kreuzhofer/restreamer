@@ -56,6 +56,9 @@ func (s *Server) initializeGenerator() error {
 			return errors.New("cannot create generator job storage")
 		}
 	}
+	if err := g.recoverBrandImports(); err != nil {
+		return err
+	}
 	if err := g.loadJobs(); err != nil {
 		return err
 	}

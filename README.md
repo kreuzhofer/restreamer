@@ -135,6 +135,17 @@ are outside this MVP. The standard HLS format keeps future CDN delivery possible
 See [validation evidence and remaining browser checks](docs/public-events-validation.md)
 for the tested media setup and the limits of the current verification.
 
+## Corporate brand packages
+
+Use **Library → Brand packages** to review and import a prepared ZIP containing
+assets, fonts, style themes and editable Starting soon, BRB and Ending templates.
+Create a show from an installed template; existing designs and on-air media stay
+unchanged. Package removal previews what will be deleted and preserves edited or
+referenced resources. Corporate assets can remain private without modifying the
+application image.
+
+See [the package format and sample builder](docs/brand-packages.md) to prepare a kit.
+
 ## Whole animation loops in scenes
 
 In the design editor, select a scene and choose **Scene length → Animation loops**,

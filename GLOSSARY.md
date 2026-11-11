@@ -86,6 +86,9 @@ An editable media design for a particular stream, optionally copied from a conte
 **Style theme**:
 A named, reusable visual style for prestream, ending, and BRB, independent of scene content and timing. It defines fonts, palette, backgrounds, borders, decorative animation, logo placement, and spacing, with supported customization and per-scene overrides.
 
+**Brand package**:
+A versioned, curated collection of a brand’s assets, style themes and content templates. Importing it makes those resources available together; existing show designs adopt changes explicitly.
+
 **Theme revision**:
 A particular saved version of a style theme, explicitly selected by a design. Editing the shared theme does not change designs that retain an earlier revision.
 

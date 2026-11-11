@@ -9,6 +9,9 @@ import (
 )
 
 func animationLoopSeconds(theme mediaauthor.Theme, stage string) int {
+	if theme.Style.Motion != nil {
+		return theme.Style.Motion.CycleSeconds
+	}
 	art, ok := themeArtworkForStage(theme.Style.Artwork, stage)
 	if !ok || art.holdEnding || theme.Style.Effect != art.effect {
 		return 0
