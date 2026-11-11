@@ -797,6 +797,23 @@ run succeeds. Releases on `main` also require successful image publication.
 Follow the [delivery completion procedure](docs/agents/delivery.md) and include
 the exact commit SHA and successful CI run link when reporting completion.
 
+Trusted `main` pushes and manual `main` CI runs use the dedicated `restreamer`
+self-hosted Linux x64 runner for tests and image publication. Pull requests and
+other branches use GitHub-hosted Ubuntu 24.04; native ARM64 checks remain hosted.
+Keep the repository's external-fork workflow approval policy set to
+`all_external_contributors`. Before approving an external fork run, review its
+workflow changes and referenced actions; do not approve jobs requesting the
+private runner. This maintainer approval is the security boundary for the public
+repository. Runner labels and workflow routing are not access controls.
+
+Install [the context check](tools/ci/runner-guard.sh) outside the checkout as
+`ACTIONS_RUNNER_HOOK_JOB_STARTED` to detect accidental routing of PR/fork contexts,
+other repositories/workflows/branches, or missing context. A failed hook is not
+an admission control: workflow steps using `if: always()` can still execute.
+Update the installed check deliberately when its reviewed source changes.
+Existing FFmpeg/FFprobe installations are used without upgrading the shared
+runner host; missing tools are installed through APT.
+
 Run locally with the configured environment variables exported:
 
 ```sh
