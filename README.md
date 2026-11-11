@@ -55,7 +55,10 @@ and [Twitch's broadcasting guidelines](https://help.twitch.tv/s/article/broadcas
 In desktop **Settings → Destinations**, choose **Public streaming page**, enter a
 unique name, optionally set an event password, and choose whether to publish replay
 automatically after the event. New targets start disabled; enable the target in
-Live before starting the broadcast. Open **Library → Events** to copy
+Live before starting the broadcast. The public viewer starts live video automatically
+when media becomes available, including after a reload. It starts muted; viewers
+can select **Unmute audio**. Browsers that block muted autoplay retain a manual
+**Watch live** button. Deliberate pauses are preserved, and replays start on demand. Open **Library → Events** to copy
 the viewer link, preview a recording, publish/withdraw replay, change the event
 password, or delete the event.
 
