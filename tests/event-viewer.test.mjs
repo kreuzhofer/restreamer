@@ -18,7 +18,7 @@ async function viewer(initial = live, {playError, native = true} = {}) {
         getAttribute: key => attributes.get(key) ?? null,
         removeAttribute: key => attributes.delete(key),
         addEventListener: (name, listener) => listeners.set(name, listener),
-        dispatch: name => listeners.get(name)?.(),
+        dispatch: name => queueMicrotask(() => listeners.get(name)?.()),
         querySelector: () => element(id + '-button')};
       Object.defineProperty(node, 'src', {get: () => attributes.get('src') || '', set: value => attributes.set('src', value)});
       nodes.set(id, node);
@@ -122,8 +122,10 @@ test('native fullscreen pause and resume preserve the viewer intent across broad
   page.setStatus({...live, delivering: false}); await page.poll();
   page.setStatus(live); await page.poll();
   assert.equal(page.video.plays.length, 1, 'a native pause must not be undone by recovery');
-  await page.video.play();
-  page.setStatus({...live, delivering: false}); await page.poll();
-  page.setStatus(live); await page.poll();
-  assert.equal(page.video.plays.length, 3, 'after a native resume, recovery should start playback again');
+  const resumed = await viewer();
+  resumed.video.pause();
+  await resumed.video.play();
+  resumed.setStatus({...live, delivering: false}); await resumed.poll();
+  resumed.setStatus(live); await resumed.poll();
+  assert.equal(resumed.video.plays.length, 3, 'after a native resume, recovery should start playback again');
 });
