@@ -53,17 +53,21 @@
         const section = summary(pkg);
         const actions = node('div', '', 'generator-actions');
         for (const template of pkg.templates) {
-          actions.append(button(`Create ${template.name}`, async () => {
+          const create = button(`Create ${template.name}`, async () => {
             const name = section.querySelector('input').value.trim();
             if (!name) throw new Error('Enter a name for your show design.');
-            const design = await request(`/api/generator/templates/${encodeURIComponent(template.id)}/designs`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,version:1,theme:{id:template.theme,revision:1}})});
+            const current = await request(`/api/generator/templates/${encodeURIComponent(template.id)}`);
+            const design = await request(`/api/generator/templates/${encodeURIComponent(template.id)}/designs`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,version:current.version,theme:{id:template.theme,revision:1}})});
             location.href = `/editor?id=${encodeURIComponent(design.id)}&return=${encodeURIComponent('/library?collection=packages')}`;
-          }, true));
+          }, true);
+          create.className += ' studio-authoring';
+          actions.append(create);
         }
         if (pkg.templates.length) {
-          const label = node('label', 'New show design name');
+          const label = node('label', 'New show design name', 'studio-authoring');
           const name = node('input'); name.value = `${pkg.name} show`; name.maxLength = 180;
           label.append(name); section.append(label);
+          section.append(node('p', 'Creates an editable show using the current template, including any saved edits, and this package’s theme version.', 'stage-help studio-authoring'));
         }
         const themes = node('a', 'Open themes', 'context-resource-link'); themes.href = '/library?collection=themes'; actions.append(themes);
         actions.append(button('Review removal', async () => {

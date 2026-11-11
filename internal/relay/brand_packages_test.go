@@ -315,3 +315,24 @@ func TestBrandPackageUpgradeKeepsExistingDesignOnExactTheme(t *testing.T) {
 		t.Fatal("upgrade changed existing design", w.Body.String())
 	}
 }
+
+func TestBrandPackageMembersRequirePackageRemoval(t *testing.T) {
+	s := libraryServer(t)
+	m := brandManifest{FormatVersion: 1, ID: "owned", Version: 1, Name: "Owned kit", Themes: []brandTheme{{ID: "primary", Name: "Primary", Style: mediaauthor.RetroTheme(1).Style}}, Templates: []brandTemplate{{ID: "welcome", Name: "Welcome", Theme: "primary", Content: mediaauthor.Design{Stage: "prestream", Scenes: []mediaauthor.Scene{{ID: "one", Layout: "title", Text: "Hello", DurationSeconds: 4}}}}}}
+	w := assetUpload(t, s, "/api/generator/packages", "kit.zip", brandZIP(t, m, nil))
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var p brandPackage
+	json.Unmarshal(w.Body.Bytes(), &p)
+	for _, request := range []struct{ route, body string }{{"/api/generator/templates/" + p.Templates[0].ID, `{"version":1}`}, {"/api/generator/themes/" + p.Themes[0].ID, `{"revision":1}`}} {
+		w = dashboardRequest(s, "DELETE", request.route, request.body)
+		if w.Code != 409 || !bytes.Contains(w.Body.Bytes(), []byte("package")) {
+			t.Errorf("package member deletion: %d %s", w.Code, w.Body.String())
+		}
+	}
+	w = dashboardRequest(s, "DELETE", "/api/generator/packages/owned/versions/1", `{}`)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}

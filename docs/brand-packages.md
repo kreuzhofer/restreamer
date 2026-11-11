@@ -1,6 +1,6 @@
 # Brand packages
 
-In **Library → Brand packages**, choose a ZIP, review its contents, then import it. Use an included content template to create an independent show design. Importing never changes stage selections or on-air media. The Themes page previews scene samples and downloads the package’s transparent OBS frame.
+On desktop, in **Library → Brand packages**, choose a ZIP, review its contents, then import it. Use an included content template to create an independent show design. Copies include the template’s current saved edits while retaining the package’s exact theme revision. On phones, inspect installed kits and preview/download their themes; importing and authoring remain desktop tasks. Importing never changes stage selections or on-air media. The Themes page previews scene samples and downloads the package’s transparent OBS frame.
 
 Packages are curated kits, not arbitrary folders of brand guidelines. A designer must select the media, define layouts and provide the relationships below. The generic importer ships with Restreamer; proprietary corporate kits stay outside its repository and container image.
 
@@ -67,6 +67,8 @@ Templates support existing title/list/image/video content, timing and single-tra
 The archive, total expanded input and total normalized asset output are each bounded to 512 MiB; at most 256 archive entries and a 256 KiB manifest are accepted. Existing asset/theme/template count limits also apply. Preparation checks available disk space, runs in the shared preparation admission queue and has a 15-minute timeout. Import staging is not visible to library readers.
 
 Reimporting an identical package/version is a no-op. Different contents under an installed version are rejected; publish a new version. Each package version installs independent identities, so existing designs retain the exact version they selected. A new template copy selects the theme included with that package version.
+
+Package-owned assets, themes and templates cannot be deleted individually while their kit is installed. Use **Review removal** in Brand packages first.
 
 **Review removal** lists unused resources to delete and edited/referenced resources to retain. Removing a package never deletes a design or render. Its unused original templates/themes/assets are removed together with the package entry; modified resources and anything referenced outside the removed kit remain. A retained object identity may prevent reinstalling that removed version; use a new package version rather than overwriting it.
 

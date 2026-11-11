@@ -39,6 +39,9 @@ func (s *Server) generatorTemplateDelete(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Template changed; reload before deleting", 409)
 		return
 	}
+	if !g.allowBrandMemberDeletion(w, "template", template.ID) {
+		return
+	}
 	_, err = deleteMediaFiles(s.library.root, []string{"generator/templates/" + template.ID + ".json"})
 	if err != nil {
 		http.Error(w, "Deletion storage error; reload to check the result. Restart retries interrupted cleanup.", 507)
@@ -84,6 +87,9 @@ func (s *Server) generatorThemeDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if latest != input.Revision {
 		http.Error(w, "Theme changed; reload its latest revision before deleting", 409)
+		return
+	}
+	if !g.allowBrandMemberDeletion(w, "theme", id) {
 		return
 	}
 	designs, err := g.list()

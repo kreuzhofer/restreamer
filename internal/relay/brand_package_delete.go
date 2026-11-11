@@ -192,3 +192,42 @@ func (s *Server) brandPackageRemovalHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	generatorJSON(w, 200, plan)
 }
+
+// Caller holds generator.mu. Package members are removed through the package
+// planner so the installed kit cannot be left with dangling references.
+func (g *generatorStore) brandOwns(kind, id string) (bool, error) {
+	packages, err := g.listBrandPackages()
+	if err != nil {
+		return false, err
+	}
+	for _, p := range packages {
+		if kind == "theme" {
+			for _, t := range p.Themes {
+				if t.ID == id {
+					return true, nil
+				}
+			}
+		}
+		if kind == "template" {
+			for _, t := range p.Templates {
+				if t.ID == id {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+func (g *generatorStore) allowBrandMemberDeletion(w http.ResponseWriter, kind, id string) bool {
+	owned, err := g.brandOwns(kind, id)
+	if err != nil {
+		http.Error(w, "Cannot inspect package ownership; reload before deleting", 503)
+		return false
+	}
+	if owned {
+		http.Error(w, "This item belongs to an installed brand package. Review removal in Library → Brand packages first.", 409)
+		return false
+	}
+	return true
+}
