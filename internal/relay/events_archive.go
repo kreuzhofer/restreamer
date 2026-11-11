@@ -16,7 +16,7 @@ func (s *Server) eventOperatorHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.mu.Lock()
-	if e.State == "deleted" {
+	if e.State == "deleted" || e.unavailable {
 		e.mu.Unlock()
 		http.NotFound(w, r)
 		return
@@ -56,8 +56,6 @@ func (s *Server) eventDeleteHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	s.controlMu.Lock()
 	defer s.controlMu.Unlock()
-	s.broadcast.mu.Lock()
-	defer s.broadcast.mu.Unlock()
 	e := s.event(r.PathValue("id"))
 	if e == nil {
 		http.NotFound(w, r)
@@ -87,6 +85,13 @@ func (s *Server) eventDeleteHTTP(w http.ResponseWriter, r *http.Request) {
 	e.mu.Unlock()
 	// A persisted tombstone revokes access before removing references or files.
 	// Any interrupted cleanup remains fail-closed and can be retried.
+	s.broadcast.mu.Lock()
+	broadcastLocked := true
+	defer func() {
+		if broadcastLocked {
+			s.broadcast.mu.Unlock()
+		}
+	}()
 	next := destinationState{Version: s.destinations.Version + 1, Targets: []config.Target{}}
 	kept := []*output{}
 	for _, o := range s.outputSnapshot() {
@@ -126,6 +131,8 @@ func (s *Server) eventDeleteHTTP(w http.ResponseWriter, r *http.Request) {
 	s.broadcast.hub.outputs = append([]*output{}, kept...)
 	s.broadcast.hub.mu.Unlock()
 	s.broadcast.control.version++
+	s.broadcast.mu.Unlock()
+	broadcastLocked = false
 	trash := filepath.Join(s.cfg.EventsDirectory, ".deleted-"+e.ID)
 	if err := os.Rename(e.dir, trash); err != nil {
 		http.Error(w, "Event revoked; recording cleanup failed. Retry Delete event", 500)

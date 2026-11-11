@@ -33,6 +33,7 @@ type streamingEvent struct {
 	Incomplete    bool           `json:"incomplete"`
 	mu            sync.Mutex
 	dir           string
+	unavailable   bool
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	State         string `json:"state"`
@@ -69,15 +70,15 @@ func (s *Server) initializeEvents() error {
 		}
 		dir := filepath.Join(s.cfg.EventsDirectory, entry.Name())
 		data, err := os.ReadFile(filepath.Join(dir, "event.json"))
-		if err != nil {
-			return errors.New("Cannot read event metadata")
-		}
 		e := &streamingEvent{dir: dir}
-		if json.Unmarshal(data, e) != nil || e.ID != entry.Name() {
-			return errors.New("Invalid event metadata")
+		if err != nil || json.Unmarshal(data, e) != nil || e.ID != entry.Name() {
+			e = &streamingEvent{dir: dir, ID: entry.Name(), Name: "Unavailable event " + entry.Name()[:8], State: "failed", Version: 1, Incomplete: true, unavailable: true, Error: "Cannot recover event metadata; restore storage or delete the event"}
+		} else if err := e.recoverRecording(); err != nil {
+			e.State, e.Published, e.Incomplete, e.unavailable = "failed", false, true, true
+			e.Error = err.Error()
 		}
-		if err := e.recoverRecording(); err != nil {
-			return err
+		if e.unavailable {
+			s.log.Warn("event recovery unavailable", "event_id", entry.Name())
 		}
 		s.events[e.ID] = e
 	}
@@ -87,6 +88,9 @@ func (s *Server) initializeEvents() error {
 var eventMediaName = regexp.MustCompile(`^(segment-[0-9]{8}\.m4s|init-[a-f0-9]{32}\.mp4)$`)
 
 func (e *streamingEvent) recoverRecording() error {
+	if e.State == "deleted" {
+		return nil
+	}
 	if e.Version == 0 || len(e.SessionKey) != 32 || len(e.Salt) != 16 || len(e.Hash) != 0 && len(e.Hash) != 32 {
 		return errors.New("Invalid event access metadata")
 	}
@@ -165,6 +169,9 @@ func (s *Server) event(id string) *streamingEvent {
 func (e *streamingEvent) save() error { return writeState(filepath.Join(e.dir, "event.json"), e) }
 
 func (s *Server) createStreamingEvent(name, password string, auto bool) (*streamingEvent, error) {
+	if s.eventStorageError != "" {
+		return nil, errors.New(s.eventStorageError)
+	}
 	if s.cfg.EventsDirectory == "" {
 		return nil, errors.New("Configure events_directory with persistent storage first")
 	}
@@ -218,7 +225,7 @@ func (e *streamingEvent) setPassword(password string) error {
 }
 
 func (e *streamingEvent) view() map[string]any {
-	return map[string]any{"id": e.ID, "name": e.Name, "state": e.State, "auto_replay": e.AutoReplay, "published": e.Published, "protected": len(e.Hash) > 0, "version": e.Version, "url": "/watch/" + e.ID, "bytes": e.Bytes, "incomplete": e.Incomplete, "error": e.Error, "recorded": len(e.Segments) > 0, "delivering": e.delivering.Load()}
+	return map[string]any{"id": e.ID, "name": e.Name, "state": e.State, "auto_replay": e.AutoReplay, "published": e.Published, "protected": len(e.Hash) > 0, "version": e.Version, "url": "/watch/" + e.ID, "bytes": e.Bytes, "incomplete": e.Incomplete, "error": e.Error, "recorded": len(e.Segments) > 0 && !e.unavailable, "delivering": e.delivering.Load(), "unavailable": e.unavailable}
 }
 
 func randomEventToken() string {

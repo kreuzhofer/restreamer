@@ -40,10 +40,12 @@ jobs:
           docker run --rm restreamer:test -config /etc/restreamer/config.json -check-config
           docker run --rm "${env_args[@]}" restreamer:test -config /etc/restreamer/config.json -check-config
           docker volume create restreamer-smoke-state
-          trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke; docker volume rm restreamer-smoke-state' EXIT
+          docker volume create restreamer-smoke-events
+          trap 'docker logs restreamer-smoke; docker rm -f restreamer-smoke; docker volume rm restreamer-smoke-state restreamer-smoke-events' EXIT
           start_container() {
             docker run -d --name restreamer-smoke --read-only --cap-drop ALL --security-opt no-new-privileges:true \
               -p 127.0.0.1:18080:8080 -v restreamer-smoke-state:/data \
+              -v restreamer-smoke-events:/events -e EVENTS_DIRECTORY=/events \
               -e TARGET_STATE_FILE=/data/targets.json -e BRB_ENABLED=true -e BRB_DIRECTORY=/data/brb -e DASHBOARD_USERNAME=ci -e DASHBOARD_PASSWORD=ci-dashboard-password \
               "${env_args[@]}" restreamer:test
             # Startup prepares BRB media before opening HTTP, including after a
@@ -182,9 +184,21 @@ jobs:
           wait_stage OFF
           api http://127.0.0.1:18080/status | jq -e '.forwarding == false and all(.outputs[]; .attempts == 0)'
           stage_command set_target '{"target":"twitch","enabled":false}'
+          # Public event metadata is writable by the unprivileged container and
+          # retained on its separate mount, with no operator credentials needed
+          # to open the unlisted viewer page.
+          destination_version=$(api http://127.0.0.1:18080/api/destinations | jq .version)
+          jq -n --argjson version "$destination_version" \
+            '{version:$version,name:"event-smoke",type:"public_page",auto_replay:false}' > /tmp/event-create.json
+          api -X POST http://127.0.0.1:18080/api/destinations \
+            -H 'Content-Type: application/json' -H 'X-Restreamer-Control: 1' \
+            --data-binary @/tmp/event-create.json > /tmp/event-created.json
+          event_id=$(jq -r '.destinations[] | select(.name == "event-smoke") | .event_id' /tmp/event-created.json)
+          curl --fail --show-error -s "http://127.0.0.1:18080/watch/$event_id/status" | jq -e '.state == "waiting" and .published == false'
           cp /tmp/stage-command.json /tmp/before-restart-command.json
           docker rm -f restreamer-smoke
           start_container
+          curl --fail --show-error -s "http://127.0.0.1:18080/watch/$event_id/status" | jq -e '.state == "waiting" and .published == false'
           python3 tests/generator-smoke.py --verify-restart
           wait_library
           api http://127.0.0.1:18080/api/stage-media > /tmp/restarted-stage-media.json

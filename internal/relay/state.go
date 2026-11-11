@@ -69,8 +69,8 @@ func (s *Server) initialize() error {
 			paths[abs] = true
 		}
 		if err := s.initializeEvents(); err != nil {
-			s.initErr = err
-			return
+			s.eventStorageError = err.Error()
+			s.log.Warn("public event storage unavailable", "reason", s.eventStorageError)
 		}
 		if err := s.initializeDestinations(); err != nil {
 			s.initErr = err

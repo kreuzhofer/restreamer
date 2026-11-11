@@ -54,7 +54,7 @@ func (p *eventPackager) push(m *rtmp.Message) error {
 		if m.Type == rtmp.Video {
 			previous = p.video
 		}
-		if previous != nil && bytes.Equal(previous.Body, m.Body) {
+		if previous != nil && bytes.Equal(previous.Body, m.Body) && !p.mux.started {
 			return nil
 		}
 		if p.mux.started {
@@ -231,6 +231,10 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 	var pack *eventPackager
 	fail := func(err error) {
 		e.mu.Lock()
+		if e.State == "deleted" {
+			e.mu.Unlock()
+			return
+		}
 		e.State = "failed"
 		e.Incomplete = true
 		e.Published = false
@@ -279,6 +283,10 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 					e.State = "interrupted"
 				} else {
 					e.State = "ended"
+				}
+				if err := e.recoverRecording(); err != nil {
+					e.Incomplete = true
+					e.Error = "Cannot validate finalized event recording"
 				}
 				e.Published = e.AutoReplay && !e.Incomplete && len(e.Segments) > 0
 				e.Version++
@@ -363,5 +371,20 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 				o.state("streaming")
 			}
 		}
+	}
+}
+
+// Called by the shared delivery gate; event state survives temporary target pauses.
+func (o *output) updateEventDelivery(enabled bool) {
+	if o.event == nil {
+		return
+	}
+	if !enabled {
+		o.event.delivering.Store(false)
+		if o.event.begun.Load() {
+			o.eventFinish.Store(true)
+		}
+	} else if status := o.snapshot(); status.Enabled && status.CanEnable {
+		o.event.begun.Store(true)
 	}
 }

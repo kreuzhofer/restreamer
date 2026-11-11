@@ -184,16 +184,7 @@ func (b *broadcast) setDeliveryLocked(enabled bool) {
 		return
 	}
 	for _, o := range b.server.outputSnapshot() {
-		if o.event != nil {
-			if !enabled {
-				o.event.delivering.Store(false)
-			} else if status := o.snapshot(); status.Enabled && status.CanEnable {
-				o.event.begun.Store(true)
-			}
-		}
-		if !enabled && o.event != nil && o.event.begun.Load() {
-			o.eventFinish.Store(true)
-		}
+		o.updateEventDelivery(enabled)
 		if enabled {
 			o.resetDrain()
 		}

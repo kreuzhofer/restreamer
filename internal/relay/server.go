@@ -16,6 +16,7 @@ import (
 )
 
 type Server struct {
+	eventStorageError     string
 	eventSlots            chan struct{}
 	eventAuthSlots        chan struct{}
 	eventsMu              sync.RWMutex

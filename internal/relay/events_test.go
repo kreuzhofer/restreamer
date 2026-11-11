@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -470,6 +471,11 @@ func TestEventRestartRejectsCorruptMediaAndKeepsRecoveryPrivate(t *testing.T) {
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
+	// Publication must revalidate files even without restarting the server.
+	body, _ := json.Marshal(map[string]any{"version": eventVersion(t, s, id), "published": true})
+	if w := dashboardRequest(s, "PATCH", "/api/events/"+id, string(body)); w.Code != 409 {
+		t.Fatal("damaged recording accepted for publication", w.Code, w.Body.String())
+	}
 	for i := 0; i < 2; i++ {
 		restarted := New(s.cfg, s.log)
 		if w := viewerRequest(restarted, "GET", "/watch/"+id+"/replay.m3u8", ""); w.Code != 404 {
@@ -483,6 +489,34 @@ func TestEventRestartRejectsCorruptMediaAndKeepsRecoveryPrivate(t *testing.T) {
 			t.Fatal("missing recovery warning", w.Body.String())
 		}
 	}
+}
+
+func TestEventDamagedMetadataDoesNotPreventOtherDestinations(t *testing.T) {
+	s := eventTestServer(t)
+	id := createEvent(t, s, "secret", false)
+	sink := newSink(t)
+	target := sink.target("other")
+	body, _ := json.Marshal(map[string]any{"version": 1, "name": target.Name, "url": target.URL, "stream_key": target.StreamKey})
+	if w := dashboardRequest(s, "POST", "/api/destinations", string(body)); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if err := os.WriteFile(filepath.Join(s.cfg.EventsDirectory, id, "event.json"), []byte("partial write"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	restarted := New(s.cfg, s.log)
+	if w := dashboardRequest(restarted, "GET", "/api/events", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Cannot recover event metadata") {
+		t.Fatal("broken event blocked operator recovery", w.Code, w.Body.String())
+	}
+	if w := viewerRequest(restarted, "GET", "/watch/"+id+"/status", ""); w.Code != 404 {
+		t.Fatal("damaged event exposed", w.Code)
+	}
+	address := startEventRelay(t, restarted)
+	stageRequest(t, restarted, "set_target", map[string]any{"target": "other", "enabled": true})
+	stageRequest(t, restarted, "go_live", nil)
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, previewVideoConfig())
+	writePacket(t, publisher, keyframe(0))
+	eventually(t, func() bool { return sink.count() == 1 })
 }
 
 func TestEventRehearsalAndDeliverySwitchesDoNotLeakOrFinishEvent(t *testing.T) {
@@ -529,4 +563,90 @@ func TestEventRehearsalAndDeliverySwitchesDoNotLeakOrFinishEvent(t *testing.T) {
 	}
 	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/live.m3u8", "").Code == 200 })
 	stageRequest(t, s, "stop_now", nil)
+}
+
+func TestEventOBSReconnectKeepsOneRecordingWithoutBRB(t *testing.T) {
+	s := eventTestServer(t)
+	id := createEvent(t, s, "", true)
+	address := startEventRelay(t, s)
+	stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true})
+	stageRequest(t, s, "go_live", nil)
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, previewVideoConfig())
+	writePacket(t, publisher, audioConfig())
+	writePacket(t, publisher, keyframe(0))
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" })
+	time.Sleep(50 * time.Millisecond)
+	for i := 1; i <= 8; i++ {
+		writePacket(t, publisher, keyframe(time.Duration(i)*time.Second))
+		time.Sleep(3 * time.Millisecond)
+	}
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/live.m3u8", "").Code == 200 })
+	publisher.Net.Close()
+	// The new OBS session restarts its timestamps after a real source gap.
+	time.Sleep(7 * time.Second)
+	publisher = publishInput(t, address)
+	writePacket(t, publisher, previewVideoConfig())
+	writePacket(t, publisher, audioConfig())
+	for i := 0; i <= 8; i++ {
+		writePacket(t, publisher, keyframe(time.Duration(i)*time.Second))
+		time.Sleep(3 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if w := viewerRequest(s, "GET", "/watch/"+id+"/status", ""); !strings.Contains(w.Body.String(), `"state":"live"`) {
+		t.Fatal("OBS reconnect closed the event", w.Body.String())
+	}
+	stageRequest(t, s, "stop_now", nil)
+	eventually(t, func() bool {
+		return viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", "").Code == 200
+	})
+	w := viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", "")
+	if strings.Count(w.Body.String(), "#EXT-X-DISCONTINUITY\n") < 2 {
+		t.Fatal("OBS sessions not separated in replay", w.Body.String())
+	}
+}
+
+func TestEventPreparedProgrammeAndEndingProduceDecodableReplay(t *testing.T) {
+	requireFFmpeg(t)
+	prepared, revision := preparedRevisionServer(t)
+	cfg := prepared.cfg
+	cfg.Targets = nil
+	cfg.EventsDirectory = filepath.Join(t.TempDir(), "events")
+	cfg.StateFile = filepath.Join(t.TempDir(), "switches.json")
+	s := New(cfg, prepared.log)
+	id := createEvent(t, s, "", true)
+	startEventRelay(t, s)
+	if w := dashboardRequest(s, "PUT", "/api/stage-media", `{"prestream":"`+revision+`","ending":"`+revision+`","shortcuts":[]}`); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true})
+	if w := stageRequest(t, s, "prestream", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/live.m3u8", "").Code == 200 })
+	if w := stageRequest(t, s, "brb", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	time.Sleep(time.Second)
+	if w := stageRequest(t, s, "play_clip", map[string]any{"revision": revision}); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	time.Sleep(time.Second)
+	stageRequest(t, s, "stop_clip", nil)
+	if w := stageRequest(t, s, "end_stream", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return readStage(t, s).Stage == "OFF" })
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", "").Code == 200 })
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-xerror", "-i", server.URL+"/watch/"+id+"/replay.m3u8", "-f", "null", "-")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("programme replay failed decoding: %v %s", err, out)
+	}
+	if w := stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true}); w.Code < 400 {
+		t.Fatal("ending allowed reuse")
+	}
 }

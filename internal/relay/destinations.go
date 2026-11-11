@@ -207,8 +207,20 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	s.controlMu.Lock()
 	defer s.controlMu.Unlock()
 	b := s.broadcast
+	var createdEvent *streamingEvent
+	committed := false
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	defer func() {
+		b.mu.Unlock()
+		if createdEvent != nil && !committed {
+			s.eventsMu.Lock()
+			delete(s.events, createdEvent.ID)
+			s.eventsMu.Unlock()
+			if os.RemoveAll(createdEvent.dir) != nil {
+				s.log.Warn("uncommitted event storage cleanup failed")
+			}
+		}
+	}()
 	if s.destinationsPath() == "" {
 		http.Error(w, "Configure persistent destination storage first", 503)
 		return
@@ -226,18 +238,6 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := destinationState{Version: s.destinations.Version + 1, Targets: []config.Target{}}
-	var createdEvent *streamingEvent
-	committed := false
-	defer func() {
-		if createdEvent != nil && !committed {
-			s.eventsMu.Lock()
-			delete(s.events, createdEvent.ID)
-			s.eventsMu.Unlock()
-			if os.RemoveAll(createdEvent.dir) != nil {
-				s.log.Warn("uncommitted event storage cleanup failed")
-			}
-		}
-	}()
 	for _, o := range s.outputSnapshot() {
 		// Retained recordings belong to the archive, not the active target limit.
 		if r.Method == "POST" && o.event != nil {
@@ -314,7 +314,11 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "At most 16 destinations are supported", 400)
 					return
 				}
+				// controlMu serializes management while ingest and stage ticks
+				// continue during password derivation and event storage I/O.
+				b.mu.Unlock()
 				event, err := s.createStreamingEvent(change.Name, change.Password, change.AutoReplay)
+				b.mu.Lock()
 				if err != nil {
 					http.Error(w, err.Error(), 400)
 					return

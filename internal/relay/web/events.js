@@ -24,7 +24,7 @@
     busy = true; $('archive-refresh').disabled = true;
     try {
       const result = await request('/api/events'); $('archive-list').replaceChildren();
-      if (!result.available) { $('archive-status').textContent = 'Event storage is not configured. Set up the persistent events directory before creating an event.'; return; }
+      if (!result.available) { $('archive-status').textContent = result.error || 'Event storage is not configured. Set up the persistent events directory before creating an event.'; return; }
       const events = result.events.sort((a, b) => a.name.localeCompare(b.name));
       $('archive-status').textContent = events.length ? events.length + ' events · recordings stay until you delete them' : 'No events yet. Create a public streaming page in Settings → Destinations.';
       for (const event of events) {
@@ -36,7 +36,7 @@
         if (event.error) { const error = node('p', event.error); error.className = 'archive-error'; details.append(error); }
         const actions = node('div', ''); actions.className = 'archive-actions';
         const button = (text, handler) => { const control = node('button', text); control.type = 'button'; control.onclick = handler; actions.append(control); return control; };
-        if (event.state !== 'deleted') {
+        if (event.state !== 'deleted' && !event.unavailable) {
           button('Copy event link', async () => { try { await navigator.clipboard.writeText(new URL(event.url, location.origin).href); $('archive-status').textContent = 'Link copied for ' + event.name + '.'; } catch (_) { $('archive-status').textContent = 'Copy this link: ' + new URL(event.url, location.origin).href; } });
           if (event.recorded) { const preview = node('a', 'Preview recording'); preview.href = '/events/' + event.id; preview.target = '_blank'; preview.rel = 'noopener'; actions.append(preview); }
           if (event.recorded && event.state !== 'live') button(event.published ? 'Withdraw replay' : 'Publish replay', () => action(event, event.published ? 'withdraw' : 'publish'));

@@ -33,7 +33,7 @@ func (s *Server) eventViewerHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.mu.Lock()
-	if e.State == "deleted" {
+	if e.State == "deleted" || e.unavailable {
 		e.mu.Unlock()
 		http.NotFound(w, r)
 		return
@@ -221,7 +221,7 @@ func (e *streamingEvent) login(w http.ResponseWriter, r *http.Request, slots cha
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.State == "deleted" || !hmac.Equal(key, e.SessionKey) {
+	if e.State == "deleted" || e.unavailable || !hmac.Equal(key, e.SessionKey) {
 		http.Error(w, "Event access changed; sign in again", 401)
 		return
 	}
@@ -248,7 +248,7 @@ func (s *Server) eventsHTTP(w http.ResponseWriter, r *http.Request) {
 			e.mu.Unlock()
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"events": views, "available": s.cfg.EventsDirectory != ""})
+		json.NewEncoder(w).Encode(map[string]any{"events": views, "available": s.cfg.EventsDirectory != "" && s.eventStorageError == "", "error": s.eventStorageError})
 		return
 	}
 	var change struct {
@@ -273,7 +273,7 @@ func (s *Server) eventsHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	oldSalt, oldHash, oldKey := e.Salt, e.Hash, e.SessionKey
 	oldPublished := e.Published
-	if e.State == "deleted" {
+	if e.State == "deleted" || e.unavailable {
 		http.NotFound(w, r)
 		return
 	}
@@ -281,6 +281,19 @@ func (s *Server) eventsHTTP(w http.ResponseWriter, r *http.Request) {
 		if *change.Published && (len(e.Segments) == 0 || e.State == "live" || e.State == "waiting" || e.Incomplete && !change.AcknowledgeIncomplete) {
 			http.Error(w, "A finalized recording is required; acknowledge an incomplete recording before publishing", 409)
 			return
+		}
+		if *change.Published {
+			version := e.Version
+			if err := e.recoverRecording(); err != nil {
+				e.Published, e.Incomplete, e.unavailable = false, true, true
+				e.Error = err.Error()
+				http.Error(w, "Recording validation failed; restore storage before publishing", 503)
+				return
+			}
+			if e.Version != version {
+				http.Error(w, "Recording media changed; review recovered media before publishing", 409)
+				return
+			}
 		}
 		e.Published = *change.Published
 	}
