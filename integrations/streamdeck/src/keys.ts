@@ -1,12 +1,14 @@
+import {platformPaths} from './platform-icons.js';
 export type Stage = {
   stage:string; server_id:string; context:string; source:string; mode:string;
   pending?:{id:string}; error?:string; fallback_error?:string; return_stage?:string;
   media?:{revision?:string}; outcomes?:{id:string;state:string;reason?:string}[];
   playback?:{state:string}; continuous?:{state:string;error?:string};
 };
-export type Snapshot = {stage:Stage; outputs:{enabled:boolean;can_enable:boolean;state:string;last_error?:string;output_mode?:string}[]};
-export type Face = {label:string; detail:string; tone:'gray'|'green'|'amber'|'red'|'blue'; symbol:string; description:string};
-export const labels:Record<string,string> = {prestream:'PRE', 'go-live':'LIVE', 'brb-return':'BRB', 'end-stream':'END', 'play-clip':'CLIP', status:'UNKNOWN', 'stop-now':'STOP'};
+export type Output = {name:string;platform?:string;enabled:boolean;can_enable:boolean;state:string;last_error?:string;output_mode?:string};
+export type Snapshot = {stage:Stage; control_destinations?:boolean; outputs:Output[]};
+export type Face = {label:string; detail:string; tone:'gray'|'green'|'amber'|'red'|'blue'; symbol:string; platform?:string; description:string};
+export const labels:Record<string,string> = {prestream:'PRE', 'go-live':'LIVE', 'brb-return':'BRB', 'end-stream':'END', 'play-clip':'CLIP', status:'UNKNOWN', 'stop-now':'STOP', 'target-toggle':'TARGET'};
 
 export function health(snapshot:Snapshot | undefined):Face {
   if (!snapshot) return {label:'UNKNOWN',detail:'OFFLINE',tone:'gray',symbol:'?',description:'UNKNOWN'};
@@ -42,5 +44,25 @@ export function keySVG(face:Face):string {
     '—':'<path d="M27 15h18"/>',
     '■':'<rect x="28" y="7" width="16" height="16"/>'
   };
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 72 72"><title>${escape(face.description)}</title><rect width="72" height="72" rx="9" fill="#101722"/><rect x="2" y="2" width="68" height="68" rx="7" fill="none" stroke="${color}" stroke-width="3"/><g fill="${color}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700"><g fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${icons[face.symbol]||icons['?']}</g><text x="36" y="44" font-size="${face.label.length>5?12:19}">${escape(face.label)}</text><text x="36" y="61" font-size="${face.detail.length>7?9:12}">${escape(face.detail)}</text></g></svg>`;
+  const platform=face.platform && platformPaths[face.platform];
+  const mark=platform?`<g transform="translate(25 4) scale(.92)" fill="${({twitch:'#bf94ff',youtube:'#ff747b',kick:'#53fc18'} as Record<string,string>)[face.platform!]}"><path d="${platform}"/></g>`:face.platform?'<g fill="none" stroke="'+color+'" stroke-width="2"><rect x="26" y="6" width="20" height="16" rx="3"/><path d="m33 10 8 4-8 4Z"/></g>':`<g fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${icons[face.symbol]||icons['?']}</g>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 72 72"><title>${escape(face.description)}</title><rect width="72" height="72" rx="9" fill="#101722"/><rect x="2" y="2" width="68" height="68" rx="7" fill="none" stroke="${color}" stroke-width="3"/><g fill="${color}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700">${mark}<text x="36" y="44" font-size="${face.label.length>9?9:face.label.length>5?12:19}">${escape(face.label)}</text><text x="36" y="61" font-size="${face.detail.length>7?9:12}">${escape(face.detail)}</text></g></svg>`;
+}
+
+export function targetFace(snapshot:Snapshot|undefined,name:string|undefined,problem:string):Face {
+ const output=snapshot?.outputs.find(o=>o.name===name);
+ const characters=Array.from(name||'TARGET');
+ const face:Face={label:characters.length>12?characters.slice(0,11).join('')+'…':characters.join(''),detail:'SELECT',tone:'gray',symbol:'○',platform:output?.platform,description:'Choose a destination'};
+ if(!snapshot)return {...face,detail:problem||'OFFLINE',symbol:'?',description:'Connection unavailable'};
+ if(!name)return face;
+ if(!output)return {...face,detail:'MISSING',tone:'amber',description:'Destination removed or renamed — select it again'};
+ if(snapshot.control_destinations!==true)return {...face,detail:'PAIR AGAIN',tone:'amber',description:'Reconnect and approve Control destinations'};
+ if(!output.can_enable)return {...face,detail:'SETUP',tone:'amber',description:'Configure this destination in Restreamer'};
+ if(!output.enabled)return {...face,detail:'OFF',description:'Destination disabled'};
+ if(snapshot.stage.stage==='OFF')return {...face,detail:'ENABLED',description:'Enabled — broadcast is off'};
+ if(snapshot.stage.mode==='preview_only')return {...face,detail:'REHEARSE',tone:'blue',description:'Enabled — rehearsal does not send to destinations'};
+ const encoder=output.output_mode==='continuous'?snapshot.stage.continuous:undefined;
+ if(output.state==='retrying'||(output.output_mode==='continuous'&&encoder?.state!=='running'&&encoder?.state!=='starting'))return {...face,detail:'ERROR',tone:'red',description:'Destination delivery failed'};
+ if(output.state==='streaming'&&(!encoder||encoder.state==='running'))return {...face,detail:'STREAMING',tone:'green',description:'Relay delivering to destination'};
+ return {...face,detail:output.state==='draining'?'FINISHING':'CONNECTING',tone:'blue',description:'Destination enabled, waiting for delivery'};
 }

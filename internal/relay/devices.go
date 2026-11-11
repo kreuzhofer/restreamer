@@ -20,11 +20,12 @@ import (
 const pairingLifetime = 5 * time.Minute
 
 type devicePairing struct {
-	Code      string
-	Name      string
-	Expires   time.Time
-	PollAfter time.Time
-	Approved  bool
+	Code                string
+	Name                string
+	Expires             time.Time
+	PollAfter           time.Time
+	Approved            bool
+	ControlDestinations bool
 }
 
 type deviceAccess struct {
@@ -37,10 +38,11 @@ type deviceAccess struct {
 }
 
 type deviceCredential struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Created int64  `json:"created"`
-	Hash    string `json:"hash"`
+	ID                  string `json:"id"`
+	Name                string `json:"name"`
+	Created             int64  `json:"created"`
+	Hash                string `json:"hash"`
+	ControlDestinations bool   `json:"control_destinations,omitempty"`
 }
 
 type devicePrincipal struct{}
@@ -103,9 +105,9 @@ func (s *Server) saveDeviceAccess(records []deviceCredential) error {
 	return nil
 }
 
-func (s *Server) deviceAuthorized(token string) bool {
+func (s *Server) deviceAuthorized(token string) (deviceCredential, bool) {
 	if len(token) != 64 || s.initializeDeviceAccess() != nil {
-		return false
+		return deviceCredential{}, false
 	}
 	d := s.devices
 	d.mu.Lock()
@@ -113,10 +115,10 @@ func (s *Server) deviceAuthorized(token string) bool {
 	hash := deviceHash(token)
 	for _, record := range d.records {
 		if record.Hash == hash {
-			return true
+			return record, true
 		}
 	}
-	return false
+	return deviceCredential{}, false
 }
 
 func deviceRouteAllowed(r *http.Request) bool {
@@ -126,6 +128,9 @@ func deviceRouteAllowed(r *http.Request) bool {
 func deviceCommandAllowed(r *http.Request, cmd StageCommand) bool {
 	if r.Context().Value(devicePrincipal{}) == nil {
 		return true
+	}
+	if cmd.Action == "set_target" {
+		return deviceCanControlDestinations(r) && cmd.Target != "" && cmd.Enabled != nil && cmd.Mode == "" && cmd.Revision == "" && !cmd.Loop && cmd.Position == 0
 	}
 	if cmd.Mode != "" || cmd.Target != "" || cmd.Enabled != nil || cmd.Loop || cmd.Position != 0 {
 		return false
@@ -137,8 +142,17 @@ func deviceCommandAllowed(r *http.Request, cmd StageCommand) bool {
 	return false
 }
 
-func withDevicePrincipal(r *http.Request) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), devicePrincipal{}, true))
+func deviceCanControlDestinations(r *http.Request) bool {
+	value := r.Context().Value(devicePrincipal{})
+	if value == nil {
+		return true
+	}
+	record, ok := value.(deviceCredential)
+	return ok && record.ControlDestinations
+}
+
+func withDevicePrincipal(r *http.Request, record deviceCredential) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), devicePrincipal{}, record))
 }
 
 func newDeviceAccess() *deviceAccess {
@@ -218,7 +232,7 @@ func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := randomIngestionToken()
-		record := deviceCredential{ID: randomIngestionToken(), Name: pair.Name, Created: now.UnixMilli(), Hash: deviceHash(token)}
+		record := deviceCredential{ID: randomIngestionToken(), Name: pair.Name, Created: now.UnixMilli(), Hash: deviceHash(token), ControlDestinations: pair.ControlDestinations}
 		records := append(append([]deviceCredential{}, d.records...), record)
 		if err := s.saveDeviceAccess(records); err != nil {
 			generatorJSON(w, 503, map[string]string{"error": err.Error()})
@@ -233,8 +247,9 @@ func (s *Server) pairingHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) approveDeviceHTTP(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		UserCode string `json:"user_code"`
-		Confirm  bool   `json:"confirm"`
+		UserCode            string `json:"user_code"`
+		Confirm             bool   `json:"confirm"`
+		ControlDestinations bool   `json:"control_destinations,omitempty"`
 	}
 	if !generatorDecodeLimit(w, r, &input, 1024) {
 		return
@@ -253,6 +268,11 @@ func (s *Server) approveDeviceHTTP(w http.ResponseWriter, r *http.Request) {
 				generatorJSON(w, 200, map[string]string{"state": "denied"})
 				return
 			}
+			if pair.Approved {
+				generatorJSON(w, 409, map[string]string{"error": "Connection already approved. Start a new pairing to change permissions."})
+				return
+			}
+			pair.ControlDestinations = input.ControlDestinations
 			pair.Approved = true
 			generatorJSON(w, 200, map[string]string{"state": "approved"})
 			return
@@ -297,7 +317,7 @@ func (s *Server) devicesHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	devices := make([]map[string]any, 0, len(d.records))
 	for _, record := range d.records {
-		devices = append(devices, map[string]any{"id": record.ID, "name": record.Name, "created": record.Created})
+		devices = append(devices, map[string]any{"id": record.ID, "name": record.Name, "created": record.Created, "control_destinations": record.ControlDestinations})
 	}
 	var pending any
 	for _, pair := range d.pending {

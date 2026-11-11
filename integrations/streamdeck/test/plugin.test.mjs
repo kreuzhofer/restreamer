@@ -286,3 +286,56 @@ test('key updates send a renderable SVG data URL to Stream Deck',async t=>{
   assert.match(r.image('prestream'),/<svg/);
   assert.match(r.image('prestream'),/>PRE</);
 });
+
+test('target toggle selects its destination and requires a two-second hold then release',async t=>{
+ const r=await rig(t);r.state.control_destinations=true;
+ r.state.outputs=[{name:'My Twitch',platform:'twitch',enabled:false,can_enable:true,state:'disabled'}];
+ r.appear('target-toggle','target',{target:'My Twitch'});
+ await eventually(()=>r.image('target').includes('My Twitch')&&r.image('target').includes('>OFF<'));
+ assert.match(r.image('target'),/OFF/);
+ r.key('target-toggle','target');await wait(100);r.key('target-toggle','target','keyUp');
+ await wait(200);assert.equal(r.commands.length,0);
+ r.key('target-toggle','target');await wait(2100);
+ assert.equal(r.commands.length,0,'must release to confirm');
+ r.key('target-toggle','target','keyUp');
+ await eventually(()=>r.commands.length===1);
+ assert.deepEqual({...r.commands[0],id:'ID'},{id:'ID',server_id:'server-1',context:'server-1:1',action:'set_target',target:'My Twitch',enabled:true,confirmed:true});
+ assert.doesNotMatch(r.image('target'),/STREAMING/,'do not claim success before server status');
+ r.state.outputs[0].enabled=true;r.state.outputs[0].state='streaming';
+ await eventually(()=>r.image('target').includes('STREAMING'));
+ r.key('target-toggle','target');await wait(2100);r.key('target-toggle','target','keyUp');
+ await eventually(()=>r.commands.length===2);assert.equal(r.commands[1].enabled,false);
+ assert.equal(r.commands[1].target,'My Twitch');
+ r.send('propertyInspectorDidAppear','target','target-toggle');r.send('sendToPlugin','target','target-toggle',{command:'load'});
+ await eventually(()=>r.messages.some(m=>m.event==='sendToPropertyInspector'&&m.payload.targets?.[0]?.name==='My Twitch'));
+});
+
+test('target toggles cancel changed holds and reject missing destinations or missing permission',async t=>{
+ const r=await rig(t);r.state.control_destinations=true;
+ r.appear('target-toggle','target',{target:'local'});
+ await eventually(()=>r.image('target').includes('STREAMING'));
+ r.key('target-toggle','target');await wait(1100);r.state.stage.context='server-1:2';await wait(1100);r.key('target-toggle','target','keyUp');
+ await eventually(()=>r.image('target').includes('CHANGED'));assert.equal(r.commands.length,0);
+ r.send('didReceiveSettings','target','target-toggle',{settings:{target:'gone'}});
+ await eventually(()=>r.image('target').includes('MISSING'));
+ r.key('target-toggle','target');await wait(2100);r.key('target-toggle','target','keyUp');await wait(100);assert.equal(r.commands.length,0);
+ r.state.control_destinations=false;r.send('didReceiveSettings','target','target-toggle',{settings:{target:'local'}});
+ await eventually(()=>r.image('target').includes('PAIR AGAIN'));
+ r.key('target-toggle','target');await wait(2100);r.key('target-toggle','target','keyUp');await wait(100);assert.equal(r.commands.length,0);
+});
+
+
+test('Unicode names render without interrupting other keys',async t=>{
+  const r=await rig(t);
+  r.appear('play-clip','emoji-clip',{revision:'a'.repeat(64),name:'abcdefghijk😀more'});
+  r.appear('target-toggle','emoji-target',{target:'abcdefghij😀more'});
+  r.appear('status');
+  await eventually(()=>r.image('emoji-clip').includes('abcdefghijk😀'));
+  await eventually(()=>r.image('emoji-target').includes('abcdefghij😀…'));
+  await eventually(()=>r.image('status').includes('HEALTHY'));
+  r.send('didReceiveSettings','emoji-clip','play-clip',{settings:{revision:'a'.repeat(64),name:'broken\ud800'}});
+  await eventually(()=>r.image('emoji-clip').includes('broken�'));
+  r.state.stage.stage='OFF';
+  await eventually(()=>r.image('status').includes('>OFF<'));
+  assert.equal(r.commands.length,0);
+});

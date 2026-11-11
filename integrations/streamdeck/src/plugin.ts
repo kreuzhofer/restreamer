@@ -1,10 +1,10 @@
 import streamDeck, {action, SingletonAction, type WillAppearEvent, type WillDisappearEvent, type KeyDownEvent, type KeyUpEvent, type KeyAction, type DidReceiveSettingsEvent} from '@elgato/streamdeck';
-import {health, keySVG, labels, type Face} from './keys.js';
+import {health, keySVG, labels, targetFace, type Face} from './keys.js';
 import {Restreamer, connectionSettings, type ConnectionSettings} from './client.js';
 import {Pairing} from './pairing.js';
 
-type ClipSettings={revision?:string;name?:string};
-type Button={key:KeyAction<ClipSettings>;kind:string;settings:ClipSettings;invalid:boolean;image?:string;down?:number;context?:string;message?:string;until?:number};
+type ClipSettings={platform?:string;target?:string;revision?:string;name?:string};
+type Button={key:KeyAction<ClipSettings>;kind:string;settings:ClipSettings;invalid:boolean;image?:string;down?:number;context?:string;targetEnabled?:boolean;message?:string;until?:number};
 const buttons=new Map<string,Button>();
 const client=new Restreamer(render);
 const pairing=new Pairing(
@@ -22,16 +22,24 @@ function readSettings(value:unknown):{settings:ClipSettings;invalid:boolean}{
   if(!value||typeof value!=='object'||Array.isArray(value))return invalid;
   const candidate=value as Record<string,unknown>;
   if(candidate.revision!==undefined&&(typeof candidate.revision!=='string'||!/^[a-f0-9]{64}$/.test(candidate.revision)))return invalid;
+  if(candidate.platform!==undefined&&(typeof candidate.platform!=='string'||!['auto','twitch','youtube','kick','custom'].includes(candidate.platform)))return invalid;
+  if(candidate.target!==undefined&&(typeof candidate.target!=='string'||!candidate.target.trim()||candidate.target.length>512))return invalid;
   if(candidate.name!==undefined&&(typeof candidate.name!=='string'||candidate.name.length>512))return invalid;
-  return {settings:{revision:candidate.revision,name:candidate.name},invalid:false};
+  return {settings:{revision:candidate.revision,name:candidate.name,target:candidate.target,platform:candidate.platform},invalid:false};
 }
 function feedback(button:Button,text:string){button.message=text;button.until=Date.now()+4000;render();}
 function render(){
   const snapshot=client.current();
   for(const b of buttons.values()){
-    if(!snapshot&&b.kind==='stop-now'){b.down=undefined;b.context=undefined;}
+    if(!snapshot&&(b.kind==='stop-now'||b.kind==='target-toggle')){b.down=undefined;b.context=undefined;}
     let face:Face=health(snapshot);
-    if(b.kind!=='status'){
+    if(b.kind==='target-toggle'){
+      face=targetFace(snapshot,b.settings.target,client.problem);
+      face.platform ||= 'custom';
+      if(b.settings.platform&&b.settings.platform!=='auto')face.platform=b.settings.platform;
+      if(b.down){face={...face,detail:Date.now()-b.down>=2000?'RELEASE':'HOLD…',tone:'amber',description:b.targetEnabled?'Hold to disable destination':'Hold to enable destination'};}
+      if(b.message&&Date.now()<(b.until||0))face={...face,detail:b.message,tone:'amber',description:b.message};
+    }else if(b.kind!=='status'){
       const stage=snapshot?.stage;
       const selected=stage?.stage===({'prestream':'PRESTREAM','go-live':'LIVE','brb-return':'BRB','end-stream':'ENDING','play-clip':'CLIP','stop-now':'OFF'} as Record<string,string>)[b.kind]&&(b.kind!=='play-clip'||stage?.media?.revision===b.settings.revision);
       const playingFile=stage?.source==='file'&&stage.playback?.state==='playing';
@@ -40,7 +48,7 @@ function render(){
       face={label:labels[b.kind],detail:snapshot?'READY':client.problem||'OFFLINE',tone:'gray',symbol:snapshot?'○':'?',description:snapshot?'READY':'UNKNOWN'};
       if(active)face={...face,tone:'green',symbol:'✓',detail:'ACTIVE',description:'ACTIVE'};
       if(b.kind==='brb-return'&&stage?.stage==='BRB')face.label='RETURN';
-      if(b.kind==='play-clip'&&!active&&snapshot)face.detail=b.settings.name?.slice(0,12)||'SELECT CLIP';
+      if(b.kind==='play-clip'&&!active&&snapshot)face.detail=(b.settings.name ? Array.from(b.settings.name).slice(0,12).join('') : '')||'SELECT CLIP';
       if(selected&&!active){
         const failed=stage?.error||stage?.fallback_error||stage?.playback?.state==='failed';
         const detail=failed?'FAILED':b.kind==='go-live'?'NO OBS':stage?.playback?.state==='paused'?'PAUSED':'NOT READY';
@@ -56,7 +64,7 @@ function render(){
     }else if(!snapshot)face.detail=client.problem||'OFFLINE';
     if(b.invalid)face={label:labels[b.kind],detail:'INVALID',tone:'amber',symbol:'!',description:'INVALID SETTINGS — reselect this key’s clip or recreate the key'};
     const svg=keySVG(face);
-    if(b.image!==svg){b.image=svg;void b.key.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);}
+    if(b.image!==svg){b.image=svg;void b.key.setImage(`data:image/svg+xml;base64,${Buffer.from(svg,'utf8').toString('base64')}`);}
   }
 }
 class Control extends SingletonAction<ClipSettings>{
@@ -71,6 +79,11 @@ class Control extends SingletonAction<ClipSettings>{
     if(b.invalid){render();return;}
     b.down=Date.now();b.context=client.current()?.stage.context;
     if(this.kind==='status'){if(client.settings.endpoint)await streamDeck.system.openUrl(new URL('/live',client.settings.endpoint).href);return;}
+    if(this.kind==='target-toggle'){
+      const snapshot=client.current(),output=snapshot?.outputs.find(o=>o.name===b.settings.target);
+      if(!snapshot||snapshot.control_destinations!==true||!output||!output.can_enable){b.down=undefined;render();return;}
+      b.targetEnabled=output.enabled;b.message='';render();return;
+    }
     if(this.kind==='stop-now'){render();return;}
     const action=({'prestream':'prestream','go-live':'go_live','brb-return':client.current()?.stage.stage==='BRB'?'return':'brb','end-stream':'end_stream','play-clip':'play_clip'} as Record<string,string>)[this.kind];
     await client.execute(action,this.kind==='play-clip'?b.settings.revision:undefined,b.settings.name,text=>feedback(b,text));
@@ -78,6 +91,11 @@ class Control extends SingletonAction<ClipSettings>{
   override async onKeyUp(ev:KeyUpEvent<ClipSettings>){
     const b=buttons.get(ev.action.id);if(!b)return;
     const held=b.down?Date.now()-b.down:0;b.down=undefined;
+    if(this.kind==='target-toggle'&&held>=2000){
+      const snapshot=client.current(),output=snapshot?.outputs.find(o=>o.name===b.settings.target);
+      if(!b.context||b.context!==snapshot?.stage.context||!output||output.enabled!==b.targetEnabled){feedback(b,'CHANGED');return;}
+      await client.execute('set_target',undefined,undefined,text=>feedback(b,text),{name:output.name,enabled:!output.enabled});
+    }
     if(this.kind==='stop-now'&&held>=2000){
       if(!b.context||b.context!==client.current()?.stage.context){feedback(b,'CHANGED');return;}
       await client.execute('stop_now',undefined,undefined,text=>feedback(b,text));
@@ -92,7 +110,8 @@ class Control extends SingletonAction<ClipSettings>{
 @action({UUID:'com.kreuzhofer.restreamer.play-clip'})class Clip extends Control{constructor(){super('play-clip');}}
 @action({UUID:'com.kreuzhofer.restreamer.status'})class Status extends Control{constructor(){super('status');}}
 @action({UUID:'com.kreuzhofer.restreamer.stop-now'})class Stop extends Control{constructor(){super('stop-now');}}
-for(const control of [new Prestream(),new GoLive(),new Break(),new Ending(),new Clip(),new Status(),new Stop()])streamDeck.actions.registerAction(control);
+@action({UUID:'com.kreuzhofer.restreamer.target-toggle'})class Target extends Control{constructor(){super('target-toggle');}}
+for(const control of [new Target(),new Prestream(),new GoLive(),new Break(),new Ending(),new Clip(),new Status(),new Stop()])streamDeck.actions.registerAction(control);
 streamDeck.settings.onDidReceiveGlobalSettings<ConnectionSettings>(ev=>{client.configure(ev.settings);});
 streamDeck.ui.onSendToPlugin(async ev=>{
   const payload=ev.payload;
@@ -119,7 +138,7 @@ streamDeck.ui.onSendToPlugin(async ev=>{
       let libraryError='';
       let choices:{id:string;name:string;state:string;duration:number}[]=[];
       try{choices=await client.library();}catch{libraryError='Library unavailable. Prepare BRB and videos in Restreamer, then refresh.';}
-      await streamDeck.ui.sendToPropertyInspector({config,clips:choices,pairing:pairing.view,message:client.current()?'Connected. Relay status is current.':client.problem==='AUTH'?'Access denied. Connect again in your browser.':'Status unavailable. Check the server address and connection.',libraryError});
+      await streamDeck.ui.sendToPropertyInspector({config,targets:client.current()?.outputs.map(o=>({name:o.name,platform:o.platform,can_enable:o.can_enable}))||[],controlDestinations:client.current()?.control_destinations===true,clips:choices,pairing:pairing.view,message:client.current()?'Connected. Relay status is current.':client.problem==='AUTH'?'Access denied. Connect again in your browser.':'Status unavailable. Check the server address and connection.',libraryError});
     }
   }catch(error){await streamDeck.ui.sendToPropertyInspector({error:error instanceof Error?error.message:'Could not save settings.'});}
 });

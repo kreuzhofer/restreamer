@@ -132,7 +132,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-			if !s.deviceAuthorized(token) {
+			record, authorized := s.deviceAuthorized(token)
+			if !authorized {
 				http.Error(w, "Device disconnected. Pair again in Stream Deck.", 401)
 				return
 			}
@@ -144,7 +145,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 				http.Error(w, "Studio unavailable", 503)
 				return
 			}
-			next.ServeHTTP(w, withDevicePrincipal(r))
+			next.ServeHTTP(w, withDevicePrincipal(r, record))
 			return
 		}
 		user, password, ok := r.BasicAuth()
@@ -168,24 +169,26 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 func (s *Server) dashboardStatus(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	status := struct {
-		Time           int64           `json:"time"`
-		Publishing     bool            `json:"publishing"`
-		Forwarding     bool            `json:"forwarding"`
-		InputBytes     uint64          `json:"input_bytes"`
-		InputFrames    uint64          `json:"input_frames"`
-		Outputs        []OutputStatus  `json:"outputs"`
-		History        []bitrateSample `json:"history,omitempty"`
-		Persistent     bool            `json:"persistent"`
-		Playback       PlaybackStatus  `json:"playback"`
-		LibraryEnabled bool            `json:"library_enabled"`
-		BRB            BRBStatus       `json:"brb"`
-		BRBAssets      brbSettings     `json:"brb_assets"`
-		BRBProfile     any             `json:"brb_profile,omitempty"`
-		Stage          StageStatus     `json:"stage"`
+		ControlDestinations bool            `json:"control_destinations"`
+		Time                int64           `json:"time"`
+		Publishing          bool            `json:"publishing"`
+		Forwarding          bool            `json:"forwarding"`
+		InputBytes          uint64          `json:"input_bytes"`
+		InputFrames         uint64          `json:"input_frames"`
+		Outputs             []OutputStatus  `json:"outputs"`
+		History             []bitrateSample `json:"history,omitempty"`
+		Persistent          bool            `json:"persistent"`
+		Playback            PlaybackStatus  `json:"playback"`
+		LibraryEnabled      bool            `json:"library_enabled"`
+		BRB                 BRBStatus       `json:"brb"`
+		BRBAssets           brbSettings     `json:"brb_assets"`
+		BRBProfile          any             `json:"brb_profile,omitempty"`
+		Stage               StageStatus     `json:"stage"`
 	}{Time: now.UnixMilli(), Publishing: s.active.Load(), InputBytes: s.inputBytes.Load(), InputFrames: s.inputFrames.Load(), Outputs: make([]OutputStatus, 0, len(s.outputSnapshot())), Persistent: s.cfg.StateFile != ""}
 	for _, o := range s.outputSnapshot() {
 		status.Outputs = append(status.Outputs, o.snapshot())
 	}
+	status.ControlDestinations = deviceCanControlDestinations(r)
 	status.Forwarding = s.forwarding.Load()
 	if s.broadcast != nil {
 		status.Stage = s.broadcast.stageStatus(now)

@@ -21,7 +21,7 @@
       for (const device of data.devices) {
         const row = document.createElement('div'), details = document.createElement('div'), name = document.createElement('strong'), created = document.createElement('p'), revoke = document.createElement('button');
         row.className = 'device-row'; name.textContent = device.name;
-        created.textContent = 'Connected ' + new Date(device.created).toLocaleString();
+        created.textContent = 'Connected ' + new Date(device.created).toLocaleString() + (device.control_destinations ? ' · Broadcast and destination control' : ' · Broadcast control');
         revoke.className = 'preview-button'; revoke.textContent = 'Revoke'; revoke.setAttribute('aria-label','Revoke access for ' + device.name);
         revoke.addEventListener('click', async () => {
           if (!window.confirm(`Revoke access for ${device.name}? Its buttons will stop controlling Restreamer. Your current broadcast keeps running.`)) return;
@@ -42,7 +42,7 @@
     if (busy) return;
     busy = true; $('device-approve').disabled = true; $('device-decline').disabled = true;
     try {
-      await api('/api/devices/' + (allow ? 'approve' : 'deny'), 'POST', {user_code:code(),confirm:true});
+      await api('/api/devices/' + (allow ? 'approve' : 'deny'), 'POST', {user_code:code(),confirm:true,...(allow?{control_destinations:$('device-control-destinations').checked}:{})});
       approved = allow;
       $('device-approval').hidden = true;
       await refresh();
@@ -53,7 +53,7 @@
   $('device-approve').addEventListener('click', () => void decide(true));
   $('device-decline').addEventListener('click', () => void decide(false));
   $('devices-refresh').addEventListener('click', () => void refresh());
-  function navigate() { approved = false; $('device-code-matches').checked = false; $('device-approve').disabled = true; document.body.toggleAttribute('data-device-pairing',location.hash.startsWith('#devices')); void refresh(); }
+  function navigate() { approved = false; $('device-control-destinations').checked = false; $('device-code-matches').checked = false; $('device-approve').disabled = true; document.body.toggleAttribute('data-device-pairing',location.hash.startsWith('#devices')); void refresh(); }
   window.addEventListener('hashchange',navigate); window.addEventListener('popstate',navigate);
   window.addEventListener('settings-section-changed',navigate);
   navigate();
