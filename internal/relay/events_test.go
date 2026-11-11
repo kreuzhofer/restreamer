@@ -728,3 +728,108 @@ func TestFinishedEventsLeaveSelectableDestinationsButRemainManaged(t *testing.T)
 	assertList(s, "/api/dashboard", "outputs", 1)
 	assertList(s, "/api/events", "events", 2)
 }
+
+func TestEventStartingSoonSwitchesToOBSWithoutClosingRecording(t *testing.T) {
+	prepared, revision := preparedRevisionServer(t)
+	cfg := prepared.cfg
+	cfg.Targets = nil
+	cfg.Application = "live"
+	cfg.StreamKey = "input-key-1234567890"
+	cfg.EventsDirectory = filepath.Join(t.TempDir(), "events")
+	cfg.StateFile = filepath.Join(t.TempDir(), "switches.json")
+	s := New(cfg, prepared.log)
+	id := createEvent(t, s, "", true)
+	address := startEventRelay(t, s)
+	if w := dashboardRequest(s, "PUT", "/api/stage-media", `{"prestream":"`+revision+`","shortcuts":[]}`); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true})
+	if w := stageRequest(t, s, "prestream", nil); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/live.m3u8", "").Code == 200 })
+	index, path := preparedClip(t)
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, index.Video)
+	writePacket(t, publisher, index.Audio)
+	stageRequest(t, s, "go_live", nil)
+	for cycle := 0; cycle < 4; cycle++ {
+		reader, err := openClip(path, index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for {
+			m, err := reader.next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Timestamp += time.Minute + time.Duration(cycle)*index.Duration
+			writePacket(t, publisher, m)
+			time.Sleep(time.Millisecond)
+		}
+		reader.close()
+	}
+	eventually(t, func() bool { return readStage(t, s).Source == "obs" })
+	if w := viewerRequest(s, "GET", "/watch/"+id+"/status", ""); !strings.Contains(w.Body.String(), `"state":"live"`) {
+		t.Fatal("Starting soon to OBS closed the event", w.Body.String())
+	}
+	stageRequest(t, s, "stop_now", nil)
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", "").Code == 200 })
+}
+
+func TestEventLongKeyframeGapReportsActionableCause(t *testing.T) {
+	s := eventTestServer(t)
+	id := createEvent(t, s, "", false)
+	address := startEventRelay(t, s)
+	stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true})
+	stageRequest(t, s, "go_live", nil)
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, previewVideoConfig())
+	writePacket(t, publisher, audioConfig())
+	writePacket(t, publisher, keyframe(0))
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" })
+	time.Sleep(50 * time.Millisecond)
+	// Join on a fresh keyframe, then keep video flowing without another IDR.
+	writePacket(t, publisher, keyframe(time.Second))
+	for i := 2; i <= 9; i++ {
+		frame := keyframe(time.Duration(i) * time.Second)
+		frame.Body[0] = 0x27
+		writePacket(t, publisher, frame)
+		time.Sleep(3 * time.Millisecond)
+	}
+	eventually(t, func() bool {
+		return strings.Contains(viewerRequest(s, "GET", "/watch/"+id+"/status", "").Body.String(), `"state":"failed"`)
+	})
+	if w := dashboardRequest(s, "GET", "/api/dashboard", ""); !strings.Contains(w.Body.String(), "keyframes at least every two seconds") {
+		t.Fatal("keyframe configuration error was hidden by recording cleanup", w.Body.String())
+	}
+}
+
+func TestEventTwoSecondKeyframeCadenceToleratesMillisecondJitter(t *testing.T) {
+	s := eventTestServer(t)
+	id := createEvent(t, s, "", true)
+	address := startEventRelay(t, s)
+	stageRequest(t, s, "set_target", map[string]any{"target": "event", "enabled": true})
+	stageRequest(t, s, "go_live", nil)
+	publisher := publishInput(t, address)
+	writePacket(t, publisher, previewVideoConfig())
+	writePacket(t, publisher, audioConfig())
+	writePacket(t, publisher, keyframe(0))
+	eventually(t, func() bool { return readStage(t, s).Stage == "LIVE" })
+	time.Sleep(50 * time.Millisecond)
+	// The encoder targets two seconds, but millisecond timestamps straddle
+	// the four-second segment boundary: 2.000, 1.999, then 2.002 seconds.
+	for _, milliseconds := range []int{1000, 3000, 4999, 7001, 9000, 11000} {
+		writePacket(t, publisher, keyframe(time.Duration(milliseconds)*time.Millisecond))
+		time.Sleep(10 * time.Millisecond)
+	}
+	w := viewerRequest(s, "GET", "/watch/"+id+"/live.m3u8", "")
+	if w.Code != 200 {
+		t.Fatalf("two-second OBS cadence stopped public playback: %d %s", w.Code, dashboardRequest(s, "GET", "/api/events", "").Body.String())
+	}
+	stageRequest(t, s, "stop_now", nil)
+	eventually(t, func() bool { return viewerRequest(s, "GET", "/watch/"+id+"/replay.m3u8", "").Code == 200 })
+}

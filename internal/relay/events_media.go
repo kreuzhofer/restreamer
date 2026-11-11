@@ -110,7 +110,10 @@ func (p *eventPackager) push(m *rtmp.Message) error {
 		if duration > 6*time.Second {
 			return errors.New("Public event requires video keyframes at least every two seconds")
 		}
-		if m.Body[0]>>4 == 1 && duration >= 4*time.Second {
+		// Cut on the first keyframe after three seconds: a two-second
+		// encoder cadence still gives roughly four-second segments, while
+		// timestamp jitter cannot push the cut past the six-second limit.
+		if m.Body[0]>>4 == 1 && duration >= 3*time.Second {
 			if err := p.flush(duration); err != nil {
 				return err
 			}
@@ -232,7 +235,9 @@ func (o *output) manageEvent(ctx context.Context, h *hub) {
 	var pack *eventPackager
 	fail := func(err error) {
 		e.mu.Lock()
-		if e.State == "deleted" {
+		// Tail cleanup can fail after the original media/storage failure.
+		// Preserve the actionable first cause instead of replacing it.
+		if e.State == "deleted" || e.State == "failed" {
 			e.mu.Unlock()
 			return
 		}
