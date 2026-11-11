@@ -56,7 +56,7 @@ function render(){
     }else if(!snapshot)face.detail=client.problem||'OFFLINE';
     if(b.invalid)face={label:labels[b.kind],detail:'INVALID',tone:'amber',symbol:'!',description:'INVALID SETTINGS — reselect this key’s clip or recreate the key'};
     const svg=keySVG(face);
-    if(b.image!==svg){b.image=svg;void b.key.setImage(svg);}
+    if(b.image!==svg){b.image=svg;void b.key.setImage(`data:image/svg+xml,${encodeURIComponent(svg)}`);}
   }
 }
 class Control extends SingletonAction<ClipSettings>{
