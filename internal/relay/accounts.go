@@ -43,6 +43,14 @@ func (s *Server) verifyAccount(user, password string) error {
 	return nil
 }
 
+func (s *Server) verifyCachedAccount(user, password string) (bool, error) {
+	if s.accountStore != nil {
+		return s.accountStore.VerifyCached(user, password)
+	}
+	// Environment-only authentication has no expensive hash to throttle.
+	return s.verifyAccount(user, password) == nil, nil
+}
+
 func (s *Server) accountUnauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", `Basic realm="Restreamer", charset="UTF-8"`)
 	http.Error(w, "Authentication required", http.StatusUnauthorized)
@@ -79,10 +87,6 @@ func (s *Server) accountPasswordHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _, _ := r.BasicAuth()
-	if !s.accountRate(r, false) {
-		s.accountAuthError(w, accounts.ErrBusy)
-		return
-	}
 	if err := s.accountStore.Change(user, input.Current, input.New); err != nil {
 		if errors.Is(err, accounts.ErrCredentials) {
 			s.accountRate(r, true)
@@ -133,6 +137,9 @@ func (s *Server) accountRate(r *http.Request, failed bool) bool {
 		return len(s.accountFailures.clients) < 512 || entry.count > 0
 	}
 	if entry.count == 0 {
+		if len(s.accountFailures.clients) >= 512 {
+			return false
+		}
 		entry.expires = now.Add(time.Minute)
 	}
 	entry.count++

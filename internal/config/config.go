@@ -331,3 +331,28 @@ func (c Config) UsersDatabasePath() string {
 	}
 	return ""
 }
+
+var ErrAdminSocketPathTooLong = errors.New("private update status unavailable: storage path exceeds the Unix socket limit; stop the app before updating")
+
+// AdminSocketPath uses the shortest spelling of the same private filesystem
+// socket. Native paths can be longer than Unix socket addresses allow.
+func (c Config) AdminSocketPath() (string, error) {
+	database := c.UsersDatabasePath()
+	if database == "" {
+		return "", nil
+	}
+	path, err := filepath.Abs(database + ".control/status.sock")
+	if err != nil {
+		return "", errors.New("cannot resolve private administration path")
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if relative, err := filepath.Rel(cwd, path); err == nil && len(relative) < len(path) {
+			path = relative
+		}
+	}
+	// Leave room for the terminating NUL on both Linux and macOS.
+	if len(path) > 100 {
+		return "", ErrAdminSocketPathTooLong
+	}
+	return path, nil
+}

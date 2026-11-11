@@ -191,10 +191,16 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		if !s.accountRate(r, false) {
-			s.accountAuthError(w, accounts.ErrBusy)
-			return
-		}
-		if err := s.verifyAccount(user, password); err != nil {
+			cached, err := s.verifyCachedAccount(user, password)
+			if err != nil {
+				s.accountAuthError(w, err)
+				return
+			}
+			if !cached {
+				s.accountAuthError(w, accounts.ErrBusy)
+				return
+			}
+		} else if err := s.verifyAccount(user, password); err != nil {
 			if errors.Is(err, accounts.ErrCredentials) {
 				s.accountRate(r, true)
 			}

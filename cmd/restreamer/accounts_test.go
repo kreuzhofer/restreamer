@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -119,5 +121,50 @@ func TestAdminStatusCLIReportsRunningServerWithoutDashboardPassword(t *testing.T
 	info, err := os.Stat(cfg.UsersDatabasePath() + ".control/status.sock")
 	if err != nil || info.Mode().Perm()&0077 != 0 {
 		t.Fatal("status socket is not private")
+	}
+}
+
+func TestLongStoragePathKeepsServerRunningAndRefusesUnverifiableUpdate(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), strings.Repeat("long", 40))
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := probe.Addr().String()
+	probe.Close()
+	cfg := config.Config{Application: "live", StreamKey: "test-stream-key-123456", QueueBytes: 1 << 20, Listen: "127.0.0.1:0", HealthListen: address, DashboardUsername: "operator", DashboardPassword: "original-password", StateFile: filepath.Join(directory, "targets.json")}
+	server := relay.New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- server.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("server: %v", err)
+		}
+	})
+	client := http.Client{Timeout: time.Second}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		response, err := client.Get("http://" + address + "/healthz")
+		if err == nil {
+			response.Body.Close()
+			if response.StatusCode == 200 {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("long state path prevented startup")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	path := filepath.Join(directory, "config.json")
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := cli(t, "", "admin", "status", "-config", path); err == nil {
+		t.Fatalf("update accepted unavailable socket: %s", output)
 	}
 }

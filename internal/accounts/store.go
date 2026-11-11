@@ -162,6 +162,24 @@ func (s *Store) Verify(user, password string) error {
 	s.mu.Unlock()
 	return nil
 }
+
+// VerifyCached admits an already verified credential without spending another
+// password-hash slot. Reading the current database hash still revokes the proof
+// immediately after a password change or reset.
+func (s *Store) VerifyCached(user, password string) (bool, error) {
+	encoded, err := s.credential(user)
+	if errors.Is(err, ErrCredentials) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	proof := s.proof(user, password)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cachedUser == user && s.cachedHash == encoded && subtle.ConstantTimeCompare(s.cachedProof[:], proof[:]) == 1, nil
+}
+
 func validPassword(password string) bool {
 	n := utf8.RuneCountInString(password)
 	if n < 12 || n > 256 || !utf8.ValidString(password) {
@@ -221,6 +239,12 @@ func (s *Store) replace(user, previous, replacement string) error {
 	if n != 1 {
 		return ErrCredentials
 	}
+	// A successful change proves the replacement password. Retain that proof so
+	// an existing operator can sign in even while anonymous guesses are throttled.
+	proof := s.proof(user, replacement)
+	s.mu.Lock()
+	s.cachedUser, s.cachedHash, s.cachedProof = user, encoded, proof
+	s.mu.Unlock()
 	return nil
 }
 func hashPassword(password string) (string, error) {

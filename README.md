@@ -457,7 +457,10 @@ and unknown users, and the running app adopts the reset without a restart.
 The installer checks active broadcasts through a private, read-only Unix socket
 beside the database, so updates continue to work after a password change.
 Only older binaries without this command use the previous authenticated HTTP
-check; a failed private status check refuses the update.
+check; a failed private status check refuses the update. Very long native storage
+paths can exceed the Unix socket limit: the server logs that private update
+status is unavailable and keeps streaming/dashboard access running. Stop the app
+deliberately before updating in that case.
 
 Use **Live** (`/live`) to operate the broadcast, **Show setup** (`/setup`) to
 choose upcoming videos, **Library** (`/library`) to manage reusable resources,

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"errors"
+	"github.com/kreuzhofer/restreamer/internal/config"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +18,14 @@ func (s *Server) startAdminStatus() (func(), error) {
 	if database == "" {
 		return func() {}, nil
 	}
+	path, err := s.cfg.AdminSocketPath()
+	if errors.Is(err, config.ErrAdminSocketPathTooLong) {
+		s.log.Warn(err.Error())
+		return func() {}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	directory := database + ".control"
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, errors.New("cannot create private administration directory")
@@ -25,7 +34,6 @@ func (s *Server) startAdminStatus() (func(), error) {
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("administration directory must be private")
 	}
-	path := directory + "/status.sock"
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return nil, errors.New("administration path is not a socket")

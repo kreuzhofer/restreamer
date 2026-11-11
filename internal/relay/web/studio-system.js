@@ -76,7 +76,7 @@
   const settings = document.querySelector('.settings-desktop');
   if (settings) {
     const tabs = document.createElement('nav'); tabs.className = 'settings-tabs'; tabs.setAttribute('aria-label','Settings sections');
-    const sections = [['ingestion','Ingestion','.settings-ingestion'],['destinations','Destinations','.settings-destinations'],['profile','Streaming profile','.settings-profile'],['devices','Connected devices','.settings-devices']];
+    const sections = [['ingestion','Ingestion','.settings-ingestion'],['destinations','Destinations','.settings-destinations'],['profile','Streaming profile','.settings-profile'],['devices','Connected devices','.settings-devices'],['account','Account','.settings-account']];
     function select(name) {
       document.body.toggleAttribute('data-device-pairing',name==='devices');
       for (const [key,,selector] of sections) settings.querySelector(selector).hidden = key !== name;

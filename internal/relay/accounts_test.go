@@ -41,6 +41,9 @@ func TestOperatorPasswordChangePersistsAndRevokesOldCredentials(t *testing.T) {
 func TestOperatorAuthenticationThrottlesFailedSignIns(t *testing.T) {
 	cfg := config.Config{DashboardUsername: "operator", DashboardPassword: "original-password", StateFile: filepath.Join(t.TempDir(), "targets.json")}
 	s := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if w := accountRequest(s, "GET", "/api/account", "original-password", ""); w.Code != 200 {
+		t.Fatalf("initial sign-in: %d", w.Code)
+	}
 	for i := 0; i < 20; i++ {
 		if w := accountRequest(s, "GET", "/api/account", "wrong-password", ""); w.Code != 401 {
 			t.Fatalf("attempt %d: %d", i, w.Code)
@@ -49,6 +52,19 @@ func TestOperatorAuthenticationThrottlesFailedSignIns(t *testing.T) {
 	if w := accountRequest(s, "GET", "/api/account", "wrong-password", ""); w.Code != 429 {
 		t.Fatalf("unbounded failed sign-ins: %d", w.Code)
 	}
+	if w := accountRequest(s, "GET", "/api/account", "original-password", ""); w.Code != 200 {
+		t.Fatalf("attack blocked an already authenticated operator: %d", w.Code)
+	}
+	if w := accountRequest(s, "POST", "/api/account/password", "original-password", `{"current_password":"original-password","new_password":"replacement-password-long"}`); w.Code != 204 {
+		t.Fatalf("password change blocked for valid operator: %d", w.Code)
+	}
+	if w := accountRequest(s, "GET", "/api/account", "replacement-password-long", ""); w.Code != 200 {
+		t.Fatalf("replacement password blocked: %d", w.Code)
+	}
+	if w := accountRequest(s, "GET", "/api/account", "original-password", ""); w.Code == 200 {
+		t.Fatal("old proof bypassed revocation while throttled")
+	}
+
 }
 
 func TestOperatorPasswordChangeRejectsInvalidRequestsAndSurvivesEnvironmentRemoval(t *testing.T) {

@@ -28,7 +28,11 @@ func adminStatus(args []string) int {
 		fmt.Fprintln(os.Stderr, "Cannot resolve private administration socket from configuration")
 		return 1
 	}
-	socket := cfg.UsersDatabasePath() + ".control/status.sock"
+	socket, err := cfg.AdminSocketPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", socket)
 	}}
