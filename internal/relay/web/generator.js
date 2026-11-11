@@ -1279,10 +1279,13 @@
   (async () => {
     // Events must remain reachable even when the authoring libraries cannot load.
     if (requestedCollection === 'events') showCollection('events');
+    const routeAtLoad = location.href;
     try {
       await listDesigns();
       await loadTemplates();
       await loadThemes();
+      // A collection chosen while these requests ran owns the current route.
+      if (location.href !== routeAtLoad) return;
       if (requestedDesign && requestedCollection !== 'brb') openDraft(await (await request(`/api/generator/designs/${encodeURIComponent(requestedDesign)}`)).json());
       else if (requestedCollection !== 'events') showCollection(requestedCollection);
     } catch (error) { $('design-list-state').textContent = 'Studio could not load. Reload this page to retry; saved designs are kept.'; if (requestedCollection !== 'events') notify(error.message); }
