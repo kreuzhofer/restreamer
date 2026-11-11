@@ -17,6 +17,7 @@ COPY config.example.json /etc/restreamer/config.json
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/restreamer /restreamer
 COPY --from=build --chown=65532:65532 /out/data /data
+COPY --from=build --chown=65532:65532 /out/data /events
 USER 65532:65532
 EXPOSE 1935 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 CMD ["/restreamer", "healthcheck"]

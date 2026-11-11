@@ -26,6 +26,16 @@ func (s *Server) setForwarding(enabled bool) {
 		s.broadcast.mu.Unlock()
 	}
 	for _, o := range s.outputSnapshot() {
+		if o.event != nil {
+			if !enabled {
+				o.event.delivering.Store(false)
+			} else if status := o.snapshot(); status.Enabled && status.CanEnable {
+				o.event.begun.Store(true)
+			}
+		}
+		if !enabled && o.event != nil && o.event.begun.Load() {
+			o.eventFinish.Store(true)
+		}
 		o.mu.Lock()
 		o.blocked = !enabled
 		o.failed = false

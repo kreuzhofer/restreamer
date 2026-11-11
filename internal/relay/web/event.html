@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Streaming event</title>
+  <link rel="stylesheet" href="/watch-assets/event.css">
+  <script src="/watch-assets/hls.light.min.js" defer></script>
+  <script src="/watch-assets/event.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><h1 id="event-name">Streaming event</h1><p id="event-status" role="status" aria-live="polite">Connecting to the event…</p></header>
+    <form id="event-login" hidden>
+      <h2>This event is password protected</h2>
+      <label for="event-password">Event password</label>
+      <input id="event-password" type="password" autocomplete="current-password" maxlength="256" required>
+      <button type="submit">Continue to event</button>
+      <p id="login-error" role="alert"></p>
+    </form>
+    <section class="screen" aria-label="Event playback">
+      <video id="event-video" playsinline hidden></video>
+      <div id="event-placeholder"><p id="event-message">Your event will appear here.</p></div>
+    </section>
+    <div class="playback-actions">
+      <button id="event-play" type="button" hidden>Watch live</button>
+      <button id="event-mute" type="button" hidden>Mute audio</button>
+      <button id="event-fullscreen" type="button" hidden>Full screen</button>
+      <button id="event-retry" type="button">Refresh event</button>
+    </div>
+    <p id="playback-error" role="alert"></p>
+    <footer>Powered by Restreamer</footer>
+  </main>
+</body>
+</html>

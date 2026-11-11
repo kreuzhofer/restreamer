@@ -15,11 +15,46 @@ var dashboardFiles embed.FS
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /watch-assets/{asset}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("asset")
+		kind := ""
+		switch name {
+		case "event.js", "hls.light.min.js":
+			kind = "text/javascript"
+		case "event.css":
+			kind = "text/css"
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		data, err := dashboardFiles.ReadFile("web/" + name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", kind)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Write(data)
+	})
+	mux.HandleFunc("GET /watch/{id}", s.eventViewerHTTP)
+	mux.HandleFunc("GET /watch/{id}/{resource...}", s.eventViewerHTTP)
+	mux.HandleFunc("POST /watch/{id}/{resource...}", s.eventViewerHTTP)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	private := http.NewServeMux()
+	private.HandleFunc("GET /api/events", s.eventsHTTP)
+	private.HandleFunc("PATCH /api/events/{id}", s.eventsHTTP)
+	private.HandleFunc("DELETE /api/events/{id}", s.eventDeleteHTTP)
+	private.HandleFunc("GET /api/events/{id}/media/{resource...}", s.eventOperatorHTTP)
+	private.HandleFunc("GET /events/{id}", s.eventOperatorHTTP)
+	private.HandleFunc("GET /events/{id}/{resource...}", s.eventOperatorHTTP)
+	private.HandleFunc("GET /events", func(w http.ResponseWriter, r *http.Request) {
+		data, _ := dashboardFiles.ReadFile("web/events.html")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+	})
 	private.HandleFunc("GET /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations", s.destinationsHTTP)
 	private.HandleFunc("POST /api/destinations/import", s.destinationsHTTP)

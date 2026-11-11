@@ -21,6 +21,8 @@ type destinationState struct {
 }
 
 type destinationView struct {
+	Type    string `json:"type,omitempty"`
+	EventID string `json:"event_id,omitempty"`
 	Name    string `json:"name"`
 	URL     string `json:"url"`
 	HasKey  bool   `json:"has_key"`
@@ -30,13 +32,16 @@ type destinationView struct {
 }
 
 type destinationChange struct {
-	Version   uint64  `json:"version"`
-	Name      string  `json:"name"`
-	URL       string  `json:"url"`
-	StreamKey *string `json:"stream_key,omitempty"`
-	Confirmed bool    `json:"confirmed"`
-	Context   string  `json:"context"`
-	ServerID  string  `json:"server_id"`
+	Type       string  `json:"type,omitempty"`
+	Password   string  `json:"password,omitempty"`
+	AutoReplay bool    `json:"auto_replay,omitempty"`
+	Version    uint64  `json:"version"`
+	Name       string  `json:"name"`
+	URL        string  `json:"url"`
+	StreamKey  *string `json:"stream_key,omitempty"`
+	Confirmed  bool    `json:"confirmed"`
+	Context    string  `json:"context"`
+	ServerID   string  `json:"server_id"`
 }
 
 func (s *Server) outputSnapshot() []*output {
@@ -53,7 +58,24 @@ func (s *Server) newOutput(target config.Target) *output {
 	if err := target.ReadyError(); err != nil {
 		status.UnavailableReason = err.Error()
 	}
-	return &output{config: target, log: s.log, changed: make(chan struct{}, 1), status: status, blocked: true}
+	o := &output{config: target, log: s.log, changed: make(chan struct{}, 1), status: status, blocked: true}
+	if target.Type == "public_page" {
+		o.event = s.event(target.EventID)
+		if o.event == nil {
+			o.status.CanEnable = false
+			o.status.Enabled = false
+			o.status.UnavailableReason = "Event is unavailable"
+		} else {
+			o.event.mu.Lock()
+			if o.event.State != "waiting" {
+				o.status.CanEnable = false
+				o.status.Enabled = false
+				o.status.UnavailableReason = "Event has finished"
+			}
+			o.event.mu.Unlock()
+		}
+	}
+	return o
 }
 
 // Caller holds controlMu. Workers share the bounded broadcast hub but retain
@@ -136,7 +158,9 @@ func validateDestination(target config.Target, allowUnavailable bool) error {
 		return errors.New("Invalid destination URL or key")
 	}
 	check := target
-	check.StreamKey = "validation"
+	if check.Type != "public_page" {
+		check.StreamKey = "validation"
+	}
 	if err := check.ReadyError(); err != nil && !allowUnavailable {
 		return err
 	}
@@ -150,7 +174,7 @@ func (s *Server) destinationResponse(w http.ResponseWriter) {
 	views := []destinationView{}
 	for _, o := range s.outputSnapshot() {
 		status := o.snapshot()
-		views = append(views, destinationView{Name: o.config.Name, URL: o.config.URL, HasKey: strings.TrimSpace(o.config.StreamKey) != "", Enabled: status.Enabled, Ready: status.CanEnable, Reason: status.UnavailableReason})
+		views = append(views, destinationView{Type: o.config.Type, EventID: o.config.EventID, Name: o.config.Name, URL: o.config.URL, HasKey: strings.TrimSpace(o.config.StreamKey) != "", Enabled: status.Enabled, Ready: status.CanEnable, Reason: status.UnavailableReason})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
@@ -202,7 +226,28 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := destinationState{Version: s.destinations.Version + 1, Targets: []config.Target{}}
+	var createdEvent *streamingEvent
+	committed := false
+	defer func() {
+		if createdEvent != nil && !committed {
+			s.eventsMu.Lock()
+			delete(s.events, createdEvent.ID)
+			s.eventsMu.Unlock()
+			if os.RemoveAll(createdEvent.dir) != nil {
+				s.log.Warn("uncommitted event storage cleanup failed")
+			}
+		}
+	}()
 	for _, o := range s.outputSnapshot() {
+		// Retained recordings belong to the archive, not the active target limit.
+		if r.Method == "POST" && o.event != nil {
+			o.event.mu.Lock()
+			closed := o.event.State != "waiting" && o.event.State != "live"
+			o.event.mu.Unlock()
+			if closed {
+				continue
+			}
+		}
 		target := o.config
 		if o.snapshot().Enabled {
 			target.Enabled = "true"
@@ -232,6 +277,10 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Unknown destination", 404)
 			return
 		}
+		if index >= 0 && next.Targets[index].Type == "public_page" {
+			http.Error(w, "Manage replay, passwords, and Delete event in the event archive", 409)
+			return
+		}
 		if index >= 0 && next.Targets[index].IsEnabled() && b.control.mode == "real" && b.control.stage != "OFF" {
 			if !change.Confirmed || change.ServerID != b.control.serverID || change.Context != b.stageContext() {
 				http.Error(w, "Confirm this change against the current broadcast: this destination will disconnect; removing the last destination stops delivery while the show and preview continue", 409)
@@ -242,6 +291,40 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			next.Targets = append(next.Targets[:index], next.Targets[index+1:]...)
 		} else {
 			target := config.Target{Name: change.Name, URL: change.URL, Enabled: "false"}
+			if change.Type == "public_page" {
+				if change.URL != "" || change.StreamKey != nil && *change.StreamKey != "" {
+					http.Error(w, "Public events do not use a server URL or stream key", 400)
+					return
+				}
+				if index >= 0 {
+					http.Error(w, "Manage events in the archive", 409)
+					return
+				}
+				if !destinationName.MatchString(change.Name) {
+					http.Error(w, "Invalid event name", 400)
+					return
+				}
+				for _, existing := range next.Targets {
+					if existing.Name == change.Name {
+						http.Error(w, "Destination names must be unique", 400)
+						return
+					}
+				}
+				if len(next.Targets) >= 16 {
+					http.Error(w, "At most 16 destinations are supported", 400)
+					return
+				}
+				event, err := s.createStreamingEvent(change.Name, change.Password, change.AutoReplay)
+				if err != nil {
+					http.Error(w, err.Error(), 400)
+					return
+				}
+				target.Type, target.EventID = "public_page", event.ID
+				createdEvent = event
+			} else if change.Type != "" && change.Type != "rtmp" {
+				http.Error(w, "Unknown destination type", 400)
+				return
+			}
 			if index >= 0 {
 				target.StreamKey = next.Targets[index].StreamKey
 				target.Enabled = next.Targets[index].Enabled
@@ -249,7 +332,7 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 			if change.StreamKey != nil {
 				target.StreamKey = *change.StreamKey
 			}
-			if strings.TrimSpace(target.StreamKey) == "" {
+			if target.Type != "public_page" && strings.TrimSpace(target.StreamKey) == "" {
 				target.Enabled = "false"
 			}
 			if index < 0 {
@@ -286,7 +369,7 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, target := range next.Targets {
 		var found *output
 		for _, o := range old {
-			if o.config.Name == target.Name && o.config.URL == target.URL && o.config.StreamKey == target.StreamKey {
+			if o.config.Name == target.Name && o.config.URL == target.URL && o.config.StreamKey == target.StreamKey && o.config.EventID == target.EventID {
 				found = o
 				break
 			}
@@ -326,6 +409,7 @@ func (s *Server) destinationsHTTP(w http.ResponseWriter, r *http.Request) {
 	b.hub.outputs = append([]*output{}, outputs...)
 	b.hub.mu.Unlock()
 	s.destinations, s.destinationsManaged = next, true
+	committed = true
 	b.control.version++
 	// Completed ending evidence remains historical and is intentionally unchanged.
 	s.destinationResponse(w)

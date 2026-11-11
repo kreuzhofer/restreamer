@@ -36,8 +36,9 @@ OBS ── RTMP :1935 ── Restreamer ┤
 - Exact prepared-media selections, predictable clip returns, bounded ending
   delivery, and isolated preview-only rehearsals.
 
-There is no live transcoding, recording, public playback endpoint, audio-only mode,
-Enhanced RTMP, HEVC/AV1, or Twitch Enhanced Broadcasting support in v1. A publisher
+Public streaming page targets add browser playback and local event recording.
+There is no live transcoding, audio-only mode, Enhanced RTMP, HEVC/AV1, or
+Twitch Enhanced Broadcasting support in v1. A publisher
 using an unsupported codec is disconnected with an explanatory log entry.
 
 **Passthrough does not make a stream compatible with a destination.** Every enabled
@@ -46,6 +47,83 @@ interval. For simultaneous Twitch/YouTube streaming, start with a compatible
 1080p H.264/AAC OBS profile. A 4K source remains 4K on every output in v1.
 See [YouTube's encoder settings](https://support.google.com/youtube/answer/2853702?hl=en)
 and [Twitch's broadcasting guidelines](https://help.twitch.tv/s/article/broadcasting-guidelines?language=en_US).
+
+## Public streaming events and replays
+
+In desktop **Settings → Destinations**, choose **Public streaming page**, enter a
+unique name, optionally set an event password, and choose whether to publish replay
+automatically after the event. New targets start disabled; enable the target in
+Live before starting the broadcast. Open **Event archive** from Settings to copy
+the viewer link, preview a recording, publish/withdraw replay, change the event
+password, or delete the event.
+
+Each link belongs to exactly one event. Stopping the overall broadcast (including
+completion of Ending) permanently finishes its active events; another broadcast
+needs a new event target. OBS disconnection and temporary target disablement do
+not finish the event. Every public event records the programme it actually
+delivers, including Starting soon, BRB, clips, and Ending, excluding rehearsal and
+disabled-delivery periods. Selecting automatic replay controls publication, not
+recording. With it off, recordings remain private until explicitly published.
+Creating another target removes finished event targets from the active target
+list without removing their archive entries or replays. A new event can reuse a
+display name, but always receives a new URL.
+
+**Delete event is permanent:** it removes the recording and public page, and the
+old URL no longer works. Withdrawing replay instead keeps the recording privately.
+Recordings have no automatic expiry. Check disk usage and delete old events before
+storage fills.
+
+### Storage and deployment
+
+Configure **events_directory** for native deployments. The example configuration
+reads EVENTS_DIRECTORY; leaving it empty disables event creation. Compose sets
+it to /events and mounts the restreamer-events named volume there. To use a host
+directory instead, set EVENT_STORAGE_PATH to its absolute path before starting
+Compose and make it writable by the container user (UID/GID 65532). Keep the
+existing /data mount as well: it holds destination configuration and operator
+state. Back up both mounts. Do not mount either directory beneath a public static
+file server.
+
+The public page uses the same externally reachable HTTPS hostname as the
+dashboard. Put Restreamer behind an HTTPS reverse proxy, forwarding the original
+Host and X-Forwarded-Proto: https; publish /watch/ and /watch-assets/ through
+that proxy. Keep direct access to the backend restricted. Existing operator routes
+retain dashboard authentication. Public pages are unlisted and marked noindex,
+but anyone with an unprotected link can watch: use an event password for access
+control. Passwords protect playlists and media segments as well as page playback.
+Viewer sessions expire after 12 hours; changing the password revokes them.
+Withdrawing/deleting replay blocks new retrieval, but cannot recall media a
+viewer has already downloaded.
+
+### Playback and limits
+
+The server packages H.264 and AAC-LC into shared fragmented-MP4 HLS without
+transcoding. Use a two-second keyframe interval. Public segments are bounded to
+six seconds and 64 MiB; unsuitable timing, codecs, or storage failures produce an
+explicit target error. There is one quality level, so every viewer needs bandwidth
+for the source bitrate. At 6 Mbps, 100 viewers require approximately 600 Mbps of
+server egress before overhead; this is a bandwidth calculation, not a capacity
+guarantee. Up to 64 media requests run concurrently; excess requests receive a
+retryable capacity error. Viewer buffering is separate from destination queues.
+
+The browser player uses native HLS where available and a locally bundled hls.js
+elsewhere. Target browsers are current Safari/iOS Safari, Chrome/Android Chrome,
+Firefox, and Edge with H.264/AAC decoding. Start playback explicitly if autoplay
+is restricted. Live playback follows the live edge, with a target delay of about
+10–20 seconds and no live rewind control. Published replays support seeking.
+
+A write failure stops the affected public target and marks its recording
+incomplete while independent RTMP outputs continue. After a server restart,
+previously active events become interrupted and cannot resume live delivery.
+Complete retained segments can be privately previewed and deliberately published
+only after acknowledging the interruption. Incomplete recordings are never
+published automatically. Startup verifies recorded media checksums; large
+archives take proportionally longer to verify. Damaged segments are excluded
+and the remaining recording requires explicit publication. If cleanup fails during deletion, access remains revoked;
+retry deletion or restart to finish cleanup.
+
+S3, CDN integration, adaptive-quality transcoding, live rewind, and video editing
+are outside this MVP. The standard HLS format keeps future CDN delivery possible.
 
 ## Run with Docker Compose
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kreuzhofer/restreamer/internal/config"
@@ -30,6 +31,8 @@ type OutputStatus struct {
 }
 
 type output struct {
+	event                    *streamingEvent
+	eventFinish              atomic.Bool
 	config                   config.Target
 	log                      *slog.Logger
 	mu                       sync.Mutex
@@ -160,6 +163,13 @@ func (o *output) settledState() string {
 
 func (o *output) setEnabled(enabled bool) {
 	o.mu.Lock()
+	if o.event != nil {
+		if !enabled {
+			o.event.delivering.Store(false)
+		} else if !o.blocked && o.status.CanEnable {
+			o.event.begun.Store(true)
+		}
+	}
 	o.status.Enabled = enabled
 	if enabled {
 		o.failed = false
@@ -182,6 +192,10 @@ func (o *output) setEnabled(enabled bool) {
 // target. It joins a cancelled worker
 // before starting another, even when switches change rapidly.
 func (o *output) manage(ctx context.Context, h *hub) {
+	if o.event != nil {
+		o.manageEvent(ctx, h)
+		return
+	}
 	// Offline changes have already been applied to the desired state.
 	select {
 	case <-o.changed:

@@ -48,7 +48,7 @@ test('removing another destination preserves an unrelated unsaved credential dra
 
 test('platform selection prefills editable names and secure URLs without saving',async()=>{
  const ui=await settings();const platform=ui.input('Platform');
- assert.deepEqual(platform.children.map(option=>option.textContent),['Custom','Twitch','YouTube','Kick']);
+ assert.deepEqual(platform.children.map(option=>option.textContent),['Custom','Twitch','YouTube','Kick','Public streaming page']);
  for(const [value,name,url] of [
    ['twitch','Twitch','rtmps://ingest.global-contribute.live-video.net:443/app'],
    ['youtube','YouTube','rtmps://a.rtmps.youtube.com:443/live2'],

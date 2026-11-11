@@ -15,8 +15,10 @@ services:
       BRB_ENABLED: "${BRB_ENABLED:-false}"
       BRB_DIRECTORY: /data/brb
       LIBRARY_DIRECTORY: /data/videos
+      EVENTS_DIRECTORY: /events
     volumes:
       - restreamer-state:/data
+      - ${EVENT_STORAGE_PATH:-restreamer-events}:/events
     read_only: true
     cap_drop:
       - ALL
@@ -31,3 +33,4 @@ services:
 
 volumes:
   restreamer-state:
+  restreamer-events:

@@ -16,6 +16,8 @@ import (
 )
 
 type Target struct {
+	Type      string     `json:"type,omitempty"`
+	EventID   string     `json:"event_id,omitempty"`
 	Name      string     `json:"name"`
 	URL       string     `json:"url"`
 	StreamKey string     `json:"stream_key"`
@@ -41,6 +43,9 @@ func (f *EnableFlag) UnmarshalJSON(data []byte) error {
 
 // IsEnabled reports whether the target can run: both the switch and key matter.
 func (t Target) IsEnabled() bool {
+	if t.Type == "public_page" {
+		return t.Enabled == "true"
+	}
 	return t.Enabled != "false" && strings.TrimSpace(t.StreamKey) != ""
 }
 
@@ -67,6 +72,7 @@ type BRBConfig struct {
 func (b *BRBConfig) IsEnabled() bool { return b != nil && b.Enabled == "true" }
 
 type Config struct {
+	EventsDirectory   string     `json:"events_directory,omitempty"`
 	DestinationsFile  string     `json:"destinations_file,omitempty"`
 	LibraryDirectory  string     `json:"library_directory,omitempty"`
 	LibraryUploadMiB  int        `json:"library_upload_mib,omitempty"`
@@ -154,6 +160,7 @@ func Load(path string) (Config, error) {
 		}
 	}
 	c.StateFile = os.ExpandEnv(c.StateFile)
+	c.EventsDirectory = os.ExpandEnv(c.EventsDirectory)
 	c.DestinationsFile = os.ExpandEnv(c.DestinationsFile)
 	c.LibraryDirectory = os.ExpandEnv(c.LibraryDirectory)
 	if c.BRB != nil {
@@ -237,6 +244,15 @@ func (c Config) Validate() error {
 
 // ReadyError is safe to display: it never includes URLs or credentials.
 func (t Target) ReadyError() error {
+	if t.Type == "public_page" {
+		if len(t.EventID) != 32 || t.URL != "" || t.StreamKey != "" {
+			return errors.New("invalid public event target")
+		}
+		return nil
+	}
+	if t.Type != "" && t.Type != "rtmp" {
+		return errors.New("unknown destination type")
+	}
 	if strings.TrimSpace(t.StreamKey) == "" {
 		return errors.New("missing stream key")
 	}

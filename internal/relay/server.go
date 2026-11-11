@@ -16,6 +16,10 @@ import (
 )
 
 type Server struct {
+	eventSlots            chan struct{}
+	eventAuthSlots        chan struct{}
+	eventsMu              sync.RWMutex
+	events                map[string]*streamingEvent
 	ingestionMu           sync.Mutex
 	ingestion             ingestionCredential
 	library               *videoLibrary
@@ -55,7 +59,7 @@ type Server struct {
 }
 
 func New(cfg config.Config, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{slot: make(chan struct{}, 1)}}
+	s := &Server{eventSlots: make(chan struct{}, 64), eventAuthSlots: make(chan struct{}, 4), cfg: cfg, log: log, previewSlots: make(chan struct{}, 8), preparation: &preparationGate{slot: make(chan struct{}, 1)}}
 	for _, target := range cfg.Targets {
 		s.outputs = append(s.outputs, s.newOutput(target))
 	}

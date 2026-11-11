@@ -68,6 +68,10 @@ func (s *Server) initialize() error {
 			}
 			paths[abs] = true
 		}
+		if err := s.initializeEvents(); err != nil {
+			s.initErr = err
+			return
+		}
 		if err := s.initializeDestinations(); err != nil {
 			s.initErr = err
 			return

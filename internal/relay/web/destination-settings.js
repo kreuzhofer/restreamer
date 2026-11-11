@@ -5,7 +5,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   if (!container || container.dataset.destinationsMounted) return;
   container.dataset.destinationsMounted = 'true';
   let snapshot, editing = '', busy = false, baseline = '';
-  const dirty = () => JSON.stringify([name.value, url.value, key.value]) !== baseline;
+  const dirty = () => JSON.stringify([name.value, url.value, key.value, password.value, !!autoReplay.checked, platform.value]) !== baseline;
   const node = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
   const heading = node('h2', 'Destinations');
   const message = node('p'); message.setAttribute('role', 'status');
@@ -23,24 +23,30 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   };
   const platformLabel = node('label', 'Platform');
   const platform = node('select'); platform.name = 'destination_platform';
-  for (const [value, label] of [['custom', 'Custom'], ['twitch', 'Twitch'], ['youtube', 'YouTube'], ['kick', 'Kick']]) {
+  for (const [value, label] of [['custom', 'Custom'], ['twitch', 'Twitch'], ['youtube', 'YouTube'], ['kick', 'Kick'], ['public_page', 'Public streaming page']]) {
     const option = node('option', label); option.value = value; platform.append(option);
   }
   platform.value = 'custom'; platformLabel.append(platform); fields.append(platformLabel);
   const input = (label, type, name) => {
     const wrapper = node('label', label);
     const field = node('input'); field.type = type; field.name = name; field.autocomplete = 'off'; field.spellcheck = false;
-    wrapper.append(field); fields.append(wrapper); return field;
+    wrapper.append(field); fields.append(wrapper); field.fieldLabel = wrapper; return field;
   };
   const name = input('Unique name', 'text', 'destination_name'); name.required = true; name.pattern = '[a-zA-Z0-9_-]{1,64}'; name.maxLength = 64;
   const url = input('RTMP or RTMPS server URL', 'url', 'destination_url'); url.required = true; url.maxLength = 2048;
   const key = input('Stream key', 'password', 'destination_key'); key.autocomplete = 'new-password'; key.maxLength = 2048;
+  const password = input('Event password (optional)', 'password', 'event_password'); password.autocomplete = 'new-password'; password.maxLength = 256; password.fieldLabel.hidden = true;
+  const autoReplay = input('Publish replay when the event ends', 'checkbox', 'auto_replay'); autoReplay.fieldLabel.hidden = true;
   const platformHint = node('p'); platformHint.id = 'destination-platform-hint';
   platform.setAttribute('aria-describedby', platformHint.id); fields.append(platformHint);
   platform.onchange = () => {
+    const publicPage = platform.value === 'public_page';
+    url.fieldLabel.hidden = key.fieldLabel.hidden = publicPage; url.required = !publicPage;
+    password.fieldLabel.hidden = autoReplay.fieldLabel.hidden = !publicPage;
+    if (publicPage) { key.value = ''; url.value = ''; }
     const preset = presets[platform.value];
     if (preset) { name.value = preset.name; url.value = preset.url; key.value = ''; }
-    platformHint.textContent = platform.value === 'kick'
+    platformHint.textContent = publicPage ? 'Creates one event with a shareable link. The event always records; replay can also be enabled afterward in the archive.' : platform.value === 'kick'
       ? 'Copy your server URL and stream key from Kick Creator Dashboard → Channel → Stream URL and Key.'
       : 'You can edit the name and server URL. Paste the stream key from your platform dashboard.';
   };
@@ -50,7 +56,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   fields.append(hint, save, cancel); form.append(fields);
   const retry = node('button', 'Refresh destinations'); retry.type = 'button'; retry.className = 'preview-button';
   container.replaceChildren(heading, message, retry, list, form);
-  baseline = JSON.stringify([name.value, url.value, key.value]);
+  baseline = JSON.stringify([name.value, url.value, key.value, password.value, !!autoReplay.checked, platform.value]);
   window.addEventListener('beforeunload', event => {
     if (!window.workspace?.departureApproved && (dirty() || busy)) { event.preventDefault(); event.returnValue = ''; }
   });
@@ -61,9 +67,10 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   }
   function reset() {
     editing = ''; form.reset(); cancel.hidden = true; save.textContent = 'Add destination'; key.placeholder = '';
+    url.fieldLabel.hidden = key.fieldLabel.hidden = false; url.required = true; password.fieldLabel.hidden = autoReplay.fieldLabel.hidden = true; autoReplay.checked = false;
     platform.value = 'custom'; platform.disabled = false; platformLabel.hidden = false; platformHint.textContent = '';
     hint.textContent = 'New destinations start disabled. Enable delivery in Live after checking readiness.';
-    baseline = JSON.stringify([name.value, url.value, key.value]);
+    baseline = JSON.stringify([name.value, url.value, key.value, password.value, !!autoReplay.checked, platform.value]);
   }
   function render() {
     list.replaceChildren(); retry.disabled = busy; fields.disabled = busy || !snapshot.available || (!snapshot.managed && snapshot.destinations.length > 0);
@@ -74,6 +81,12 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
       list.append(node('p', 'Import existing configuration once before editing. Stop broadcasting or rehearsal first.'), migrate);
     }
     for (const destination of snapshot.destinations) {
+      if (destination.type === 'public_page') {
+        const row = node('article'); row.append(node('h3', destination.name), node('p', destination.ready ? 'Public streaming page · one event per link' : destination.reason));
+        const watch = node('a', 'Open viewer page'); watch.href = '/watch/' + destination.event_id; watch.target = '_blank'; watch.rel = 'noopener';
+        const archive = node('a', 'Manage event and replay'); archive.href = '/events';
+        row.append(watch, document.createTextNode(' · '), archive); list.append(row); continue;
+      }
       const row = node('article');
       row.append(node('h3', destination.name), node('p', destination.url), node('p', `${destination.has_key ? 'Key stored ••••••••' : 'No key'} · ${destination.ready ? 'Ready' : destination.reason}`));
       const edit = node('button', 'Edit'); edit.type = 'button'; edit.disabled = busy || !snapshot.managed;
@@ -83,7 +96,7 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
         platform.disabled = true; platformLabel.hidden = true; platformHint.textContent = '';
         key.placeholder = destination.has_key ? 'Leave blank to keep stored key' : 'Enter stream key';
         hint.textContent = 'Leaving the key blank preserves the stored key. Saving an active destination reconnects only that destination.';
-        save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value]); name.focus();
+        save.textContent = 'Save destination'; cancel.hidden = false; baseline = JSON.stringify([name.value, url.value, key.value, password.value, !!autoReplay.checked, platform.value]); name.focus();
       };
       const remove = node('button', 'Remove'); remove.type = 'button'; remove.disabled = busy || !snapshot.managed;
       remove.onclick = () => mutate(`/api/destinations/${encodeURIComponent(destination.name)}`, 'DELETE', {}, `Remove ${destination.name} and its stored key? Its delivery will stop. Removing the last destination leaves the show and preview running without delivery.`);
@@ -113,8 +126,8 @@ window.mountDestinationSettings = function mountDestinationSettings(container) {
   }
   form.onsubmit = event => {
     event.preventDefault();
-    const values = {name: name.value.trim(), url: url.value.trim()};
-    if (key.value || !editing) values.stream_key = key.value;
+    const values = platform.value === 'public_page' ? {name: name.value.trim(), type: 'public_page', password: password.value, auto_replay: !!autoReplay.checked} : {name: name.value.trim(), url: url.value.trim()};
+    if (platform.value !== 'public_page' && (key.value || !editing)) values.stream_key = key.value;
     mutate(editing ? `/api/destinations/${encodeURIComponent(editing)}` : '/api/destinations', editing ? 'PUT' : 'POST', values);
   };
   cancel.onclick = () => { reset(); name.focus(); };
