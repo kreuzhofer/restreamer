@@ -27,7 +27,7 @@ async function viewer(initial = live, {playError, native = true} = {}) {
   };
   const video = element('event-video');
   Object.assign(video, {paused: true, muted: false, plays: [], canPlayType: () => native ? 'probably' : '',
-    pause() {this.paused = true; this.dispatch('pause');}, load() {},
+    pause() {const wasPaused = this.paused; this.paused = true; if (!wasPaused) this.dispatch('pause');}, load() {},
     async play() {this.plays.push({muted: this.muted, src: this.src}); if (playError) throw playError; this.paused = false; this.dispatch('play');}});
   class Hls {
     static Events = {ERROR: 'error'};
@@ -113,4 +113,17 @@ test('replays retain deliberate playback instead of starting automatically', asy
   await page.element('event-play').onclick();
   assert.equal(page.video.plays.length, 1);
   assert.equal(page.video.src, '/watch/test-event/replay.m3u8');
+});
+
+
+test('native fullscreen pause and resume preserve the viewer intent across broadcast gaps', async () => {
+  const page = await viewer();
+  page.video.pause();
+  page.setStatus({...live, delivering: false}); await page.poll();
+  page.setStatus(live); await page.poll();
+  assert.equal(page.video.plays.length, 1, 'a native pause must not be undone by recovery');
+  await page.video.play();
+  page.setStatus({...live, delivering: false}); await page.poll();
+  page.setStatus(live); await page.poll();
+  assert.equal(page.video.plays.length, 3, 'after a native resume, recovery should start playback again');
 });

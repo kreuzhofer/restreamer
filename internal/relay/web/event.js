@@ -4,12 +4,13 @@
   const base = location.pathname.replace(/\/$/, '');
   const video = $('event-video'), play = $('event-play');
   let source = '', hls, replay = false, busy = false, starting = false, playbackEpoch = 0;
-  let pausedByViewer = false, audioChosen = false;
+  let pausedByViewer = false, audioChosen = false, expectedPauses = 0;
   function setMuted(muted) { video.muted = muted; $('event-mute').textContent = muted ? 'Unmute audio' : 'Mute audio'; }
   function stop() {
     playbackEpoch++; starting = false; play.disabled = false;
     $('playback-error').textContent = '';
     if (hls) { hls.destroy(); hls = null; }
+    if (!video.paused) expectedPauses++;
     video.pause(); video.removeAttribute('src'); video.load(); video.hidden = true;
     $('event-placeholder').hidden = false;
     $('event-mute').hidden = $('event-fullscreen').hidden = true;
@@ -74,6 +75,13 @@
     pausedByViewer = false;
     return startPlayback();
   };
+  video.addEventListener('pause', () => {
+    if (expectedPauses) { expectedPauses--; return; }
+    if (source && !video.hidden && video.paused) { pausedByViewer = true; play.textContent = 'Resume playback'; }
+  });
+  video.addEventListener('play', () => {
+    if (source && !video.hidden && !video.paused) { pausedByViewer = false; play.textContent = 'Pause playback'; }
+  });
   video.addEventListener('error', () => playbackError('Playback failed. Refresh the event and try again.'));
   $('event-mute').onclick = () => { audioChosen = true; setMuted(!video.muted); };
   $('event-fullscreen').onclick = () => { if (video.requestFullscreen) video.requestFullscreen().catch(() => playbackError('Full screen is unavailable.')); else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); };
