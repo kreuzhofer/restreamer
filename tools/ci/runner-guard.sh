@@ -9,20 +9,22 @@ import sys
 
 
 def reject():
-    print('Refusing untrusted runner job: only this repository CI on trusted main is allowed.', file=sys.stderr)
+    print('Refusing untrusted runner job: only this repository CI on main or the approved feature-branch push is allowed.', file=sys.stderr)
     raise SystemExit(1)
 
+
+event = os.environ.get('GITHUB_EVENT_NAME')
+ref = os.environ.get('GITHUB_REF')
+if not ((ref == 'refs/heads/main' and event in ('push', 'workflow_dispatch'))
+        or (ref == 'refs/heads/feature/nebius-show-package' and event == 'push')):
+    reject()
 
 expected = {
     'GITHUB_ACTIONS': 'true',
     'GITHUB_REPOSITORY': 'kreuzhofer/restreamer',
-    'GITHUB_REF': 'refs/heads/main',
-    'GITHUB_WORKFLOW_REF': 'kreuzhofer/restreamer/.github/workflows/ci.yml@refs/heads/main',
+    'GITHUB_WORKFLOW_REF': f'kreuzhofer/restreamer/.github/workflows/ci.yml@{ref}',
 }
 if any(os.environ.get(key) != value for key, value in expected.items()):
-    reject()
-event = os.environ.get('GITHUB_EVENT_NAME')
-if event not in ('push', 'workflow_dispatch'):
     reject()
 try:
     with open(os.environ['GITHUB_EVENT_PATH']) as source:
@@ -32,10 +34,10 @@ try:
         reject()
     if 'pull_request' in payload:
         reject()
-    allowed_refs = ('refs/heads/main',) if event == 'push' else ('main', 'refs/heads/main')
+    allowed_refs = (ref,) if event == 'push' else ('main', 'refs/heads/main')
     if payload['ref'] not in allowed_refs:
         reject()
 except (OSError, KeyError, TypeError, ValueError):
     reject()
-print('Trusted main CI job accepted.')
+print('Trusted CI job accepted.')
 PY

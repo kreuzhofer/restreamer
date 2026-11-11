@@ -809,8 +809,12 @@ Follow the [delivery completion procedure](docs/agents/delivery.md) and include
 the exact commit SHA and successful CI run link when reporting completion.
 
 Trusted `main` pushes and manual `main` CI runs use the dedicated `restreamer`
-self-hosted Linux x64 runner for tests and image publication. Pull requests and
-other branches use GitHub-hosted Ubuntu 24.04; native ARM64 checks remain hosted.
+self-hosted Linux x64 runner for tests and image publication. The maintainer also
+approved pushes to `feature/nebius-show-package` for private x64 validation while
+hosted Ubuntu package DNS is unavailable; remove that exception from routing and
+the installed context check when the branch is retired. Pull requests, forks,
+manual feature-branch runs and all other branches remain on GitHub-hosted Ubuntu
+24.04; native ARM64 checks remain hosted.
 Keep the repository's external-fork workflow approval policy set to
 `all_external_contributors`. Before approving an external fork run, review its
 workflow changes and referenced actions; do not approve jobs requesting the
