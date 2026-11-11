@@ -1128,7 +1128,7 @@
     $('design-theme-status').textContent = selected ? `${selected.name} · revision ${selected.revision}. Theme edits leave this draft pinned until you apply an update.` : 'Choose an available exact theme revision.';
     $('preview-time-control').hidden = !selected?.style.motion && !['pixel-trail', 'arcade-palette', 'neon-palette', 'workshop-motion', 'pacman-motion'].includes(selected?.style.effect);
     if (selected) {
-      $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : 'Go Sans'}`;
+      $('scene-font').options[0].textContent = `Theme default · ${selected.style.font === 'arcade-pixel' ? 'Arcade Pixel · uppercase' : selected.style.font === 'go-mono' ? 'Go Mono' : selected.style.font === 'brand-font' ? 'Brand font' : 'Go Sans'}`;
       const defaultSize = draft.scenes[selectedScene]?.layout === 'list' && selected.style.list_font_size ? selected.style.list_font_size : selected.style.font_size;
       $('scene-size').placeholder = `Theme default · ${defaultSize}`;
       $('region-width').placeholder = `Theme default · ${selected.style.content_region.width_percent}`;
